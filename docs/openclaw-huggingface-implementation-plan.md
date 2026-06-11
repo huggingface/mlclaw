@@ -42,15 +42,16 @@ Created per user:
 
 ```text
 README.md
-bootstrap.sh                  # compatibility entrypoint, eventually delegates to hclaw
+bootstrap.sh                  # compatibility entrypoint delegating to hclaw
 docs/
   openclaw-huggingface-implementation-plan.md
 src/
   hclaw/                      # CLI: bootstrap | update | doctor
   hf-bucket-client/           # typed Storage Bucket client
   hf-state-sync/              # runtime snapshot/restore supervisor
-  space-template/             # generated files for user Spaces
   vendor/hfjs-xet/            # vendored Xet upload path from huggingface.js
+space/
+  README.md                   # generated Space metadata/readme source
 scripts/
   parity-probe.ts
 test/
@@ -129,7 +130,7 @@ Default command.
    `_bot`, `-bot`, or `bot`.
 5. Create a private bucket named `<agent>-data`.
 6. Create a private Docker Space named `<agent>`.
-7. Generate the Space files from `src/space-template`.
+7. Generate the Space files from this GitHub source tree.
 8. Upload/commit the generated files into the user's Space repo.
 9. Set variables/secrets.
 10. Restart the Space and print Space/bucket URLs.
@@ -172,12 +173,10 @@ bucket objects.
 
 ## Compatibility Bootstrap
 
-The imported `bootstrap.sh` from `osolmaz/openclaw-bootstrap` stays working
-until `hclaw` is fully verified.
-
-After verification, replace `bootstrap.sh` with a compatibility shim that
-downloads and runs the committed `dist/hclaw.mjs` from GitHub. Do not delete the
-old Hugging Face bootstrap repo; its published URL must keep working.
+The `bootstrap.sh` in this GitHub repo is a compatibility shim that downloads
+and runs the committed `dist/hclaw.mjs` from GitHub. The old Hugging Face
+bootstrap repo remains published separately so existing URLs can keep working
+until we intentionally repoint them.
 
 ## Security Defaults
 
