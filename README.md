@@ -75,9 +75,13 @@ Private Spaces use Telegram long polling, not webhooks. Telegram cannot call a
 private Space webhook because Hugging Face requires authentication before the
 request reaches the app.
 
-Some Hugging Face Space runtimes may have unreliable outbound access to
-`api.telegram.org`. If the Space logs Telegram connection timeouts, keep the
-Space private and configure `TELEGRAM_PROXY` or `TELEGRAM_API_ROOT`.
+Free Hugging Face Spaces can block outbound bot-platform traffic such as
+Telegram or Discord to prevent abuse. If Telegram logs connection timeouts on a
+free Space, upgrade the Space to paid hardware. That is the expected production
+path.
+
+Keep the Space private. Use `TELEGRAM_PROXY` or `TELEGRAM_API_ROOT` only when
+you intentionally want to route Telegram traffic through your own proxy.
 
 ## Development
 

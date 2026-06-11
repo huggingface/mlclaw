@@ -230,9 +230,11 @@ Live:
 
 ## Telegram Caveat
 
-The generated Space configures Telegram long polling for private Spaces, but
-Hugging Face egress to `api.telegram.org` can still fail from some Space
-runtimes with `UND_ERR_CONNECT_TIMEOUT`. That is outside the Space generation
-and bucket durability path. Operators can use upgraded Space hardware,
-`TELEGRAM_PROXY`, or `TELEGRAM_API_ROOT` when direct Telegram egress is
-unreliable.
+The generated Space configures Telegram long polling for private Spaces. Free
+Hugging Face Spaces can block outbound bot-platform traffic such as Telegram or
+Discord to prevent abuse. If Telegram logs `UND_ERR_CONNECT_TIMEOUT` on a free
+Space, upgrade the Space to paid hardware for production use.
+
+Keep the Space private. `TELEGRAM_PROXY` and `TELEGRAM_API_ROOT` are operator
+escape hatches for deployments that intentionally route Telegram traffic
+through their own proxy.
