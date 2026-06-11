@@ -5218,7 +5218,8 @@ async function bootstrap(args, hub, hfToken) {
   const names = namesFor(owner, agentName);
   const hardware = stringFlag(args, "hardware") ?? DEFAULT_HARDWARE;
   const model = stringFlag(args, "model") ?? DEFAULT_MODEL;
-  const gatewayToken = stringFlag(args, "gateway-token") ?? randomBytes(32).toString("base64url");
+  const providedGatewayToken = stringFlag(args, "gateway-token");
+  const gatewayToken = providedGatewayToken ?? randomBytes(32).toString("base64url");
   console.log(`Creating private bucket ${names.bucket}`);
   await hub.createBucket(names.bucket, true);
   console.log(`Creating private Space ${names.space}`);
@@ -5244,6 +5245,13 @@ async function bootstrap(args, hub, hfToken) {
   console.log(`Space:  https://huggingface.co/spaces/${names.space}`);
   console.log(`Bucket: https://huggingface.co/buckets/${names.bucket}`);
   console.log(`Agent:  ${agentName}${bot ? ` (@${bot.username})` : ""}`);
+  if (!providedGatewayToken) {
+    console.log("");
+    console.log("Generated OpenClaw gateway token:");
+    console.log(`  ${gatewayToken}`);
+    console.log("");
+    console.log("Save this token now. Hugging Face stores it as a write-only Space Secret.");
+  }
   console.log("Restart requested. Build logs may take a few minutes to appear.");
 }
 async function update(args, hub, hfToken) {
