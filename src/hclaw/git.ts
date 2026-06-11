@@ -96,7 +96,7 @@ function redact(arg: string): string {
   return arg.includes("@huggingface.co") ? "<authenticated-url>" : arg;
 }
 
-async function generateSpaceRepo(sourceDir: string, outDir: string): Promise<void> {
+export async function generateSpaceRepo(sourceDir: string, outDir: string): Promise<void> {
   const copies: Array<[string, string]> = [
     [".gitattributes", ".gitattributes"],
     ["Dockerfile", "Dockerfile"],

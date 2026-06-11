@@ -8,6 +8,7 @@
     "build:state-sync": "esbuild src/hf-state-sync/cli.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/hf-state-sync.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "build:hclaw": "esbuild src/hclaw/cli.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/hclaw.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "build:probe": "esbuild scripts/parity-probe.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/parity-probe.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "check:secrets": "node scripts/check-secrets.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

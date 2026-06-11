@@ -11,26 +11,37 @@ Space files directly to that user's Space repo.
 
 There is no maintained Hugging Face template Space in the deployment path.
 
-## Install
+## One-Command Use
 
-For development from this checkout:
+After `hf auth login`, run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh) \
+  bootstrap \
+  --telegram-token-file ~/secrets/bob_bot.env \
+  --telegram-user-id 1234567890
+```
+
+The compatibility Hugging Face bootstrap URL is also supported:
+
+```bash
+bash <(curl -fsSL https://huggingface.co/osolmaz/openclaw-bootstrap/resolve/main/bootstrap.sh) \
+  bootstrap \
+  --telegram-token-file ~/secrets/bob_bot.env \
+  --telegram-user-id 1234567890
+```
+
+Both commands run locally. They read your Hugging Face token from `HF_TOKEN`,
+`HF_TOKEN_PATH`, `$HF_HOME/token`, or the normal `hf auth login` cache.
+
+## Development
 
 ```bash
 npm install
 npm run build
-node dist/hclaw.mjs --help
-```
-
-The compatibility bootstrap entrypoint remains in `bootstrap.sh`. After the
-new CLI path is fully verified, that script can delegate to `dist/hclaw.mjs`
-without deleting the old Hugging Face bootstrap URL.
-
-## Usage
-
-```bash
-node dist/hclaw.mjs bootstrap \
-  --telegram-token-file ~/secrets/bob_bot.env \
-  --telegram-user-id 1234567890
+npm run typecheck
+npm test
+npm run check:secrets
 ```
 
 `hclaw bootstrap` creates:
@@ -45,14 +56,6 @@ the current source. It never touches the state bucket.
 
 `hclaw doctor <owner/space>` checks Space configuration, bucket access, and
 runtime logs. `doctor --fix` only applies safe Space config repairs.
-
-## Development
-
-```bash
-npm run build
-npm run typecheck
-npm test
-```
 
 Important directories:
 

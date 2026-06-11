@@ -12,6 +12,15 @@ The local CLI is `hclaw`. It runs on the user's machine, uses the user's local
 Hugging Face token, generates the Space repository contents, uploads those
 files to the user's Space repo, sets variables/secrets, and restarts the Space.
 
+The supported one-command entrypoint is:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh)
+```
+
+The Hugging Face bootstrap URL delegates to that GitHub entrypoint for
+backward compatibility.
+
 ## Maintained Resources
 
 Maintained by us:
@@ -55,6 +64,7 @@ src/
 space/
   README.md                   # generated Space metadata/readme source
 scripts/
+  check-secrets.mjs
   parity-probe.ts
 test/
 dist/
@@ -201,7 +211,8 @@ Local:
 1. `npm run build`
 2. `npm run typecheck`
 3. `npm test`
-4. Bucket parity probe against a real test bucket:
+4. `npm run check:secrets`
+5. Bucket parity probe against a real test bucket:
    upload, list, download, missing object, delete.
 
 Live:
@@ -225,3 +236,12 @@ Live:
 - Hosted launcher Spaces that collect user credentials.
 - npm publishing. The committed bundle plus shell shim is the first
   distribution target.
+
+## Telegram Caveat
+
+The generated Space configures Telegram long polling for private Spaces, but
+Hugging Face egress to `api.telegram.org` can still fail from some Space
+runtimes with `UND_ERR_CONNECT_TIMEOUT`. That is outside the Space generation
+and bucket durability path. Operators can use upgraded Space hardware,
+`TELEGRAM_PROXY`, or `TELEGRAM_API_ROOT` when direct Telegram egress is
+unreliable.
