@@ -105,6 +105,26 @@ Honest numbers, since "deploy your own agent" tends to hide them:
   block above: upgrade the hardware.
 - Keep the Space private.
 
+## Space hardware
+
+For Telegram or Discord, use upgraded Space hardware. Free `cpu-basic` Spaces
+can block outbound bot-platform traffic. The cheapest paid CPU tier is enough
+for the gateway:
+
+```bash
+hf spaces settings your-hf-username/research-agent --hardware cpu-upgrade --sleep-time -1
+```
+
+Hugging Face uses `--sleep-time -1` to keep upgraded hardware always on. The
+equivalent API call is `POST /api/spaces/{owner}/{space}/hardware` with:
+
+```json
+{
+  "flavor": "cpu-upgrade",
+  "sleepTimeSeconds": -1
+}
+```
+
 ## Development
 
 ```bash
