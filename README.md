@@ -1,19 +1,26 @@
-# Hugging Claw
-
 <p align="center">
-  <img src="assets/huggingclaw.svg" alt="Hugging Claw" width="160">
+  <img src="assets/huggingclaw.svg" alt="Hugging Claw" width="180">
 </p>
 
-Hugging Claw deploys a private [OpenClaw](https://openclaw.ai) agent to
-Hugging Face from a local CLI. This GitHub repo is the single source of truth:
-`hclaw` creates each user's private Space and bucket, then uploads generated
-Space files directly to that user's Space repo.
+# Hugging Claw
 
-There is no maintained Hugging Face template Space in the deployment path.
+Deploy a private [OpenClaw](https://openclaw.ai) agent to Hugging Face with one
+local command.
 
-## One-Command Use
+Hugging Claw creates a private Hugging Face Docker Space for the agent and a
+private Hugging Face Storage Bucket for durable state. The Space can be rebuilt
+or restarted; the bucket keeps the agent's snapshots.
 
-After `hf auth login`, run:
+## Requirements
+
+- A Hugging Face account.
+- The Hugging Face CLI installed as `hf`.
+- `hf auth login` completed locally.
+- Optional: a Telegram bot token from BotFather.
+
+## Deploy
+
+Run the installer from your own machine:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh) \
@@ -22,8 +29,55 @@ bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hcl
   --telegram-user-id 1234567890
 ```
 
-This command runs locally. It reads your Hugging Face token from `HF_TOKEN`,
-`HF_TOKEN_PATH`, `$HF_HOME/token`, or the normal `hf auth login` cache.
+The command reads your Hugging Face token from `HF_TOKEN`, `HF_TOKEN_PATH`,
+`$HF_HOME/token`, or the normal `hf auth login` cache. It does not ask you to
+paste Hugging Face credentials into a hosted app.
+
+If you do not want Telegram yet, omit the Telegram flags:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh) bootstrap
+```
+
+## What It Creates
+
+- A private Hugging Face Docker Space.
+- A private Hugging Face Storage Bucket.
+- Space variables and write-only Space secrets.
+- Generated Space source from this repo.
+
+If Hugging Claw generates an OpenClaw gateway token, it prints that token once.
+Save it when you see it. Hugging Face stores Space secrets as write-only values,
+so the installer cannot read it back later.
+
+## Commands
+
+Update an existing deployment from the current Hugging Claw source:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh) \
+  update osolmaz/bob
+```
+
+Check a deployment:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/huggingclaw/main/hclaw.sh) \
+  doctor osolmaz/bob
+```
+
+`doctor --fix` only applies safe Space configuration repairs. It does not read
+secret values and does not modify bucket objects.
+
+## Telegram Notes
+
+Private Spaces use Telegram long polling, not webhooks. Telegram cannot call a
+private Space webhook because Hugging Face requires authentication before the
+request reaches the app.
+
+Some Hugging Face Space runtimes may have unreliable outbound access to
+`api.telegram.org`. If the Space logs Telegram connection timeouts, keep the
+Space private and configure `TELEGRAM_PROXY` or `TELEGRAM_API_ROOT`.
 
 ## Development
 
@@ -35,24 +89,5 @@ npm test
 npm run check:secrets
 ```
 
-`hclaw bootstrap` creates:
-
-- a private Hugging Face Storage Bucket
-- a private Hugging Face Docker Space
-- generated Space files from this repo
-- required Space variables and secrets
-
-`hclaw update <owner/space>` regenerates and force-pushes the Space files from
-the current source. It never touches the state bucket.
-
-`hclaw doctor <owner/space>` checks Space configuration, bucket access, and
-runtime logs. `doctor --fix` only applies safe Space config repairs.
-
-Important directories:
-
-- `src/hclaw/`: CLI implementation.
-- `src/hf-bucket-client/`: typed Hugging Face Storage Bucket client.
-- `src/hf-state-sync/`: runtime snapshot/restore supervisor.
-- `src/vendor/hfjs-xet/`: vendored Xet upload path from `huggingface.js`.
-- `space/`: files used only in generated Hugging Face Spaces.
-- `docs/`: implementation plans and architecture notes.
+Architecture and implementation notes live in
+[`docs/openclaw-huggingface-implementation-plan.md`](docs/openclaw-huggingface-implementation-plan.md).
