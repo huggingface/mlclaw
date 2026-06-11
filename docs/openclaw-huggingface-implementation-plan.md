@@ -1,85 +1,95 @@
-# OpenClaw Hugging Face Deployment Template: Implementation Plan
+# Hugging Claw Implementation Plan
 
 ## Decision
 
-Create a generic Hugging Face Docker Space template under:
+`osolmaz/huggingclaw` is the single source of truth for Hugging Claw.
 
-```text
-osolmaz/openclaw-huggingface
-```
+Hugging Claw deploys a private OpenClaw agent to Hugging Face by creating a
+private Storage Bucket and a private Docker Space for each user. There is no
+maintained Hugging Face template Space required for normal operation.
 
-The template is not Telegram-specific. It runs a fully Hugging Face-hosted OpenClaw gateway/control UI, with Telegram as the first optional happy-path channel.
-
-Create a Merve-style local bootstrap repo under:
-
-```text
-osolmaz/openclaw-bootstrap
-```
-
-The bootstrap script is the primary UX. It creates a private Space, creates a private bucket, mounts the bucket at `/data`, sets Space secrets, and starts the deployed OpenClaw runtime.
+The local CLI is `hclaw`. It runs on the user's machine, uses the user's local
+Hugging Face token, generates the Space repository contents, uploads those
+files to the user's Space repo, sets variables/secrets, and restarts the Space.
 
 ## Maintained Resources
 
 Maintained by us:
 
 ```text
-1 public HF Space template:
-  osolmaz/openclaw-huggingface
-1 public HF bootstrap repo:
-  osolmaz/openclaw-bootstrap
+1 GitHub source repo:
+  https://github.com/osolmaz/huggingclaw
+
+1 compatibility Hugging Face bootstrap repo:
+  https://huggingface.co/osolmaz/openclaw-bootstrap
+```
+
+Optional/non-authoritative:
+
+```text
+HF demo or test Spaces may exist, but they are generated outputs only.
+They are not the source of truth and are not required by hclaw.
 ```
 
 Created per user:
 
 ```text
-1 private HF Space
-1 private HF Storage Bucket mounted read-write at /data
+1 private HF Docker Space repo
+1 private HF Storage Bucket
 ```
 
 ## Repository Contents
 
 ```text
 README.md
-Dockerfile
-entrypoint.sh
-openclaw.default.json
-deploy-hf-openclaw.sh
-scripts/
-  configure-telegram.mjs
-```
-
-Bootstrap repo:
-
-```text
-README.md
-bootstrap.sh
+bootstrap.sh                  # compatibility entrypoint, eventually delegates to hclaw
 docs/
   openclaw-huggingface-implementation-plan.md
+src/
+  hclaw/                      # CLI: bootstrap | update | doctor
+  hf-bucket-client/           # typed Storage Bucket client
+  hf-state-sync/              # runtime snapshot/restore supervisor
+  space-template/             # generated files for user Spaces
+  vendor/hfjs-xet/            # vendored Xet upload path from huggingface.js
+scripts/
+  parity-probe.ts
+test/
+dist/
+  hclaw.mjs                   # committed one-file CLI bundle
 ```
 
 ## Runtime Contract
 
-The Space runs OpenClaw from the official image:
+Generated Spaces run OpenClaw from:
 
 ```text
 ghcr.io/openclaw/openclaw:latest
 ```
 
-It exposes the Hugging Face Space port:
+The generated Space exposes:
 
 ```text
 OPENCLAW_GATEWAY_PORT=7860
 ```
 
-Persistent state lives under:
+OpenClaw state lives on local Space disk:
 
 ```text
-OPENCLAW_STATE_DIR=/data/.openclaw
-OPENCLAW_WORKSPACE_DIR=/data/workspace
-OPENCLAW_CONFIG_PATH=/data/.openclaw/openclaw.json
+OPENCLAW_LIVE_DIR=/tmp/openclaw-live
+OPENCLAW_STATE_DIR=/tmp/openclaw-live/.openclaw
+OPENCLAW_WORKSPACE_DIR=/tmp/openclaw-live/workspace
+OPENCLAW_CONFIG_PATH=/tmp/openclaw-live/.openclaw/openclaw.json
 ```
 
-Secrets live in Hugging Face Space Secrets:
+Durability is handled by `hf-state-sync`:
+
+1. On boot, restore the newest verified snapshot from the private bucket.
+2. During runtime and shutdown, snapshot local state to a `tar.zst` archive.
+3. Copy live SQLite databases via `VACUUM INTO` before archiving.
+4. Upload archive and manifest through the TypeScript bucket client.
+5. Never mount the bucket as a filesystem for live SQLite.
+
+Space Secrets:
 
 ```text
 OPENCLAW_GATEWAY_TOKEN
@@ -90,129 +100,123 @@ TELEGRAM_PROXY
 TELEGRAM_API_ROOT
 ```
 
-Default model config uses Hugging Face Inference Providers, not a dedicated paid Inference Endpoint:
+Space Variables:
 
 ```text
-provider: huggingface
-base_url: https://router.huggingface.co/v1
-model: huggingface/Qwen/Qwen3-8B
+OPENCLAW_HF_STATE_BUCKET
+OPENCLAW_HF_TEMPLATE_REV
+OPENCLAW_MODEL
+OPENCLAW_AGENT_NAME
 ```
 
-Inference Endpoints remain a later/pro option for users who explicitly want dedicated model infrastructure.
+Default model:
 
-## Bootstrap Naming Flow
+```text
+huggingface/Qwen/Qwen3-8B
+```
 
-If the user configures Telegram, the bootstrap should derive sensible defaults from the bot token:
+## CLI Contract
 
-1. Prompt for `TELEGRAM_BOT_TOKEN`.
-2. Call Telegram Bot API `getMe`.
-3. Validate the token and display the detected bot.
-4. Derive a base slug from the bot username by removing a trailing `_bot`, `-bot`, or `bot`.
-5. Fallback to the bot `first_name` if no username exists.
-6. Prompt with editable defaults.
+### `hclaw bootstrap`
+
+Default command.
+
+1. Read HF auth from `HF_TOKEN` or the standard Hugging Face token cache.
+2. Optionally read Telegram token from `--telegram-token`,
+   `--telegram-token-file`, or `TELEGRAM_BOT_TOKEN`.
+3. If Telegram is present, call Telegram `getMe`.
+4. Derive the default agent name from the bot username by removing a trailing
+   `_bot`, `-bot`, or `bot`.
+5. Create a private bucket named `<agent>-data`.
+6. Create a private Docker Space named `<agent>`.
+7. Generate the Space files from `src/space-template`.
+8. Upload/commit the generated files into the user's Space repo.
+9. Set variables/secrets.
+10. Restart the Space and print Space/bucket URLs.
 
 Example:
 
-```text
-Telegram bot detected: @bob_research_bot (Bob Research)
-
-Agent display name [Bob Research]:
-Space name [bob-research]:
-Bucket name [bob-research-data]:
-Telegram allowed user id:
-```
-
-Normalization rules:
-
-```text
-@bob_research_bot -> bob-research
-Bob Research      -> bob-research
-bobbot            -> bob
-```
-
-Names remain configurable through prompts and environment overrides:
-
 ```bash
-OPENCLAW_HF_SPACE_NAME=bob-research
-OPENCLAW_HF_BUCKET_NAME=bob-research-data
-OPENCLAW_AGENT_NAME="Bob Research"
+hclaw bootstrap \
+  --telegram-token-file ~/secrets/bob_bot.env \
+  --telegram-user-id 1234567890
 ```
 
-## First-Boot Behavior
+### `hclaw update <owner/space>`
 
-`entrypoint.sh`:
+1. Confirm the target looks like a Hugging Claw deployment, unless `--force`.
+2. Regenerate Space files from the current source repo.
+3. Force-push the generated files into the target Space repo.
+4. Re-stamp `OPENCLAW_HF_TEMPLATE_REV`.
+5. Restart the Space.
+6. Run doctor checks.
 
-1. Creates `/data/.openclaw`, `/data/workspace`, and `/data/backups`.
-2. Copies `openclaw.default.json` to `/data/.openclaw/openclaw.json` only if no config exists.
-3. If Telegram secrets are present, enables Telegram in config and inserts the allowlist.
-4. Starts `openclaw gateway`.
+The update command never writes to the state bucket.
 
-Existing user config is never overwritten.
+### `hclaw doctor <owner/space>`
 
-## User Flows
+Report-only by default; `--fix` applies safe Space config repairs.
 
-### Secure default: local bootstrap
+Checks:
 
-1. User runs `hf auth login`.
-2. User runs the bootstrap one-liner from `osolmaz/openclaw-bootstrap`.
-3. Script asks for optional Telegram bot token.
-4. If Telegram is configured, script calls `getMe` and suggests agent, Space, and bucket names.
-5. Script creates a private Space under the user's HF account.
-6. Script creates a private bucket and mounts it at `/data`.
-7. Script sets Space variables and secrets.
-8. Space builds and starts.
-9. User opens Control UI or messages the configured Telegram bot.
+- Required variables present.
+- Required secret names present.
+- State bucket is accessible.
+- No legacy `/data` path variables are set.
+- Runtime logs show restore/fresh-start and snapshot upload outcomes.
+- Template rev is present.
 
-### Secondary path: duplicate in Hugging Face UI
+`doctor --fix` may delete stale path variables or set a missing bucket variable
+when `--bucket` is provided. It never reads secret values and never modifies
+bucket objects.
 
-1. User opens the public template Space.
-2. User clicks **Duplicate this Space**.
-3. User makes the duplicated Space private.
-4. User adds persistent storage or a bucket mount.
-5. User enters Space Secrets.
-6. Space builds and starts.
+## Compatibility Bootstrap
 
-The local bootstrap is preferred because it avoids a hosted launcher that asks for Hugging Face credentials while still automating the private Space/bucket setup.
+The imported `bootstrap.sh` from `osolmaz/openclaw-bootstrap` stays working
+until `hclaw` is fully verified.
+
+After verification, replace `bootstrap.sh` with a compatibility shim that
+downloads and runs the committed `dist/hclaw.mjs` from GitHub. Do not delete the
+old Hugging Face bootstrap repo; its published URL must keep working.
 
 ## Security Defaults
 
-- No credentials in git.
-- No credentials in `/data` by default.
-- Private duplicated Spaces for real use.
-- Gateway auth required via `OPENCLAW_GATEWAY_TOKEN`.
-- Telegram uses `dmPolicy: "allowlist"` when configured by the helper.
-- Telegram long polling works with private Spaces because the runtime connects outbound.
-- Telegram webhook mode is intentionally not the default for private Spaces. Telegram cannot deliver webhook requests to a private Hugging Face Space because unauthenticated requests do not reach the app.
-- Some Hugging Face Space runtimes cannot reliably reach `api.telegram.org` directly. In that case, keep the private Space and configure `TELEGRAM_PROXY` or an operator-controlled `TELEGRAM_API_ROOT` instead of making the Space public.
-- Bootstrap reads the HF token with `hf auth token`, not Python `huggingface_hub` imports.
-- Bootstrap never prints secret values.
+- The user runs `hclaw` locally; no hosted launcher asks for HF credentials.
+- No credentials are committed to git.
+- Secret values are write-only and never printed.
+- Generated Spaces are private by default.
+- Gateway auth is required.
+- Telegram is allowlisted by default.
+- Telegram uses long polling for private Spaces.
 
-## Open Questions To Validate
+## Verification
 
-1. Confirm the exact OpenClaw config schema for `gateway.auth.token` with `${OPENCLAW_GATEWAY_TOKEN}` substitution.
-2. Confirm the official Docker image contains the `openclaw` CLI on PATH for `openclaw gateway`.
-3. Confirm bucket mounts via `hf spaces volumes set <space> -v hf://buckets/<bucket>:/data` work reliably for private buckets.
-4. Confirm `hf spaces variables add` and `hf spaces secrets add` command syntax against the installed CLI version before publishing the launcher.
-5. Decide whether to pin `ghcr.io/openclaw/openclaw:<version>` instead of `latest` for reproducible template builds.
-6. Confirm the OpenClaw config field for agent display name before wiring `OPENCLAW_AGENT_NAME` into runtime config.
+Local:
 
-## Next Implementation Steps
+1. `npm run build`
+2. `npm run typecheck`
+3. `npm test`
+4. Bucket parity probe against a real test bucket:
+   upload, list, download, missing object, delete.
 
-1. Implement/finish `osolmaz/openclaw-bootstrap/bootstrap.sh`.
-2. Make bootstrap prompts derive defaults from Telegram `getMe`.
-3. Create a private test Space and private test bucket from the bootstrap.
-4. Mount the bucket at `/data`.
-5. Set `OPENCLAW_GATEWAY_TOKEN`, `HF_TOKEN`, and Telegram secrets.
-6. Configure default model as `huggingface/Qwen/Qwen3-8B` through HF Inference Providers.
-7. Verify:
-   - Build succeeds.
-   - `/health` returns healthy.
-   - Control UI accepts the gateway token.
-   - `/data/.openclaw/openclaw.json` persists across restart.
-   - Bot-derived names are correct for examples like `@bob_research_bot`.
-   - Telegram DM from allowed user reaches OpenClaw.
-   - Telegram DM from non-allowed user is rejected.
-8. If the private Space logs Telegram `UND_ERR_CONNECT_TIMEOUT`, rerun with `TELEGRAM_PROXY` or `TELEGRAM_API_ROOT` and re-run the Telegram DM verification.
-9. Iterate on config/schema issues.
-10. Freeze a tested image tag.
-11. Update README with the exact working bootstrap command and troubleshooting notes.
+Live:
+
+1. Wipe old `osolmaz/onurclawtest` Space and `osolmaz/onurclawtest-data`
+   bucket when explicitly authorized.
+2. Run `hclaw bootstrap` using the saved Telegram token file and allowed user.
+3. Confirm the Space repo was generated from `huggingclaw`, not from a template
+   Space.
+4. Confirm Space builds.
+5. Confirm logs show `fresh start` or `restored snapshot`.
+6. Confirm logs show `snapshot ... uploaded`.
+7. Restart the Space and confirm restore from bucket.
+8. Run `hclaw doctor osolmaz/onurclawtest`.
+9. Induce one stale `/data` variable, then confirm `doctor --fix` removes it.
+
+## Out of Scope
+
+- A maintained Hugging Face template Space as source of truth.
+- Mounted buckets for live state.
+- Hosted launcher Spaces that collect user credentials.
+- npm publishing. The committed bundle plus shell shim is the first
+  distribution target.
