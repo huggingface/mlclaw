@@ -89,5 +89,6 @@ npm test
 npm run check:secrets
 ```
 
-Architecture and implementation notes live in
-[`docs/openclaw-huggingface-implementation-plan.md`](docs/openclaw-huggingface-implementation-plan.md).
+## License
+
+[MIT](LICENSE)
