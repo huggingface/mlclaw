@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/huggingclaw.svg" alt="Hugging Claw" width="180">
+  <img src="https://raw.githubusercontent.com/osolmaz/huggingclaw/main/assets/huggingclaw.svg" alt="Hugging Claw" width="180">
 </p>
 
 # Hugging Claw
