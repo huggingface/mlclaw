@@ -77,6 +77,101 @@ huggingface/Qwen/Qwen3-32B
 the earlier 12B investigation: Gemma 4 12B was rejected by the router, but Gemma
 4 26B-A4B-it works.
 
+## Router Catalog And Provider Suffixes
+
+The shared router exposes its current chat model catalog at:
+
+```text
+GET https://router.huggingface.co/v1/models
+```
+
+On 2026-06-12, that endpoint returned 118 router models. Filtering for
+Gemma/Qwen-like IDs returned 42 entries. The router catalog is the best
+availability signal: if a repo is not present there, direct `/v1/chat/completions`
+calls generally fail even when the Hub model page says `endpoints_compatible`.
+
+The Hub model API also exposes provider mappings for many models. For example:
+
+```text
+GET https://huggingface.co/api/models/google/gemma-4-26B-A4B-it?expand[]=inferenceProviderMapping
+```
+
+returned live providers for `google/gemma-4-26B-A4B-it`, while
+`google/gemma-4-12B-it`, `ggml-org/gemma-4-26B-A4B-it-GGUF`, and
+`unsloth/gemma-4-26B-A4B-it-GGUF` had empty provider mappings.
+
+Provider suffixes work for canonical router-listed IDs:
+
+| Model field | Result |
+| --- | --- |
+| `google/gemma-4-26B-A4B-it:deepinfra` | 200 |
+| `google/gemma-4-26B-A4B-it:novita` | 200 |
+| `google/gemma-4-26B-A4B-it:featherless-ai` | 200 |
+| `google/gemma-4-26B-A4B-it:cheapest` | 200 |
+| `google/gemma-4-26B-A4B-it:fastest` | 200 |
+| `Qwen/Qwen3.6-35B-A3B:deepinfra` | 200 |
+| `Qwen/Qwen3.6-35B-A3B:featherless-ai` | 200 |
+| `Qwen/Qwen3.6-35B-A3B:cheapest` | 200 |
+| `Qwen/Qwen3.6-35B-A3B:fastest` | 200 |
+
+Provider suffixes did not unlock models that were absent from the router
+catalog:
+
+| Model field | Result |
+| --- | --- |
+| `google/gemma-4-12B-it:deepinfra` | 400 `model_not_supported` |
+| `google/gemma-4-12B-it:novita` | 400 `model_not_supported` |
+| `ggml-org/gemma-4-26B-A4B-it-GGUF:deepinfra` | 400 `model_not_supported` |
+| `unsloth/gemma-4-26B-A4B-it-GGUF:deepinfra` | 400 `model_not_supported` |
+| `unsloth/Qwen3-Coder-Next-GGUF:featherless-ai` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-8B-GGUF:nscale` | 400 `model_not_supported` |
+
+## GGUF, ggml-org, And Unsloth Repos
+
+Hugging Face Hub search shows many `ggml-org/*` and `unsloth/*` GGUF repos with
+`endpoints_compatible` and `conversational` tags. Those tags do not mean the
+shared router can serve them as chat-completion models.
+
+Representative direct router probes all failed with `400 model_not_supported`:
+
+| Hub model | Result |
+| --- | --- |
+| `ggml-org/gemma-4-26B-A4B-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/gemma-4-31B-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/gemma-4-12B-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/gemma-4-E4B-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/gemma-3-27b-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/gemma-3n-E4B-it-GGUF` | 400 `model_not_supported` |
+| `unsloth/gemma-4-26B-A4B-it` | 400 `model_not_supported` |
+| `unsloth/gemma-4-26B-A4B-it-GGUF` | 400 `model_not_supported` |
+| `unsloth/gemma-4-31B-it-GGUF` | 400 `model_not_supported` |
+| `unsloth/gemma-4-12b-it` | 400 `model_not_supported` |
+| `unsloth/gemma-4-12b-it-GGUF` | 400 `model_not_supported` |
+| `unsloth/gemma-4-E4B-it` | 400 `model_not_supported` |
+| `unsloth/gemma-4-E4B-it-GGUF` | 400 `model_not_supported` |
+| `unsloth/gemma-3n-E4B-it` | 400 `model_not_supported` |
+| `unsloth/gemma-3-27b-it-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-8B-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-14B-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-Coder-Next-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-Coder-30B-A3B-Instruct-Q8_0-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3-0.6B-GGUF` | 400 `model_not_supported` |
+| `ggml-org/Qwen3.6-35B-A3B-GGUF` | 400 `model_not_supported` |
+| `unsloth/Qwen3-Coder-Next-GGUF` | 400 `model_not_supported` |
+| `unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF` | 400 `model_not_supported` |
+| `unsloth/Qwen3.5-9B` | 400 `model_not_supported` |
+| `unsloth/Qwen3.5-9B-GGUF` | 400 `model_not_supported` |
+| `unsloth/Qwen3.5-4B` | 400 `model_not_supported` |
+| `unsloth/Qwen3.5-4B-GGUF` | 400 `model_not_supported` |
+| `unsloth/Qwen3-14B-unsloth-bnb-4bit` | 400 `model_not_supported` |
+| `unsloth/Qwen3-4B` | 400 `model_not_supported` |
+| `unsloth/Qwen3-4B-unsloth-bnb-4bit` | 400 `model_not_supported` |
+| `unsloth/Qwen3.6-35B-A3B-GGUF` | 400 `model_not_supported` |
+
+The practical conclusion is: use canonical router-listed model IDs for OpenClaw.
+Use GGUF/Unsloth repos for dedicated endpoints, llama.cpp/Ollama/LM Studio, or
+other custom runtimes, not for the shared HF router.
+
 ## Gemma Models That Worked
 
 | Hub model | OpenClaw model | Router model | Notes |
