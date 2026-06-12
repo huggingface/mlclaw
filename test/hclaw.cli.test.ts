@@ -158,6 +158,26 @@ describe("hclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
   });
 
+  it("fails non-interactive paid bootstrap hardware without consent even without Telegram", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--hardware",
+      "cpu-upgrade",
+      "--gateway-token",
+      "gateway-token",
+    ], createRuntime(hub, prompt, stderr));
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("paid Hugging Face Space hardware requires explicit consent");
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+  });
+
   it("updates Space hardware settings through the Hugging Face settings API", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([]);

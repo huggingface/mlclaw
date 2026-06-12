@@ -431,6 +431,14 @@ async function resolveHardware(params: {
   runtime: Required<CliRuntime>;
 }): Promise<{ hardware: string; sleepTime?: number }> {
   if (!params.needsTelegram) {
+    if (params.requestedHardware && isPaidHardware(params.requestedHardware)) {
+      await confirmPaidHardware({
+        hardware: params.requestedHardware,
+        ...(typeof params.requestedSleepTime === "number" ? { sleepTime: params.requestedSleepTime } : {}),
+        yes: params.yes,
+        runtime: params.runtime,
+      });
+    }
     return {
       hardware: params.requestedHardware ?? DEFAULT_HARDWARE,
       ...(typeof params.requestedSleepTime === "number" ? { sleepTime: params.requestedSleepTime } : {}),
