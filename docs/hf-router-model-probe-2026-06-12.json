@@ -1,0 +1,2287 @@
+{
+  "startedAt": "2026-06-12T09:11:20.070Z",
+  "finishedAt": "2026-06-12T09:12:23.335Z",
+  "endpoint": "https://router.huggingface.co/v1/chat/completions",
+  "prompt": "Reply exactly: ok",
+  "max_tokens": 12,
+  "candidates": [
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E2B",
+      "openclawModel": "huggingface/google/gemma-4-E2B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:46:29.000Z",
+        "downloads": 1036155,
+        "likes": 329
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 506,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E2B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E2B-it",
+      "openclawModel": "huggingface/google/gemma-4-E2B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "any-to-any",
+          "base_model:google/gemma-4-E2B",
+          "base_model:finetune:google/gemma-4-E2B",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:47:10.000Z",
+        "downloads": 2548288,
+        "likes": 720
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 335,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E2B-it' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E2B-it-assistant",
+      "openclawModel": "huggingface/google/gemma-4-E2B-it-assistant",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_assistant",
+          "text-generation",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:45:31.000Z",
+        "downloads": 28623,
+        "likes": 62
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 262,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E2B-it-assistant' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E4B",
+      "openclawModel": "huggingface/google/gemma-4-E4B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:47:46.000Z",
+        "downloads": 650176,
+        "likes": 311
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 253,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E4B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E4B-it",
+      "openclawModel": "huggingface/google/gemma-4-E4B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "any-to-any",
+          "base_model:google/gemma-4-E4B",
+          "base_model:finetune:google/gemma-4-E4B",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:48:25.000Z",
+        "downloads": 5699237,
+        "likes": 1235
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 249,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E4B-it' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-E4B-it-assistant",
+      "openclawModel": "huggingface/google/gemma-4-E4B-it-assistant",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_assistant",
+          "text-generation",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:45:05.000Z",
+        "downloads": 87581,
+        "likes": 108
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 246,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-E4B-it-assistant' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-12B",
+      "openclawModel": "huggingface/google/gemma-4-12B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_unified",
+          "image-text-to-text",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-04T11:58:12.000Z",
+        "downloads": 140221,
+        "likes": 521
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 248,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-12B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-12B-it",
+      "openclawModel": "huggingface/google/gemma-4-12B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_unified",
+          "image-text-to-text",
+          "any-to-any",
+          "base_model:google/gemma-4-12B",
+          "base_model:finetune:google/gemma-4-12B",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-04T11:58:10.000Z",
+        "downloads": 675936,
+        "likes": 947
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 267,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-12B-it' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-12B-it-assistant",
+      "openclawModel": "huggingface/google/gemma-4-12B-it-assistant",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_unified_assistant",
+          "text-generation",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-04T11:58:14.000Z",
+        "downloads": 22505,
+        "likes": 81
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 244,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-12B-it-assistant' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-26B-A4B",
+      "openclawModel": "huggingface/google/gemma-4-26B-A4B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:48:56.000Z",
+        "downloads": 99515,
+        "likes": 307
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 249,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-26B-A4B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-26B-A4B-it",
+      "openclawModel": "huggingface/google/gemma-4-26B-A4B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "conversational",
+          "base_model:google/gemma-4-26B-A4B",
+          "base_model:finetune:google/gemma-4-26B-A4B",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:49:38.000Z",
+        "downloads": 11448151,
+        "likes": 1121
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 1054,
+        "routerModel": "google/gemma-4-26b-a4b-it",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-26B-A4B-it-assistant",
+      "openclawModel": "huggingface/google/gemma-4-26B-A4B-it-assistant",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_assistant",
+          "text-generation",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:43:10.000Z",
+        "downloads": 152531,
+        "likes": 162
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 253,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-26B-A4B-it-assistant' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-31B",
+      "openclawModel": "huggingface/google/gemma-4-31B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:50:11.000Z",
+        "downloads": 474417,
+        "likes": 412
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 306,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-31B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-31B-it",
+      "openclawModel": "huggingface/google/gemma-4-31B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4",
+          "image-text-to-text",
+          "conversational",
+          "base_model:google/gemma-4-31B",
+          "base_model:finetune:google/gemma-4-31B",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:50:40.000Z",
+        "downloads": 9794751,
+        "likes": 2969
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 2211,
+        "routerModel": "google/gemma-4-31b-it",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-4-31B-it-assistant",
+      "openclawModel": "huggingface/google/gemma-4-31B-it-assistant",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma4_assistant",
+          "text-generation",
+          "any-to-any",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-06-03T08:41:56.000Z",
+        "downloads": 381012,
+        "likes": 299
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 270,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-4-31B-it-assistant' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3n-E2B-it",
+      "openclawModel": "huggingface/google/gemma-3n-E2B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3n",
+          "image-text-to-text",
+          "automatic-speech-recognition",
+          "automatic-speech-translation",
+          "audio-text-to-text",
+          "video-text-to-text",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2210.03057",
+          "arxiv:2502.12404",
+          "arxiv:2411.19799",
+          "arxiv:2009.03300",
+          "arxiv:2502.21228",
+          "arxiv:2311.12022",
+          "arxiv:2403.07974",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "base_model:google/gemma-3n-E4B-it",
+          "base_model:finetune:google/gemma-3n-E4B-it",
+          "license:gemma",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-07-14T13:55:52.000Z",
+        "downloads": 355597,
+        "likes": 305
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 257,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-3n-E2B-it' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3n-E4B-it",
+      "openclawModel": "huggingface/google/gemma-3n-E4B-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3n",
+          "image-text-to-text",
+          "automatic-speech-recognition",
+          "automatic-speech-translation",
+          "audio-text-to-text",
+          "video-text-to-text",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2210.03057",
+          "arxiv:2502.12404",
+          "arxiv:2411.19799",
+          "arxiv:2009.03300",
+          "arxiv:2502.21228",
+          "arxiv:2311.12022",
+          "arxiv:2403.07974",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "base_model:google/gemma-3n-E4B",
+          "base_model:finetune:google/gemma-3n-E4B",
+          "license:gemma",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-07-14T13:56:17.000Z",
+        "downloads": 16944,
+        "likes": 917
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 899,
+        "routerModel": "google/gemma-3n-E4B-it",
+        "finishReason": "stop",
+        "content": "ok\n",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3-270m-it",
+      "openclawModel": "huggingface/google/gemma-3-270m-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3",
+          "gemma",
+          "google",
+          "text-generation",
+          "arxiv:2503.19786",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:2311.07911",
+          "arxiv:2311.12022",
+          "arxiv:2411.04368",
+          "arxiv:1904.09728",
+          "arxiv:1903.00161",
+          "arxiv:2009.03300",
+          "arxiv:2304.06364",
+          "arxiv:2103.03874",
+          "arxiv:2110.14168",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "arxiv:2403.07974",
+          "arxiv:2305.03111",
+          "arxiv:2405.04520",
+          "arxiv:2210.03057",
+          "arxiv:2106.03193",
+          "arxiv:1910.11856",
+          "arxiv:2502.12404",
+          "arxiv:2502.21228",
+          "arxiv:2404.16816",
+          "arxiv:2104.12756",
+          "arxiv:2311.16502",
+          "arxiv:2203.10244",
+          "arxiv:2404.12390",
+          "arxiv:1810.12440",
+          "arxiv:1908.02660",
+          "arxiv:2310.02255"
+        ],
+        "lastModified": "2025-08-14T07:35:07.000Z",
+        "downloads": 119964,
+        "likes": 593
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 249,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-3-270m-it' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3-1b-it",
+      "openclawModel": "huggingface/google/gemma-3-1b-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3_text",
+          "text-generation",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2009.03300",
+          "arxiv:2304.06364",
+          "arxiv:2103.03874",
+          "arxiv:2110.14168",
+          "arxiv:2311.12022",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "arxiv:2210.03057",
+          "arxiv:2106.03193",
+          "arxiv:1910.11856",
+          "arxiv:2502.12404",
+          "arxiv:2502.21228",
+          "arxiv:2404.16816",
+          "arxiv:2104.12756",
+          "arxiv:2311.16502",
+          "arxiv:2203.10244",
+          "arxiv:2404.12390",
+          "arxiv:1810.12440",
+          "arxiv:1908.02660",
+          "arxiv:2312.11805",
+          "base_model:google/gemma-3-1b-pt",
+          "base_model:finetune:google/gemma-3-1b-pt",
+          "license:gemma",
+          "eval-results",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-04-04T13:12:40.000Z",
+        "downloads": 1809332,
+        "likes": 1005
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 253,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-3-1b-it' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3-4b-it",
+      "openclawModel": "huggingface/google/gemma-3-4b-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2009.03300",
+          "arxiv:2304.06364",
+          "arxiv:2103.03874",
+          "arxiv:2110.14168",
+          "arxiv:2311.12022",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "arxiv:2210.03057",
+          "arxiv:2106.03193",
+          "arxiv:1910.11856",
+          "arxiv:2502.12404",
+          "arxiv:2502.21228",
+          "arxiv:2404.16816",
+          "arxiv:2104.12756",
+          "arxiv:2311.16502",
+          "arxiv:2203.10244",
+          "arxiv:2404.12390",
+          "arxiv:1810.12440",
+          "arxiv:1908.02660",
+          "arxiv:2312.11805",
+          "base_model:google/gemma-3-4b-pt",
+          "base_model:finetune:google/gemma-3-4b-pt",
+          "license:gemma",
+          "eval-results",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-03-21T20:20:53.000Z",
+        "downloads": 1520992,
+        "likes": 1362
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 250,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-3-4b-it' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3-12b-it",
+      "openclawModel": "huggingface/google/gemma-3-12b-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2009.03300",
+          "arxiv:2304.06364",
+          "arxiv:2103.03874",
+          "arxiv:2110.14168",
+          "arxiv:2311.12022",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "arxiv:2210.03057",
+          "arxiv:2106.03193",
+          "arxiv:1910.11856",
+          "arxiv:2502.12404",
+          "arxiv:2502.21228",
+          "arxiv:2404.16816",
+          "arxiv:2104.12756",
+          "arxiv:2311.16502",
+          "arxiv:2203.10244",
+          "arxiv:2404.12390",
+          "arxiv:1810.12440",
+          "arxiv:1908.02660",
+          "arxiv:2312.11805",
+          "base_model:google/gemma-3-12b-pt",
+          "base_model:finetune:google/gemma-3-12b-pt",
+          "license:gemma",
+          "eval-results",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-03-21T20:28:56.000Z",
+        "downloads": 2643795,
+        "likes": 749
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 255,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'google/gemma-3-12b-it' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "gemma",
+      "model": "google/gemma-3-27b-it",
+      "openclawModel": "huggingface/google/gemma-3-27b-it",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "gemma3",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:1905.07830",
+          "arxiv:1905.10044",
+          "arxiv:1911.11641",
+          "arxiv:1904.09728",
+          "arxiv:1705.03551",
+          "arxiv:1911.01547",
+          "arxiv:1907.10641",
+          "arxiv:1903.00161",
+          "arxiv:2009.03300",
+          "arxiv:2304.06364",
+          "arxiv:2103.03874",
+          "arxiv:2110.14168",
+          "arxiv:2311.12022",
+          "arxiv:2108.07732",
+          "arxiv:2107.03374",
+          "arxiv:2210.03057",
+          "arxiv:2106.03193",
+          "arxiv:1910.11856",
+          "arxiv:2502.12404",
+          "arxiv:2502.21228",
+          "arxiv:2404.16816",
+          "arxiv:2104.12756",
+          "arxiv:2311.16502",
+          "arxiv:2203.10244",
+          "arxiv:2404.12390",
+          "arxiv:1810.12440",
+          "arxiv:1908.02660",
+          "arxiv:2312.11805",
+          "base_model:google/gemma-3-27b-pt",
+          "base_model:finetune:google/gemma-3-27b-pt",
+          "license:gemma",
+          "eval-results",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-03-21T20:29:02.000Z",
+        "downloads": 1381843,
+        "likes": 1976
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 689,
+        "routerModel": "gemma-3-27b-it",
+        "finishReason": "stop",
+        "content": "ok\n",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-0.8B",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-0.8B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "base_model:Qwen/Qwen3.5-0.8B-Base",
+          "base_model:finetune:Qwen/Qwen3.5-0.8B-Base",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-03-02T11:26:58.000Z",
+        "downloads": 2447518,
+        "likes": 569
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 259,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-0.8B' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-2B",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-2B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "base_model:Qwen/Qwen3.5-2B-Base",
+          "base_model:finetune:Qwen/Qwen3.5-2B-Base",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-03-02T11:26:29.000Z",
+        "downloads": 1662918,
+        "likes": 304
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 253,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-2B' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-4B",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-4B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "base_model:Qwen/Qwen3.5-4B-Base",
+          "base_model:finetune:Qwen/Qwen3.5-4B-Base",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-03-02T00:52:52.000Z",
+        "downloads": 8955908,
+        "likes": 631
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 254,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-4B' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-9B",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-9B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "base_model:Qwen/Qwen3.5-9B-Base",
+          "base_model:finetune:Qwen/Qwen3.5-9B-Base",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-03-02T00:51:43.000Z",
+        "downloads": 8700726,
+        "likes": 1557
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 600,
+        "routerModel": "Qwen/Qwen3.5-9B",
+        "finishReason": "length",
+        "content": "",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-0.8B-Base",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-0.8B-Base",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-04-23T11:14:09.000Z",
+        "downloads": 188718,
+        "likes": 79
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 256,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-0.8B-Base' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-2B-Base",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-2B-Base",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-04-23T11:13:46.000Z",
+        "downloads": 130071,
+        "likes": 76
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 248,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-2B-Base' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3.5-4B-Base",
+      "openclawModel": "huggingface/Qwen/Qwen3.5-4B-Base",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_5",
+          "image-text-to-text",
+          "conversational",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2026-04-23T11:13:30.000Z",
+        "downloads": 191545,
+        "likes": 68
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 271,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3.5-4B-Base' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Coder-Next",
+      "openclawModel": "huggingface/Qwen/Qwen3-Coder-Next",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_next",
+          "text-generation",
+          "conversational",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2026-02-03T16:16:38.000Z",
+        "downloads": 948250,
+        "likes": 1445
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 1928,
+        "routerModel": "qwen/qwen3-coder-next",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_moe",
+          "text-generation",
+          "conversational",
+          "arxiv:2505.09388",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-12-03T08:05:17.000Z",
+        "downloads": 1884200,
+        "likes": 1102
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 756,
+        "routerModel": "qwen3-coder-30b-a3b-instruct",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+      "openclawModel": "huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_moe",
+          "text-generation",
+          "conversational",
+          "arxiv:2505.09388",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "fp8",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-12-03T08:20:23.000Z",
+        "downloads": 793448,
+        "likes": 183
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 256,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_next",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2404.06654",
+          "arxiv:2505.09388",
+          "arxiv:2501.15383",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-09-17T06:57:40.000Z",
+        "downloads": 323646,
+        "likes": 1027
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 254,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Next-80B-A3B-Instruct' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Next-80B-A3B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_next",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "arxiv:2501.15383",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-09-15T09:12:48.000Z",
+        "downloads": 28355,
+        "likes": 489
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 1804,
+        "routerModel": "qwen/qwen3-next-80b-a3b-thinking",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": "Okay, the user said \"Reply exactly: ok\". So I need to just say \"ok\" without any extra words or formatting. Let me check the instructions again. They want the exact reply, so no additional text, no punctuation beyond what's necessary. The user specified \"Reply exactly: ok\", so the response should be just \"ok\". I shouldn't add anything else. Let me confirm. Yes, the correct response is simply \"ok\". No need for quotes, no extra spaces. Just the word \"ok\". Got it.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Next-80B-A3B-Instruct-FP8",
+      "openclawModel": "huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct-FP8",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_next",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2404.06654",
+          "arxiv:2505.09388",
+          "arxiv:2501.15383",
+          "base_model:Qwen/Qwen3-Next-80B-A3B-Instruct",
+          "base_model:quantized:Qwen/Qwen3-Next-80B-A3B-Instruct",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "fp8",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-09-22T05:38:44.000Z",
+        "downloads": 247281,
+        "likes": 90
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 357,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Next-80B-A3B-Instruct-FP8' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Next-80B-A3B-Thinking-FP8",
+      "openclawModel": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_next",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "arxiv:2501.15383",
+          "base_model:Qwen/Qwen3-Next-80B-A3B-Thinking",
+          "base_model:quantized:Qwen/Qwen3-Next-80B-A3B-Thinking",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "fp8",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-09-22T05:39:57.000Z",
+        "downloads": 3765,
+        "likes": 55
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 306,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Next-80B-A3B-Thinking-FP8' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-Omni-30B-A3B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_omni_moe",
+          "text-to-audio",
+          "multimodal",
+          "any-to-any",
+          "en",
+          "license:other",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-09-22T14:17:52.000Z",
+        "downloads": 1624276,
+        "likes": 936
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 249,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Omni-30B-A3B-Instruct' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-Omni-30B-A3B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "any-to-any",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_omni_moe",
+          "text-to-audio",
+          "multimodal",
+          "any-to-any",
+          "en",
+          "license:other",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-09-22T14:17:44.000Z",
+        "downloads": 308657,
+        "likes": 305
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 259,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-Omni-30B-A3B-Thinking' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-2B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-2B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-23T11:30:44.000Z",
+        "downloads": 1908840,
+        "likes": 422
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 253,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-2B-Instruct' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-4B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-4B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-15T16:15:55.000Z",
+        "downloads": 3832845,
+        "likes": 395
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 260,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-4B-Instruct' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-8B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-15T16:16:59.000Z",
+        "downloads": 7341396,
+        "likes": 951
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 1122,
+        "routerModel": "qwen/qwen3-vl-8b-instruct",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-32B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-32B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-21T18:26:34.000Z",
+        "downloads": 3015689,
+        "likes": 203
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 307,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-32B-Instruct' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl_moe",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-11-26T13:18:04.000Z",
+        "downloads": 681711,
+        "likes": 578
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 729,
+        "routerModel": "qwen/qwen3-vl-30b-a3b-instruct",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-235B-A22B-Instruct",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-235B-A22B-Instruct",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl_moe",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-11-26T13:18:18.000Z",
+        "downloads": 1632283,
+        "likes": 393
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 1564,
+        "routerModel": "qwen/qwen3-vl-235b-a22b-instruct",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-2B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-2B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-20T19:15:08.000Z",
+        "downloads": 36825,
+        "likes": 114
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 391,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-2B-Thinking' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-4B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-4B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-15T16:14:47.000Z",
+        "downloads": 31971,
+        "likes": 112
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 276,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-4B-Thinking' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-8B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-8B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-11-26T13:18:14.000Z",
+        "downloads": 252033,
+        "likes": 210
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 359,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-8B-Thinking' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-32B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-32B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-10-21T18:23:29.000Z",
+        "downloads": 16653,
+        "likes": 87
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 251,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-VL-32B-Thinking' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-30B-A3B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-30B-A3B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl_moe",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-11-26T13:18:00.000Z",
+        "downloads": 12688,
+        "likes": 198
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 3672,
+        "routerModel": "qwen/qwen3-vl-30b-a3b-thinking",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": "Okay, the user asked me to reply exactly with \"ok\". Let me check the instructions.\n\nFirst, the user said: \"Reply exactly: ok\". So I need to respond with just the word \"ok\" without any additional text. No explanations, no extra words. Just \"ok\".\n\nI should make sure that my response is exactly as requested. Let me think about possible mistakes. Maybe I could add something like \"Okay\" or \"OK\", but the user specified \"ok\", so lowercase is important here. Also, no punctuation, no periods. Just the word \"ok\".\n\nWait, the user wrote \"Reply exactly: ok\", so the word is in lowercase. I need to follow that exactly. So the response should be \"ok\" with lowercase 'o' and 'k', no spaces, no other characters.\n\nLet me confirm once again. The instruction is clear: reply with \"ok\" exactly. So the correct response is simply:\n\nok\n\nYes, that's it. No other text. Just \"ok\". I should make sure not to add anything else. Alright, that's straightforward.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-VL-235B-A22B-Thinking",
+      "openclawModel": "huggingface/Qwen/Qwen3-VL-235B-A22B-Thinking",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "image-text-to-text",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_vl_moe",
+          "image-text-to-text",
+          "conversational",
+          "arxiv:2505.09388",
+          "arxiv:2502.13923",
+          "arxiv:2409.12191",
+          "arxiv:2308.12966",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-11-26T13:18:17.000Z",
+        "downloads": 5940,
+        "likes": 398
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 4808,
+        "routerModel": "qwen/qwen3-vl-235b-a22b-thinking",
+        "finishReason": "stop",
+        "content": "ok",
+        "reasoningContent": "Hmm, the user just asked me to reply exactly with \"ok\". That's a very simple instruction. \n\nI wonder why they want such a minimal response. Maybe they're testing if I follow instructions precisely? Or perhaps they're in a hurry and need confirmation without extra words. \n\nThe request is clear-cut - no room for interpretation. Just \"ok\" and nothing else. No capitalization or punctuation specified, so lowercase \"ok\" should be fine. \n\nI should resist adding even a single character beyond what's asked. No \"Sure!\", no \"Here you go\", just pure compliance. \n\n...Though part of me wants to ask if they need anything else, but that would violate the instruction. Strict adherence is what they want here. \n\nOkay, sending just \"ok\" as requested. Keeping it clean.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-0.6B",
+      "openclawModel": "huggingface/Qwen/Qwen3-0.6B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3",
+          "text-generation",
+          "conversational",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-0.6B-Base",
+          "base_model:finetune:Qwen/Qwen3-0.6B-Base",
+          "license:apache-2.0",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:46:27.000Z",
+        "downloads": 22278159,
+        "likes": 1316
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 248,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-0.6B' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-1.7B",
+      "openclawModel": "huggingface/Qwen/Qwen3-1.7B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3",
+          "text-generation",
+          "conversational",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-1.7B-Base",
+          "base_model:finetune:Qwen/Qwen3-1.7B-Base",
+          "license:apache-2.0",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:46:32.000Z",
+        "downloads": 4678165,
+        "likes": 483
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 244,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-1.7B' is not supported by any provider you have enabled.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-4B",
+      "openclawModel": "huggingface/Qwen/Qwen3-4B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "text-generation",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-4B-Base",
+          "base_model:finetune:Qwen/Qwen3-4B-Base",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:46:39.000Z",
+        "downloads": 16414133,
+        "likes": 634
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 244,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-4B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-8B",
+      "openclawModel": "huggingface/Qwen/Qwen3-8B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-8B-Base",
+          "base_model:finetune:Qwen/Qwen3-8B-Base",
+          "license:apache-2.0",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:49:13.000Z",
+        "downloads": 10850942,
+        "likes": 1135
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 682,
+        "routerModel": "Qwen/Qwen3-8B",
+        "finishReason": "length",
+        "content": null,
+        "reasoningContent": "\nOkay, the user just said \"ok\" and",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-14B",
+      "openclawModel": "huggingface/Qwen/Qwen3-14B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-14B-Base",
+          "base_model:finetune:Qwen/Qwen3-14B-Base",
+          "license:apache-2.0",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:49:23.000Z",
+        "downloads": 1496823,
+        "likes": 407
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 979,
+        "routerModel": "Qwen/Qwen3-14B",
+        "finishReason": "length",
+        "content": null,
+        "reasoningContent": "\nOkay, the user wants me to reply exactly with",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-32B",
+      "openclawModel": "huggingface/Qwen/Qwen3-32B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "license:apache-2.0",
+          "eval-results",
+          "text-generation-inference",
+          "endpoints_compatible",
+          "deploy:azure",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:45:22.000Z",
+        "downloads": 2728585,
+        "likes": 700
+      },
+      "probe": {
+        "status": 200,
+        "ok": true,
+        "ms": 556,
+        "routerModel": "qwen/qwen3-32b",
+        "finishReason": "length",
+        "content": "<think>\nOkay, the user wants me to reply exactly with",
+        "reasoningContent": null,
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "openclawModel": "huggingface/Qwen/Qwen3-30B-A3B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "text-generation",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "base_model:Qwen/Qwen3-30B-A3B-Base",
+          "base_model:finetune:Qwen/Qwen3-30B-A3B-Base",
+          "license:apache-2.0",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:45:17.000Z",
+        "downloads": 2130277,
+        "likes": 900
+      },
+      "probe": {
+        "status": 400,
+        "ok": false,
+        "ms": 269,
+        "content": null,
+        "reasoningContent": null,
+        "errorType": "invalid_request_error",
+        "errorCode": "model_not_supported",
+        "errorMessage": "The requested model 'Qwen/Qwen3-30B-A3B' is not a chat model.",
+        "attempt": 1
+      }
+    },
+    {
+      "family": "qwen",
+      "model": "Qwen/Qwen3-235B-A22B",
+      "openclawModel": "huggingface/Qwen/Qwen3-235B-A22B",
+      "meta": {
+        "exists": true,
+        "pipeline_tag": "text-generation",
+        "tags": [
+          "transformers",
+          "safetensors",
+          "qwen3_moe",
+          "text-generation",
+          "conversational",
+          "arxiv:2309.00071",
+          "arxiv:2505.09388",
+          "license:apache-2.0",
+          "eval-results",
+          "endpoints_compatible",
+          "region:us"
+        ],
+        "lastModified": "2025-07-26T03:45:13.000Z",
+        "downloads": 539219,
+        "likes": 1094
+      },
+      "probe": {
+        "status": 500,
+        "ok": false,
+        "ms": 7329,
+        "content": null,
+        "reasoningContent": null,
+        "attempt": 1,
+        "retry": {
+          "status": 200,
+          "ok": true,
+          "ms": 1323,
+          "routerModel": "qwen/qwen3-235b-a22b-fp8",
+          "finishReason": "stop",
+          "content": "ok",
+          "reasoningContent": null,
+          "attempt": 2
+        }
+      }
+    }
+  ]
+}
