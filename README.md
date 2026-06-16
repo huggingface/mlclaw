@@ -4,13 +4,13 @@
 
 # Hugging Claw
 
-Your own private [OpenClaw](https://openclaw.ai) agent, hosted entirely in your
-Hugging Face account — and it never forgets.
+Your own private [OpenClaw](https://openclaw.ai) agent, backed by your Hugging
+Face account — and it never forgets.
 
-One command creates a private Space that runs the agent and a private Storage
-Bucket that keeps its memory. The Space is disposable: rebuild it, restart it,
-or break it, and the agent comes back with its memory intact. Message it on
-Telegram a few minutes after installing.
+One command creates a private Storage Bucket that keeps the agent's memory, then
+runs the gateway either on your machine or in a private Hugging Face Space. The
+gateway is disposable: rebuild it, restart it, move it between local and Space,
+and the agent comes back with its memory intact.
 
 ## Install
 
@@ -48,6 +48,17 @@ For automation, pass the same answers as flags:
 
 ```bash
 npx huggingclaw bootstrap \
+  --gateway local \
+  --telegram-token-file ~/secrets/research_bot.env \
+  --telegram-user-id 1234567890 \
+  --yes
+```
+
+For a fully hosted Space gateway:
+
+```bash
+npx huggingclaw bootstrap \
+  --gateway space \
   --telegram-token-file ~/secrets/research_bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
@@ -55,14 +66,41 @@ npx huggingclaw bootstrap \
   --yes
 ```
 
-The install creates a private Docker Space, a private Storage Bucket, and the
-Space variables and write-only secrets that connect them. If it generates an
-OpenClaw gateway token, it prints that token **once** — save it; Hugging Face
-secrets are write-only, so it cannot be read back later.
+The install creates a private Storage Bucket and a local deployment manifest.
+With `--gateway local`, it starts a Docker container on your machine. With
+`--gateway space`, it creates a private Docker Space and sets the Space
+variables and write-only secrets that connect it. If it generates an OpenClaw
+gateway token, it prints that token **once** — save it; secret stores are
+write-only, so it cannot be read back later.
+
+## Gateway location
+
+Gateway location decides where the live OpenClaw gateway runs:
+
+- **local:** runs on your machine. This is the default, avoids paid Space
+  hardware for Telegram/Discord, and requires Docker plus an online machine.
+- **space:** runs in a private Hugging Face Space. This is fully hosted, but
+  Telegram/Discord currently require paid upgraded Space hardware.
+
+Move the gateway without losing bucket-backed state:
+
+```bash
+hclaw gateway migrate research --to space --hardware cpu-upgrade --sleep-time -1
+hclaw gateway migrate research --to local
+```
+
+Useful local operations:
+
+```bash
+hclaw gateway status research
+hclaw gateway logs research
+hclaw gateway stop research
+hclaw gateway start research
+```
 
 ## Keep it healthy
 
-Update a deployment to the current Hugging Claw source (its bucket — the
+Update a Space gateway to the current Hugging Claw source (its bucket — the
 memory — is never touched):
 
 ```bash
@@ -88,16 +126,16 @@ integrity-checked, compressed — and uploads it to the bucket. On every boot,
 the newest verified snapshot is restored; a corrupt snapshot is skipped in
 favor of an older one. Secrets are never included in snapshots.
 
-So the Space is cattle, the bucket is the brain. Deleting the Space and
-bootstrapping again with the same bucket brings the same agent back.
+So the gateway is cattle, the bucket is the brain. Deleting the local container
+or Space and starting again with the same bucket brings the same agent back.
 
 ## What it costs
 
 Honest numbers, since "deploy your own agent" tends to hide them:
 
-- **Space hardware:** Telegram deployments currently require upgraded paid
-  Space hardware. Free `cpu-basic` Spaces are not expected to keep Telegram
-  connections working. The cheapest paid CPU tier is enough for the gateway.
+- **Gateway hardware:** local gateway mode has no fixed paid Space cost. Space
+  gateway mode currently requires upgraded paid Space hardware for
+  Telegram/Discord. The cheapest paid CPU tier is enough for the gateway.
 - **Inference:** requests use your Hugging Face Inference Providers credits
   ($0.10/month on free accounts, $2.00 with PRO), then pay-as-you-go at
   provider rates. Small models like Qwen3-8B keep this at a few dollars a
@@ -107,14 +145,17 @@ Honest numbers, since "deploy your own agent" tends to hide them:
 
 - Private Spaces use long polling, not webhooks — Telegram cannot reach a
   private Space URL, and that is fine.
-- Telegram deployments currently require upgraded paid Space hardware.
+- Fully hosted Space gateway deployments currently require upgraded paid Space
+  hardware.
+- Local gateway deployments avoid that Space egress restriction because
+  Telegram traffic originates from your machine.
 - Keep the Space private.
 
 ## Space hardware
 
-Hugging Claw uses Telegram as the main interaction surface, so use upgraded
-Space hardware. Free `cpu-basic` Spaces are not expected to keep Telegram
-connections working. The cheapest paid CPU tier is enough for the gateway:
+If you choose `--gateway space`, use upgraded Space hardware. Free `cpu-basic`
+Spaces are not expected to keep Telegram connections working. The cheapest paid
+CPU tier is enough for the gateway:
 
 ```bash
 hclaw settings your-hf-username/research-agent --hardware cpu-upgrade --sleep-time -1

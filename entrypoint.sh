@@ -3,6 +3,11 @@ set -euo pipefail
 
 LIVE_DIR="${OPENCLAW_LIVE_DIR:-/tmp/openclaw-live}"
 
+if [ "${HUGGINGCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
+  echo "[huggingclaw] gateway disabled"
+  exit 0
+fi
+
 # State, workspace, and config paths are ALWAYS derived from the live dir,
 # never inherited: older deployments set OPENCLAW_STATE_DIR=/data/... as Space
 # variables, and any state written outside the live dir would be invisible to

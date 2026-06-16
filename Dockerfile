@@ -28,6 +28,8 @@ ENV OPENCLAW_STATE_DIR=/tmp/openclaw-live/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/tmp/openclaw-live/workspace
 ENV OPENCLAW_CONFIG_PATH=/tmp/openclaw-live/.openclaw/openclaw.json
 ENV OPENCLAW_DISABLE_BONJOUR=1
+ARG HUGGINGCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/huggingclaw-runtime:latest
+ENV HUGGINGCLAW_RUNTIME_IMAGE=$HUGGINGCLAW_RUNTIME_IMAGE
 
 EXPOSE 7860
 

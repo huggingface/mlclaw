@@ -1,6 +1,11 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { main } from "../src/hclaw/cli.js";
 import type { HubApi, SpaceRuntime } from "../src/hclaw/hub-api.js";
+import type { DockerRunner, DockerInspect, DockerRunParams } from "../src/hclaw/docker.js";
+import type { BucketEntry } from "../src/hf-bucket-client/client.js";
 
 type PromptAnswer = string | boolean;
 
@@ -27,8 +32,39 @@ function createFakeHub() {
   const calls: Array<{ name: string; args: unknown[] }> = [];
   const variables = new Map<string, { value?: string }>();
   const secrets = new Map<string, { key: string }>();
+  const bucketObjects = new Map<string, string>();
+  const bucketClient = {
+    async uploadFiles(files: Array<{ path: string; content: Blob }>) {
+      calls.push({ name: "bucket.uploadFiles", args: [files.map((file) => file.path)] });
+      for (const file of files) {
+        bucketObjects.set(file.path, await file.content.text());
+      }
+    },
+    async deleteFiles(paths: string[]) {
+      calls.push({ name: "bucket.deleteFiles", args: [paths] });
+      for (const file of paths) {
+        bucketObjects.delete(file);
+      }
+    },
+    async downloadFile(file: string) {
+      calls.push({ name: "bucket.downloadFile", args: [file] });
+      const value = bucketObjects.get(file);
+      return value ? new Blob([value]) : null;
+    },
+    async listFiles() {
+      return [...bucketObjects.keys()].map((path) => ({ path, size: 0, type: "file" as const })) satisfies BucketEntry[];
+    },
+    async assertBucketAccessible() {
+      calls.push({ name: "bucket.assertBucketAccessible", args: [] });
+    },
+  };
   const hub = {
     calls,
+    bucketObjects,
+    bucket() {
+      calls.push({ name: "bucket", args: [] });
+      return bucketClient;
+    },
     async whoami() {
       calls.push({ name: "whoami", args: [] });
       return { name: "alice" };
@@ -84,7 +120,9 @@ function createFakeHub() {
   return hub as typeof hub & HubApi;
 }
 
-function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt>["prompt"], stderr: string[] = []) {
+async function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt>["prompt"], stderr: string[] = []) {
+  const docker = createFakeDocker();
+  const configRoot = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-cli-test-"));
   return {
     env: {},
     stdout: { log: () => undefined },
@@ -98,16 +136,75 @@ function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt>["pro
       first_name: "Research",
       username: "research_bot",
     }),
+    dockerRunner: docker,
+    configRoot,
+    now: () => new Date("2026-06-16T00:00:00.000Z"),
     prompt,
   };
 }
 
+function createFakeDocker(): DockerRunner & { calls: Array<{ name: string; args: unknown[] }>; inspectValue: DockerInspect | null } {
+  return {
+    calls: [],
+    inspectValue: null,
+    async pull(...args: unknown[]) {
+      this.calls.push({ name: "pull", args });
+    },
+    async run(params: DockerRunParams) {
+      this.calls.push({ name: "run", args: [params] });
+      this.inspectValue = { exists: true, running: true, status: "running", image: params.image };
+    },
+    async start(...args: unknown[]) {
+      this.calls.push({ name: "start", args });
+      this.inspectValue = { exists: true, running: true, status: "running" };
+    },
+    async stop(...args: unknown[]) {
+      this.calls.push({ name: "stop", args });
+      this.inspectValue = { exists: true, running: false, status: "exited" };
+    },
+    async rm(...args: unknown[]) {
+      this.calls.push({ name: "rm", args });
+      this.inspectValue = null;
+    },
+    async logs(...args: unknown[]) {
+      this.calls.push({ name: "logs", args });
+      return "logs";
+    },
+    async inspect(...args: unknown[]) {
+      this.calls.push({ name: "inspect", args });
+      return this.inspectValue;
+    },
+  };
+}
+
 describe("hclaw CLI", () => {
-  it("runs bootstrap as the default command and prompts for Telegram setup", async () => {
+  it("runs bootstrap as local gateway by default", async () => {
+    const hub = createFakeHub();
+    const { prompt, notes } = createPrompt(["telegram-token", "7216393410"]);
+
+    const runtime = await createRuntime(hub, prompt);
+    const code = await main(["--gateway-token", "gateway-token", "--no-pull"], runtime);
+
+    expect(code).toBe(0);
+    expect(notes).toEqual([]);
+    expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+    expect(runtime.dockerRunner.calls).toContainEqual({
+      name: "run",
+      args: [
+        expect.objectContaining({
+          containerName: "huggingclaw-research",
+          image: "ghcr.io/osolmaz/huggingclaw-runtime:latest",
+        }),
+      ],
+    });
+  });
+
+  it("runs bootstrap as Space gateway when requested and prompts for paid hardware", async () => {
     const hub = createFakeHub();
     const { prompt, notes } = createPrompt(["telegram-token", "7216393410", true]);
 
-    const code = await main(["--gateway-token", "gateway-token"], createRuntime(hub, prompt));
+    const code = await main(["bootstrap", "--gateway", "space", "--gateway-token", "gateway-token"], await createRuntime(hub, prompt));
 
     expect(code).toBe(0);
     expect(notes).toEqual([
@@ -133,6 +230,10 @@ describe("hclaw CLI", () => {
       args: ["alice/research", "cpu-upgrade", -1],
     });
     expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "HUGGINGCLAW_GATEWAY_LOCATION", "space"],
+    });
+    expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
       args: ["alice/research", "TELEGRAM_BOT_TOKEN", "telegram-token"],
     });
@@ -142,20 +243,22 @@ describe("hclaw CLI", () => {
     });
   });
 
-  it("fails non-interactive Telegram bootstrap without paid hardware consent", async () => {
+  it("fails non-interactive Space bootstrap without paid hardware consent", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
 
     const code = await main([
       "bootstrap",
+      "--gateway",
+      "space",
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
       "7216393410",
       "--gateway-token",
       "gateway-token",
-    ], createRuntime(hub, prompt, stderr));
+    ], await createRuntime(hub, prompt, stderr));
 
     expect(code).toBe(1);
     expect(stderr.join("\n")).toContain("paid Hugging Face Space hardware requires explicit consent");
@@ -173,7 +276,7 @@ describe("hclaw CLI", () => {
       "7216393410",
       "--gateway-token",
       "gateway-token",
-    ], createRuntime(hub, prompt, stderr));
+    ], await createRuntime(hub, prompt, stderr));
 
     expect(code).toBe(1);
     expect(stderr.join("\n")).toContain("Telegram bot token is required");
@@ -192,12 +295,59 @@ describe("hclaw CLI", () => {
       "--sleep-time",
       "-1",
       "--yes",
-    ], createRuntime(hub, prompt));
+    ], await createRuntime(hub, prompt));
 
     expect(code).toBe(0);
     expect(hub.calls).toContainEqual({
       name: "requestSpaceHardware",
       args: ["alice/research", "cpu-upgrade", -1],
     });
+  });
+
+  it("migrates local to Space and back without starting both gateways", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const runtime = await createRuntime(hub, prompt);
+
+    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    hub.calls.length = 0;
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "space",
+      "--yes",
+    ], runtime)).resolves.toBe(0);
+
+    const stopIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "stop");
+    expect(stopIndex).toBeGreaterThanOrEqual(0);
+    expect(hub.calls).toContainEqual({ name: "createDockerSpace", args: ["alice/research", expect.any(Object)] });
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+
+    hub.calls.length = 0;
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "local",
+      "--no-pull",
+    ], runtime)).resolves.toBe(0);
+
+    const disableIndex = hub.calls.findIndex((call) =>
+      call.name === "addSpaceVariable" &&
+      call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED" &&
+      call.args[2] === "1"
+    );
+    const restartIndex = hub.calls.findIndex((call) => call.name === "restartSpace");
+    const startIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "start" || call.name === "run");
+    expect(disableIndex).toBeGreaterThanOrEqual(0);
+    expect(restartIndex).toBeGreaterThan(disableIndex);
+    expect(startIndex).toBeGreaterThanOrEqual(0);
   });
 });

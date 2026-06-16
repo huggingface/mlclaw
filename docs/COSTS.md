@@ -8,10 +8,10 @@ pricing pages before promising a user a specific monthly bill.
 
 ## Short Version
 
-The recommended personal deployment is:
+The recommended first deployment is:
 
 ```text
-Private Hugging Face Space: cpu-upgrade, always on
+Gateway: local Docker container
 Private Hugging Face Storage Bucket: small state snapshots
 Model inference: Hugging Face Inference Providers router
 ```
@@ -19,7 +19,7 @@ Model inference: Hugging Face Inference Providers router
 Expected fixed cost:
 
 ```text
-$0.03/hour * 730 hours/month = $21.90/month
+$0/month fixed Space cost
 ```
 
 Variable cost:
@@ -28,9 +28,9 @@ Variable cost:
 model input tokens + model output tokens, billed at the selected provider/model rate
 ```
 
-For a Telegram deployment, do not plan around free `cpu-basic`. It may be useful
-for demos and build checks, but Telegram/Discord connectivity currently needs
-paid Space hardware in practice.
+For a fully hosted Telegram deployment in a Hugging Face Space, do not plan
+around free `cpu-basic`. It may be useful for demos and build checks, but
+Telegram/Discord connectivity currently needs paid Space hardware in practice.
 
 If a local gateway mode is used instead, Telegram/Discord traffic originates
 from the user's machine. That avoids the paid-Space egress requirement, but the
@@ -74,10 +74,10 @@ Use 730 hours for a rough average month.
 | 1x Nvidia L40S | $1.80 | $1,314.00 | Larger local model serving |
 | Nvidia A100 large | $2.50 | $1,825.00 | Larger local model serving |
 
-For a normal Hugging Claw install, `cpu-upgrade` is the right default. The GPU
+For a fully hosted Space gateway, `cpu-upgrade` is the right default. The GPU
 Space tiers are included here to make the tradeoff clear: moving inference into
-the Space turns a roughly $22/month gateway into a hundreds-of-dollars/month
-always-on model server.
+the Space turns a roughly $22/month Space gateway into a
+hundreds-of-dollars/month always-on model server.
 
 ## Sleep-Time Choices
 
@@ -240,10 +240,17 @@ can reduce small model-inference bills by increasing included credits, but the
 Default:
 
 ```text
-hardware: cpu-upgrade
-sleepTimeSeconds: -1
+gatewayLocation: local
 model: a router-compatible Hugging Face model
 provider policy: default/fastest unless the user explicitly chooses cheapest
+```
+
+Space gateway override:
+
+```text
+gatewayLocation: space
+hardware: cpu-upgrade
+sleepTimeSeconds: -1
 ```
 
 Prompt before applying paid hardware:

@@ -29,6 +29,9 @@ describe("supervise", () => {
       intervalSeconds: 3600,
       keepSnapshots: 2,
       runId: "run-supervise",
+      agentName: "test-agent",
+      gatewayLocation: "local",
+      runtimeImage: "example/runtime:test",
     };
     const hub = createFakeHub();
 

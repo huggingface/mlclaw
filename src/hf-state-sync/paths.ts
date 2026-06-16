@@ -16,6 +16,9 @@ export type SyncConfig = {
   keepSnapshots: number;
   /** Identifies this container run in manifests, for observability. */
   runId: string;
+  agentName: string;
+  gatewayLocation: "local" | "space" | "unknown";
+  runtimeImage: string;
 };
 
 const DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
@@ -35,7 +38,12 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
     bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: randomUUID(),
+    runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
+    agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
+    gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space"
+      ? env.HUGGINGCLAW_GATEWAY_LOCATION
+      : "unknown",
+    runtimeImage: env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || "unknown",
   };
 }
 

@@ -1,7 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { BucketHub } from "./hub.js";
-import { type SyncConfig, log, logError } from "./paths.js";
+import { type SyncConfig, log, logError, remotePath } from "./paths.js";
 import { runSnapshot } from "./snapshot.js";
 
 /**
@@ -22,6 +25,28 @@ export async function supervise(params: {
     throw new Error("supervise: missing child command");
   }
   const bootTime = new Date().toISOString();
+  let lastSnapshotId: string | undefined;
+
+  const writeLease = async () => {
+    const status = {
+      schemaVersion: 1,
+      agent: config.agentName,
+      runtimeId: config.runId,
+      gatewayLocation: config.gatewayLocation,
+      runtimeImage: config.runtimeImage,
+      startedAt: bootTime,
+      lastHeartbeatAt: new Date().toISOString(),
+      ...(lastSnapshotId ? { lastSnapshotId } : {}),
+    };
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hf-state-lease-"));
+    try {
+      const file = path.join(tmpDir, "status.json");
+      await fs.writeFile(file, JSON.stringify(status, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/status.json"));
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
 
   const child: ChildProcess = spawn(binary, args, { stdio: "inherit" });
   const childExit = new Promise<number>((resolve) => {
@@ -39,7 +64,12 @@ export async function supervise(params: {
       const outcome = await runSnapshot({ config, hub, bootTime });
       if (outcome.kind === "failed") {
         logError(`${label}: snapshot failed: ${outcome.detail}`);
+      } else if (outcome.kind === "uploaded") {
+        lastSnapshotId = outcome.entry.path;
       }
+      await writeLease().catch((err) => {
+        logError(`${label}: lease heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     } finally {
       inFlight = null;
     }
@@ -64,6 +94,7 @@ export async function supervise(params: {
   };
 
   const loop = (async () => {
+    await writeLease().catch((err) => logError(`initial lease failed: ${err instanceof Error ? err.message : String(err)}`));
     while (!stopping) {
       await delay(config.intervalSeconds * 1000);
       if (stopping) {

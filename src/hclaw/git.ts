@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { HubApi } from "./hub-api.js";
+import { DEFAULT_RUNTIME_IMAGE } from "./runtime-image.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -12,6 +13,7 @@ export async function pushTemplateToSpace(params: {
   targetRepo: string;
   token: string;
   sourceDir?: string;
+  runtimeImage?: string;
 }): Promise<{ templateRev: string }> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-space-"));
   try {
@@ -19,7 +21,9 @@ export async function pushTemplateToSpace(params: {
     const templateRev = await currentTemplateRev(sourceDir);
     const outDir = path.join(tempRoot, "space");
     await fs.mkdir(outDir, { recursive: true });
-    await generateSpaceRepo(sourceDir, outDir);
+    await generateSpaceRepo(sourceDir, outDir, {
+      ...(params.runtimeImage ? { runtimeImage: params.runtimeImage } : {}),
+    });
 
     const hub = new HubApi({ token: params.token });
     const [files, existingFiles] = await Promise.all([
@@ -57,27 +61,24 @@ export async function currentTemplateRev(sourceDir?: string): Promise<string> {
   return `npm:${pkg.name ?? "huggingclaw"}@${pkg.version ?? "unknown"}`;
 }
 
-export async function generateSpaceRepo(sourceDir: string, outDir: string): Promise<void> {
+export async function generateSpaceRepo(
+  sourceDir: string,
+  outDir: string,
+  options: { runtimeImage?: string } = {},
+): Promise<void> {
   const copies: Array<[string, string]> = [
     [".gitattributes", ".gitattributes"],
-    ["Dockerfile", "Dockerfile"],
-    ["entrypoint.sh", "entrypoint.sh"],
-    ["openclaw.default.json", "openclaw.default.json"],
-    ["package.json", "package.json"],
-    [await firstExisting(sourceDir, ["package-lock.json", "space/package-lock.json"]), "package-lock.json"],
-    ["tsconfig.json", "tsconfig.json"],
     ["assets/huggingclaw.svg", "assets/huggingclaw.svg"],
     ["space/README.md", "README.md"],
-    ["scripts/configure-telegram.mjs", "scripts/configure-telegram.mjs"],
-    ["scripts/report-telegram-probe.mjs", "scripts/report-telegram-probe.mjs"],
-    ["src/hf-bucket-client", "src/hf-bucket-client"],
-    ["src/hf-state-sync", "src/hf-state-sync"],
-    ["src/vendor", "src/vendor"],
   ];
   for (const [from, to] of copies) {
     await copyExisting(path.join(sourceDir, from), path.join(outDir, to));
   }
-  await writeSpacePackageJson(path.join(outDir, "package.json"));
+  await fs.writeFile(
+    path.join(outDir, "Dockerfile"),
+    `FROM ${options.runtimeImage ?? DEFAULT_RUNTIME_IMAGE}\n`,
+    "utf8",
+  );
 }
 
 async function findPackagedSourceRoot(): Promise<string> {
@@ -121,41 +122,6 @@ async function copyExisting(from: string, to: string): Promise<void> {
     await fs.copyFile(from, to);
     await fs.chmod(to, stat.mode);
   }
-}
-
-async function firstExisting(sourceDir: string, candidates: string[]): Promise<string> {
-  for (const candidate of candidates) {
-    try {
-      await fs.access(path.join(sourceDir, candidate));
-      return candidate;
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  throw new Error(`None of these source files exist: ${candidates.join(", ")}`);
-}
-
-async function writeSpacePackageJson(file: string): Promise<void> {
-  const pkg = JSON.parse(await fs.readFile(file, "utf8")) as {
-    name?: string;
-    scripts?: Record<string, string>;
-    bin?: unknown;
-    files?: unknown;
-    private?: boolean;
-  };
-  pkg.name = "huggingclaw-generated-space";
-  pkg.private = true;
-  delete pkg.bin;
-  delete pkg.files;
-  pkg.scripts = {
-    ...pkg.scripts,
-    build: pkg.scripts?.["build:state-sync"] ?? "esbuild src/hf-state-sync/cli.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/hf-state-sync.js",
-  };
-  delete pkg.scripts["build:hclaw"];
-  delete pkg.scripts["build:probe"];
-  delete pkg.scripts["pack:check"];
-  delete pkg.scripts["prepack"];
-  await fs.writeFile(file, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
 async function readFilesForCommit(root: string): Promise<Array<{ path: string; content: Buffer }>> {

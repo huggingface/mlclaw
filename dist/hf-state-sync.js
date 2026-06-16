@@ -3828,10 +3828,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path5, processedBytes]) => ({
-        path: path5,
-        progress: processedBytes / this.fileSize[path5],
-        lastSentProgress: ((this.fileUploadedBytes[path5] ?? 0) + (processedBytes - (this.fileUploadedBytes[path5] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path5]
+      files: Object.entries(this.fileProcessedBytes).map(([path6, processedBytes]) => ({
+        path: path6,
+        progress: processedBytes / this.fileSize[path6],
+        lastSentProgress: ((this.fileUploadedBytes[path6] ?? 0) + (processedBytes - (this.fileUploadedBytes[path6] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path6]
       }))
     };
   }
@@ -4704,7 +4704,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path5) => ({ type: "deleteFile", path: path5 })));
+    await this.batch(paths.map((path6) => ({ type: "deleteFile", path: path6 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -4720,8 +4720,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path5) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path5)}`;
+  async downloadFile(path6) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path6)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -4831,7 +4831,10 @@ function resolveSyncConfig(env = process.env) {
     bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: randomUUID()
+    runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
+    agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
+    gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space" ? env.HUGGINGCLAW_GATEWAY_LOCATION : "unknown",
+    runtimeImage: env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || "unknown"
   };
 }
 function remotePath(config, name) {
@@ -5469,8 +5472,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -5586,11 +5589,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -9229,6 +9232,9 @@ async function runSnapshot(params) {
 
 // src/hf-state-sync/supervise.ts
 import { spawn } from "node:child_process";
+import fs6 from "node:fs/promises";
+import os3 from "node:os";
+import path5 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 async function supervise(params) {
   const { config, hub, command } = params;
@@ -9237,6 +9243,27 @@ async function supervise(params) {
     throw new Error("supervise: missing child command");
   }
   const bootTime = (/* @__PURE__ */ new Date()).toISOString();
+  let lastSnapshotId;
+  const writeLease = async () => {
+    const status = {
+      schemaVersion: 1,
+      agent: config.agentName,
+      runtimeId: config.runId,
+      gatewayLocation: config.gatewayLocation,
+      runtimeImage: config.runtimeImage,
+      startedAt: bootTime,
+      lastHeartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...lastSnapshotId ? { lastSnapshotId } : {}
+    };
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-lease-"));
+    try {
+      const file = path5.join(tmpDir, "status.json");
+      await fs6.writeFile(file, JSON.stringify(status, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/status.json"));
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
   const child = spawn(binary, args, { stdio: "inherit" });
   const childExit = new Promise((resolve) => {
     child.on("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
@@ -9252,7 +9279,12 @@ async function supervise(params) {
       const outcome = await runSnapshot({ config, hub, bootTime });
       if (outcome.kind === "failed") {
         logError(`${label}: snapshot failed: ${outcome.detail}`);
+      } else if (outcome.kind === "uploaded") {
+        lastSnapshotId = outcome.entry.path;
       }
+      await writeLease().catch((err) => {
+        logError(`${label}: lease heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     } finally {
       inFlight = null;
     }
@@ -9273,6 +9305,7 @@ async function supervise(params) {
     await inFlight;
   };
   const loop = (async () => {
+    await writeLease().catch((err) => logError(`initial lease failed: ${err instanceof Error ? err.message : String(err)}`));
     while (!stopping) {
       await delay(config.intervalSeconds * 1e3);
       if (stopping) {

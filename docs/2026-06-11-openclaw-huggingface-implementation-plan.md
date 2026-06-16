@@ -4,9 +4,14 @@
 
 `osolmaz/huggingclaw` is the single source of truth for Hugging Claw.
 
-Hugging Claw deploys a private OpenClaw agent to Hugging Face by creating a
-private Storage Bucket and a private Docker Space for each user. There is no
+Hugging Claw deploys a private OpenClaw agent backed by Hugging Face state. The
+gateway can run either locally or in a private Hugging Face Space. There is no
 maintained Hugging Face template Space required for normal operation.
+
+Gateway location is now a first-class design decision. See
+[Gateway Location Implementation Plan](2026-06-16-gateway-location-implementation-plan.md)
+for the plan to support local and Space gateway targets with the same runtime
+image and bucket state format.
 
 The local CLI is `hclaw`. It runs on the user's machine, uses the user's local
 Hugging Face token, generates the Space repository contents, uploads those
@@ -67,8 +72,8 @@ They are not the source of truth and are not required by hclaw.
 Created per user:
 
 ```text
-1 private HF Docker Space repo
 1 private HF Storage Bucket
+0 or 1 private HF Docker Space repo, depending on gateway location
 ```
 
 ## Repository Contents
@@ -78,7 +83,8 @@ README.md
 assets/
   huggingclaw.svg             # shared GitHub and generated Space branding
 docs/
-  openclaw-huggingface-implementation-plan.md
+  2026-06-11-openclaw-huggingface-implementation-plan.md
+  2026-06-16-gateway-location-implementation-plan.md
 hclaw.sh                     # Unix launcher; installs/uses pinned Node if needed
 hclaw.ps1                    # Windows launcher; installs/uses pinned Node if needed
 src/

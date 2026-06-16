@@ -30,6 +30,9 @@ function configFor(liveDir: string, overrides?: Partial<SyncConfig>): SyncConfig
     intervalSeconds: 60,
     keepSnapshots: 2,
     runId: "run-test",
+    agentName: "test-agent",
+    gatewayLocation: "local",
+    runtimeImage: "example/runtime:test",
     ...overrides,
   };
 }
