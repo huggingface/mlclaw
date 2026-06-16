@@ -28,6 +28,7 @@ function configFor(liveDir: string, overrides?: Partial<SyncConfig>): SyncConfig
     bucket: "tester/bucket",
     bucketPrefix: PREFIX,
     intervalSeconds: 60,
+    handoffPollSeconds: 5,
     keepSnapshots: 2,
     runId: "run-test",
     agentName: "test-agent",

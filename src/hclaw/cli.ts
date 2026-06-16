@@ -12,7 +12,14 @@ import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } f
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
 import { pushTemplateToSpace } from "./git.js";
 import { HubApi } from "./hub-api.js";
-import { assertNoLiveForeignLease, readRuntimeLease, type RuntimeLease } from "./lease.js";
+import {
+  assertNoLiveForeignLease,
+  clearRuntimeHandoffRequest,
+  readRuntimeHandoffAck,
+  readRuntimeLease,
+  writeRuntimeHandoffRequest,
+  type RuntimeHandoffAck,
+} from "./lease.js";
 import {
   defaultConfigRoot,
   manifestExists,
@@ -675,53 +682,62 @@ async function disableAndPauseSpaceGateway(params: {
   runtime: Required<CliRuntime>;
 }): Promise<void> {
   const handoffStartedAt = params.runtime.now();
+  const requestId = randomBytes(16).toString("hex");
   await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
-  await params.hub.restartSpace(params.manifest.space, true);
+  await writeRuntimeHandoffRequest(params.hub, params.manifest.bucket, {
+    schemaVersion: 1,
+    requestId,
+    agent: params.manifest.agent,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    requestedAt: handoffStartedAt.toISOString(),
+    targetRuntimeId: localRuntimeId(params.manifest.agent),
+  });
   params.runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
-  try {
-    await waitForRuntimeLease({
-      hub: params.hub,
-      bucket: params.manifest.bucket,
-      runtimeId: spaceRuntimeId(params.manifest.agent),
-      since: handoffStartedAt,
-      timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
-      pollMs: SPACE_HANDOFF_POLL_MS,
-    });
-    params.runtime.stdout.log("Space final snapshot observed");
-  } finally {
-    await params.hub.pauseSpace(params.manifest.space);
-    params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
-  }
+  await waitForRuntimeHandoffAck({
+    hub: params.hub,
+    bucket: params.manifest.bucket,
+    requestId,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    since: handoffStartedAt,
+    timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+    pollMs: SPACE_HANDOFF_POLL_MS,
+  });
+  await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket).catch(() => undefined);
+  params.runtime.stdout.log("Space final snapshot observed");
+  await params.hub.pauseSpace(params.manifest.space);
+  params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
 }
 
-async function waitForRuntimeLease(params: {
+async function waitForRuntimeHandoffAck(params: {
   hub: HubApi;
   bucket: string;
+  requestId: string;
   runtimeId: string;
   since: Date;
   timeoutMs: number;
   pollMs: number;
-}): Promise<RuntimeLease> {
+}): Promise<RuntimeHandoffAck> {
   const started = Date.now();
   let lastError: string | undefined;
   while (true) {
     try {
-      const lease = await readRuntimeLease(params.hub, params.bucket);
-      const heartbeatAt = lease ? Date.parse(lease.lastHeartbeatAt) : Number.NaN;
+      const ack = await readRuntimeHandoffAck(params.hub, params.bucket);
+      const completedAt = ack ? Date.parse(ack.completedAt) : Number.NaN;
       if (
-        lease?.runtimeId === params.runtimeId &&
-        Number.isFinite(heartbeatAt) &&
-        heartbeatAt >= params.since.getTime()
+        ack?.requestId === params.requestId &&
+        ack.runtimeId === params.runtimeId &&
+        Number.isFinite(completedAt) &&
+        completedAt >= params.since.getTime()
       ) {
-        return lease;
+        return ack;
       }
       lastError = undefined;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
     if (Date.now() - started >= params.timeoutMs) {
-      const detail = lastError ? `; last lease read failed: ${lastError}` : "";
-      throw new Error(`timed out waiting for ${params.runtimeId} to upload a final snapshot${detail}`);
+      const detail = lastError ? `; last ack read failed: ${lastError}` : "";
+      throw new Error(`timed out waiting for ${params.runtimeId} to acknowledge handoff ${params.requestId}${detail}`);
     }
     await delay(params.pollMs);
   }

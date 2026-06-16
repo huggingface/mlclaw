@@ -26,6 +26,7 @@ export async function supervise(params: {
   }
   const bootTime = new Date().toISOString();
   let lastSnapshotId: string | undefined;
+  const handoffState: { request: RuntimeHandoffRequest | null } = { request: null };
 
   const writeLease = async () => {
     const status = {
@@ -43,6 +44,49 @@ export async function supervise(params: {
       const file = path.join(tmpDir, "status.json");
       await fs.writeFile(file, JSON.stringify(status, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/status.json"));
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const readHandoffRequest = async (): Promise<RuntimeHandoffRequest | null> => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hf-state-handoff-"));
+    try {
+      const file = path.join(tmpDir, "request.json");
+      const result = await hub.download(remotePath(config, "runtime/handoff-request.json"), file);
+      if (result === "not-found") {
+        return null;
+      }
+      const parsed = JSON.parse(await fs.readFile(file, "utf8")) as RuntimeHandoffRequest;
+      if (
+        parsed?.schemaVersion !== 1 ||
+        parsed.agent !== config.agentName ||
+        parsed.runtimeId !== config.runId ||
+        typeof parsed.requestId !== "string" ||
+        !parsed.requestId
+      ) {
+        return null;
+      }
+      return parsed;
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const writeHandoffAck = async (request: RuntimeHandoffRequest) => {
+    const ack = {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      agent: config.agentName,
+      runtimeId: config.runId,
+      gatewayLocation: config.gatewayLocation,
+      completedAt: new Date().toISOString(),
+      ...(lastSnapshotId ? { lastSnapshotId } : {}),
+    };
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hf-state-handoff-ack-"));
+    try {
+      const file = path.join(tmpDir, "ack.json");
+      await fs.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/handoff-ack.json"));
+      await hub.delete([remotePath(config, "runtime/handoff-request.json")]);
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -103,6 +147,29 @@ export async function supervise(params: {
       await snapshotInterval();
     }
   })();
+  void loop;
+
+  const handoffLoop = (async () => {
+    while (!stopping && !handoffState.request) {
+      await delay(config.handoffPollSeconds * 1000);
+      if (stopping || handoffState.request) {
+        return;
+      }
+      try {
+        const request = await readHandoffRequest();
+        if (!request) {
+          continue;
+        }
+        handoffState.request = request;
+        log(`handoff ${request.requestId} requested for ${request.targetRuntimeId}`);
+        stopping = true;
+        child.kill("SIGTERM");
+      } catch (err) {
+        logError(`handoff poll failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  })();
+  void handoffLoop;
 
   const forwardSignal = (signal: NodeJS.Signals) => {
     log(`received ${signal}, shutting down`);
@@ -117,5 +184,22 @@ export async function supervise(params: {
 
   log(`child exited with code ${exitCode}, taking final snapshot`);
   await snapshotFinal();
+  if (handoffState.request) {
+    const request = handoffState.request;
+    await writeHandoffAck(request).catch((err) => {
+      throw new Error(`handoff ${request.requestId} snapshot completed but ack failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    log(`handoff ${request.requestId} acknowledged`);
+    return 0;
+  }
   return exitCode;
 }
+
+type RuntimeHandoffRequest = {
+  schemaVersion: 1;
+  requestId: string;
+  agent: string;
+  runtimeId: string;
+  requestedAt: string;
+  targetRuntimeId: string;
+};

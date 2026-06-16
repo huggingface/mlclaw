@@ -2,6 +2,8 @@ import type { HubApi } from "./hub-api.js";
 import type { GatewayLocation } from "./gateway-location.js";
 
 export const RUNTIME_STATUS_PATH = "openclaw-state/runtime/status.json";
+export const RUNTIME_HANDOFF_REQUEST_PATH = "openclaw-state/runtime/handoff-request.json";
+export const RUNTIME_HANDOFF_ACK_PATH = "openclaw-state/runtime/handoff-ack.json";
 export const DEFAULT_LEASE_TTL_MS = 3 * 60 * 1000;
 
 export type RuntimeLease = {
@@ -12,6 +14,25 @@ export type RuntimeLease = {
   runtimeImage: string;
   startedAt: string;
   lastHeartbeatAt: string;
+  lastSnapshotId?: string;
+};
+
+export type RuntimeHandoffRequest = {
+  schemaVersion: 1;
+  requestId: string;
+  agent: string;
+  runtimeId: string;
+  requestedAt: string;
+  targetRuntimeId: string;
+};
+
+export type RuntimeHandoffAck = {
+  schemaVersion: 1;
+  requestId: string;
+  agent: string;
+  runtimeId: string;
+  gatewayLocation: GatewayLocation | "unknown";
+  completedAt: string;
   lastSnapshotId?: string;
 };
 
@@ -30,6 +51,31 @@ export async function writeRuntimeLease(hub: HubApi, bucket: string, lease: Runt
       content: new Blob([JSON.stringify(lease, null, 2) + "\n"], { type: "application/json" }),
     },
   ]);
+}
+
+export async function writeRuntimeHandoffRequest(
+  hub: HubApi,
+  bucket: string,
+  request: RuntimeHandoffRequest,
+): Promise<void> {
+  await hub.bucket(bucket).uploadFiles([
+    {
+      path: RUNTIME_HANDOFF_REQUEST_PATH,
+      content: new Blob([JSON.stringify(request, null, 2) + "\n"], { type: "application/json" }),
+    },
+  ]);
+}
+
+export async function readRuntimeHandoffAck(hub: HubApi, bucket: string): Promise<RuntimeHandoffAck | null> {
+  const blob = await hub.bucket(bucket).downloadFile(RUNTIME_HANDOFF_ACK_PATH);
+  if (!blob) {
+    return null;
+  }
+  return JSON.parse(await blob.text()) as RuntimeHandoffAck;
+}
+
+export async function clearRuntimeHandoffRequest(hub: HubApi, bucket: string): Promise<void> {
+  await hub.bucket(bucket).deleteFiles([RUNTIME_HANDOFF_REQUEST_PATH]);
 }
 
 export function runtimeLeaseIsLive(lease: RuntimeLease, now = new Date(), ttlMs = DEFAULT_LEASE_TTL_MS): boolean {

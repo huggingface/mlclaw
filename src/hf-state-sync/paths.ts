@@ -13,6 +13,7 @@ export type SyncConfig = {
   /** Path prefix inside the bucket for all sync objects. */
   bucketPrefix: string;
   intervalSeconds: number;
+  handoffPollSeconds: number;
   keepSnapshots: number;
   /** Identifies this container run in manifests, for observability. */
   runId: string;
@@ -24,6 +25,7 @@ export type SyncConfig = {
 const DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
 const DEFAULT_PREFIX = "openclaw-state";
 const DEFAULT_INTERVAL_SECONDS = 60;
+const DEFAULT_HANDOFF_POLL_SECONDS = 5;
 const DEFAULT_KEEP = 5;
 
 function positiveIntFromEnv(value: string | undefined, fallback: number): number {
@@ -37,6 +39,7 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
     bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
+    handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
     runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
     agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",

@@ -9551,6 +9551,8 @@ async function listFiles(root, dir = "") {
 
 // src/hclaw/lease.ts
 var RUNTIME_STATUS_PATH = "openclaw-state/runtime/status.json";
+var RUNTIME_HANDOFF_REQUEST_PATH = "openclaw-state/runtime/handoff-request.json";
+var RUNTIME_HANDOFF_ACK_PATH = "openclaw-state/runtime/handoff-ack.json";
 var DEFAULT_LEASE_TTL_MS = 3 * 60 * 1e3;
 async function readRuntimeLease(hub, bucket) {
   const blob = await hub.bucket(bucket).downloadFile(RUNTIME_STATUS_PATH);
@@ -9558,6 +9560,24 @@ async function readRuntimeLease(hub, bucket) {
     return null;
   }
   return JSON.parse(await blob.text());
+}
+async function writeRuntimeHandoffRequest(hub, bucket, request) {
+  await hub.bucket(bucket).uploadFiles([
+    {
+      path: RUNTIME_HANDOFF_REQUEST_PATH,
+      content: new Blob([JSON.stringify(request, null, 2) + "\n"], { type: "application/json" })
+    }
+  ]);
+}
+async function readRuntimeHandoffAck(hub, bucket) {
+  const blob = await hub.bucket(bucket).downloadFile(RUNTIME_HANDOFF_ACK_PATH);
+  if (!blob) {
+    return null;
+  }
+  return JSON.parse(await blob.text());
+}
+async function clearRuntimeHandoffRequest(hub, bucket) {
+  await hub.bucket(bucket).deleteFiles([RUNTIME_HANDOFF_REQUEST_PATH]);
 }
 function runtimeLeaseIsLive(lease, now = /* @__PURE__ */ new Date(), ttlMs = DEFAULT_LEASE_TTL_MS) {
   const last = Date.parse(lease.lastHeartbeatAt);
@@ -10126,41 +10146,48 @@ function spaceRuntimeId(agent) {
 }
 async function disableAndPauseSpaceGateway(params) {
   const handoffStartedAt = params.runtime.now();
+  const requestId = randomBytes(16).toString("hex");
   await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
-  await params.hub.restartSpace(params.manifest.space, true);
+  await writeRuntimeHandoffRequest(params.hub, params.manifest.bucket, {
+    schemaVersion: 1,
+    requestId,
+    agent: params.manifest.agent,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    requestedAt: handoffStartedAt.toISOString(),
+    targetRuntimeId: localRuntimeId(params.manifest.agent)
+  });
   params.runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
-  try {
-    await waitForRuntimeLease({
-      hub: params.hub,
-      bucket: params.manifest.bucket,
-      runtimeId: spaceRuntimeId(params.manifest.agent),
-      since: handoffStartedAt,
-      timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
-      pollMs: SPACE_HANDOFF_POLL_MS
-    });
-    params.runtime.stdout.log("Space final snapshot observed");
-  } finally {
-    await params.hub.pauseSpace(params.manifest.space);
-    params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
-  }
+  await waitForRuntimeHandoffAck({
+    hub: params.hub,
+    bucket: params.manifest.bucket,
+    requestId,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    since: handoffStartedAt,
+    timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+    pollMs: SPACE_HANDOFF_POLL_MS
+  });
+  await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket).catch(() => void 0);
+  params.runtime.stdout.log("Space final snapshot observed");
+  await params.hub.pauseSpace(params.manifest.space);
+  params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
 }
-async function waitForRuntimeLease(params) {
+async function waitForRuntimeHandoffAck(params) {
   const started = Date.now();
   let lastError;
   while (true) {
     try {
-      const lease = await readRuntimeLease(params.hub, params.bucket);
-      const heartbeatAt = lease ? Date.parse(lease.lastHeartbeatAt) : Number.NaN;
-      if (lease?.runtimeId === params.runtimeId && Number.isFinite(heartbeatAt) && heartbeatAt >= params.since.getTime()) {
-        return lease;
+      const ack = await readRuntimeHandoffAck(params.hub, params.bucket);
+      const completedAt = ack ? Date.parse(ack.completedAt) : Number.NaN;
+      if (ack?.requestId === params.requestId && ack.runtimeId === params.runtimeId && Number.isFinite(completedAt) && completedAt >= params.since.getTime()) {
+        return ack;
       }
       lastError = void 0;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
     if (Date.now() - started >= params.timeoutMs) {
-      const detail = lastError ? `; last lease read failed: ${lastError}` : "";
-      throw new Error(`timed out waiting for ${params.runtimeId} to upload a final snapshot${detail}`);
+      const detail = lastError ? `; last ack read failed: ${lastError}` : "";
+      throw new Error(`timed out waiting for ${params.runtimeId} to acknowledge handoff ${params.requestId}${detail}`);
     }
     await delay(params.pollMs);
   }

@@ -37,7 +37,20 @@ function createFakeHub() {
     async uploadFiles(files: Array<{ path: string; content: Blob }>) {
       calls.push({ name: "bucket.uploadFiles", args: [files.map((file) => file.path)] });
       for (const file of files) {
-        bucketObjects.set(file.path, await file.content.text());
+        const text = await file.content.text();
+        bucketObjects.set(file.path, text);
+        if (file.path === "openclaw-state/runtime/handoff-request.json") {
+          const request = JSON.parse(text) as { requestId: string; agent: string; runtimeId: string };
+          bucketObjects.set("openclaw-state/runtime/handoff-ack.json", JSON.stringify({
+            schemaVersion: 1,
+            requestId: request.requestId,
+            agent: request.agent,
+            runtimeId: request.runtimeId,
+            gatewayLocation: "space",
+            completedAt: "2026-06-16T00:00:01.000Z",
+            lastSnapshotId: "openclaw-state/snapshots/state-test.tar.zst",
+          }));
+        }
       }
     },
     async deleteFiles(paths: string[]) {
@@ -360,12 +373,16 @@ describe("hclaw CLI", () => {
       call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED" &&
       call.args[2] === "1"
     );
-    const restartIndex = hub.calls.findIndex((call) => call.name === "restartSpace");
+    const handoffIndex = hub.calls.findIndex((call) =>
+      call.name === "bucket.uploadFiles" &&
+      Array.isArray(call.args[0]) &&
+      call.args[0].includes("openclaw-state/runtime/handoff-request.json")
+    );
     const pauseIndex = hub.calls.findIndex((call) => call.name === "pauseSpace");
     const startIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "start" || call.name === "run");
     expect(disableIndex).toBeGreaterThanOrEqual(0);
-    expect(restartIndex).toBeGreaterThan(disableIndex);
-    expect(pauseIndex).toBeGreaterThan(restartIndex);
+    expect(handoffIndex).toBeGreaterThan(disableIndex);
+    expect(pauseIndex).toBeGreaterThan(handoffIndex);
     expect(startIndex).toBeGreaterThanOrEqual(0);
   });
 });

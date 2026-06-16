@@ -4819,6 +4819,7 @@ import { randomUUID } from "node:crypto";
 var DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
 var DEFAULT_PREFIX = "openclaw-state";
 var DEFAULT_INTERVAL_SECONDS = 60;
+var DEFAULT_HANDOFF_POLL_SECONDS = 5;
 var DEFAULT_KEEP = 5;
 function positiveIntFromEnv(value, fallback) {
   const parsed = Number(value);
@@ -4830,6 +4831,7 @@ function resolveSyncConfig(env = process.env) {
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
     bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
+    handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
     runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
     agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
@@ -9244,6 +9246,7 @@ async function supervise(params) {
   }
   const bootTime = (/* @__PURE__ */ new Date()).toISOString();
   let lastSnapshotId;
+  const handoffState = { request: null };
   const writeLease = async () => {
     const status = {
       schemaVersion: 1,
@@ -9260,6 +9263,43 @@ async function supervise(params) {
       const file = path5.join(tmpDir, "status.json");
       await fs6.writeFile(file, JSON.stringify(status, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/status.json"));
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const readHandoffRequest = async () => {
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-"));
+    try {
+      const file = path5.join(tmpDir, "request.json");
+      const result = await hub.download(remotePath(config, "runtime/handoff-request.json"), file);
+      if (result === "not-found") {
+        return null;
+      }
+      const parsed = JSON.parse(await fs6.readFile(file, "utf8"));
+      if (parsed?.schemaVersion !== 1 || parsed.agent !== config.agentName || parsed.runtimeId !== config.runId || typeof parsed.requestId !== "string" || !parsed.requestId) {
+        return null;
+      }
+      return parsed;
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const writeHandoffAck = async (request) => {
+    const ack = {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      agent: config.agentName,
+      runtimeId: config.runId,
+      gatewayLocation: config.gatewayLocation,
+      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...lastSnapshotId ? { lastSnapshotId } : {}
+    };
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-ack-"));
+    try {
+      const file = path5.join(tmpDir, "ack.json");
+      await fs6.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/handoff-ack.json"));
+      await hub.delete([remotePath(config, "runtime/handoff-request.json")]);
     } finally {
       await fs6.rm(tmpDir, { recursive: true, force: true });
     }
@@ -9314,6 +9354,28 @@ async function supervise(params) {
       await snapshotInterval();
     }
   })();
+  void loop;
+  const handoffLoop = (async () => {
+    while (!stopping && !handoffState.request) {
+      await delay(config.handoffPollSeconds * 1e3);
+      if (stopping || handoffState.request) {
+        return;
+      }
+      try {
+        const request = await readHandoffRequest();
+        if (!request) {
+          continue;
+        }
+        handoffState.request = request;
+        log(`handoff ${request.requestId} requested for ${request.targetRuntimeId}`);
+        stopping = true;
+        child.kill("SIGTERM");
+      } catch (err) {
+        logError(`handoff poll failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  })();
+  void handoffLoop;
   const forwardSignal = (signal) => {
     log(`received ${signal}, shutting down`);
     stopping = true;
@@ -9325,6 +9387,14 @@ async function supervise(params) {
   stopping = true;
   log(`child exited with code ${exitCode}, taking final snapshot`);
   await snapshotFinal();
+  if (handoffState.request) {
+    const request = handoffState.request;
+    await writeHandoffAck(request).catch((err) => {
+      throw new Error(`handoff ${request.requestId} snapshot completed but ack failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    log(`handoff ${request.requestId} acknowledged`);
+    return 0;
+  }
   return exitCode;
 }
 
