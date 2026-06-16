@@ -244,6 +244,7 @@ describe("hclaw CLI", () => {
         }),
       ],
     });
+    expect(runtime.dockerRunner.calls.find((call) => call.name === "run")?.args[0]).not.toHaveProperty("port");
     const manifest = await readManifest(runtime.configRoot, "research");
     expect(manifest.localRuntimeId).toMatch(/^local-research-[a-f0-9]{16}$/);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
@@ -655,6 +656,51 @@ describe("hclaw CLI", () => {
     expect(hub.calls).toContainEqual({
       name: "bucket.downloadFile",
       args: ["custom/prefix/runtime/status.json"],
+    });
+  });
+
+  it("does not let ambient bucket prefix change an existing deployment", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const stdout: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt),
+      env: { OPENCLAW_HF_STATE_PREFIX: "wrong/prefix" },
+      stdout: { log: (message: unknown) => stdout.push(String(message)) },
+    };
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: "test-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+    hub.bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
+      schemaVersion: 1,
+      agent: "research",
+      runtimeId: "local-research-existing",
+      gatewayLocation: "local",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      startedAt: "2026-06-16T00:00:00.000Z",
+      lastHeartbeatAt: "2026-06-16T00:00:01.000Z",
+    }) + "\n");
+
+    await expect(main(["gateway", "status", "research"], runtime)).resolves.toBe(0);
+
+    expect(stdout.join("\n")).toContain("Lease: local local-research-existing heartbeat 2026-06-16T00:00:01.000Z");
+    expect(hub.calls).toContainEqual({
+      name: "bucket.downloadFile",
+      args: ["openclaw-state/runtime/status.json"],
+    });
+    expect(hub.calls).not.toContainEqual({
+      name: "bucket.downloadFile",
+      args: ["wrong/prefix/runtime/status.json"],
     });
   });
 

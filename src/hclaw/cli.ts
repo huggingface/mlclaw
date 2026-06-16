@@ -323,7 +323,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const now = runtime.now().toISOString();
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
-  const bucketPrefix = stateBucketPrefix(existingSecrets, runtime);
+  const bucketPrefix = bootstrapBucketPrefix(existingManifest, existingSecrets, runtime);
   const localRuntimeId = existingManifest?.localRuntimeId ?? newLocalRuntimeId(agentName);
 
   runtime.stdout.log(`Creating private bucket ${names.bucket}`);
@@ -547,7 +547,6 @@ async function startLocalGateway(params: {
     volumeName,
     volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
     liveDir: LOCAL_LIVE_DIR,
-    port: DEFAULT_LOCAL_PORT,
   });
   runtime.stdout.log(`Local gateway created: ${containerName}`);
 }
@@ -653,7 +652,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
   const secrets = await readSecretEnv(runtime.configRoot, agent);
-  const bucketPrefix = stateBucketPrefix(secrets, runtime);
+  const bucketPrefix = persistedBucketPrefix(secrets);
   const updated: DeploymentManifest = {
     ...current,
     gatewayLocation: target,
@@ -740,11 +739,28 @@ async function readDeploymentManifest(runtime: Required<CliRuntime>, agent: stri
 
 async function readDeploymentBucketPrefix(runtime: Required<CliRuntime>, agent: string): Promise<string | undefined> {
   const secrets = await readSecretEnv(runtime.configRoot, agent).catch(() => ({}));
-  return stateBucketPrefix(secrets, runtime);
+  return persistedBucketPrefix(secrets);
 }
 
-function stateBucketPrefix(secrets: Record<string, string>, runtime: Required<CliRuntime>): string | undefined {
-  return secrets.OPENCLAW_HF_STATE_PREFIX?.trim() || runtime.env.OPENCLAW_HF_STATE_PREFIX?.trim() || undefined;
+function bootstrapBucketPrefix(
+  existingManifest: DeploymentManifest | null,
+  secrets: Record<string, string>,
+  runtime: Required<CliRuntime>,
+): string | undefined {
+  return persistedBucketPrefix(secrets) ?? (existingManifest ? undefined : envBucketPrefix(runtime));
+}
+
+function persistedBucketPrefix(secrets: Record<string, string>): string | undefined {
+  return nonEmpty(secrets.OPENCLAW_HF_STATE_PREFIX);
+}
+
+function envBucketPrefix(runtime: Required<CliRuntime>): string | undefined {
+  return nonEmpty(runtime.env.OPENCLAW_HF_STATE_PREFIX);
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function newLocalRuntimeId(agent: string): string {

@@ -4324,8 +4324,6 @@ var CliDockerRunner = class {
       params.envFile,
       "-e",
       `OPENCLAW_LIVE_DIR=${params.liveDir}`,
-      "-p",
-      `127.0.0.1:${params.port}:${params.port}`,
       "-v",
       `${params.volumeName}:${params.volumeMountPath}`,
       params.image
@@ -9897,7 +9895,7 @@ async function bootstrap(opts, runtime) {
   const now = runtime.now().toISOString();
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
-  const bucketPrefix = stateBucketPrefix(existingSecrets, runtime);
+  const bucketPrefix = bootstrapBucketPrefix(existingManifest, existingSecrets, runtime);
   const localRuntimeId = existingManifest?.localRuntimeId ?? newLocalRuntimeId(agentName);
   runtime.stdout.log(`Creating private bucket ${names.bucket}`);
   await hub.createBucket(names.bucket, true);
@@ -10079,8 +10077,7 @@ async function startLocalGateway(params) {
     envFile: secretEnvPath(runtime.configRoot, manifest.agent),
     volumeName,
     volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
-    liveDir: LOCAL_LIVE_DIR,
-    port: DEFAULT_LOCAL_PORT
+    liveDir: LOCAL_LIVE_DIR
   });
   runtime.stdout.log(`Local gateway created: ${containerName}`);
 }
@@ -10180,7 +10177,7 @@ async function gatewayMigrate(agent, opts, runtime) {
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
   const secrets = await readSecretEnv(runtime.configRoot, agent);
-  const bucketPrefix = stateBucketPrefix(secrets, runtime);
+  const bucketPrefix = persistedBucketPrefix(secrets);
   const updated = {
     ...current,
     gatewayLocation: target,
@@ -10265,10 +10262,20 @@ async function readDeploymentManifest(runtime, agent) {
 }
 async function readDeploymentBucketPrefix(runtime, agent) {
   const secrets = await readSecretEnv(runtime.configRoot, agent).catch(() => ({}));
-  return stateBucketPrefix(secrets, runtime);
+  return persistedBucketPrefix(secrets);
 }
-function stateBucketPrefix(secrets, runtime) {
-  return secrets.OPENCLAW_HF_STATE_PREFIX?.trim() || runtime.env.OPENCLAW_HF_STATE_PREFIX?.trim() || void 0;
+function bootstrapBucketPrefix(existingManifest, secrets, runtime) {
+  return persistedBucketPrefix(secrets) ?? (existingManifest ? void 0 : envBucketPrefix(runtime));
+}
+function persistedBucketPrefix(secrets) {
+  return nonEmpty(secrets.OPENCLAW_HF_STATE_PREFIX);
+}
+function envBucketPrefix(runtime) {
+  return nonEmpty(runtime.env.OPENCLAW_HF_STATE_PREFIX);
+}
+function nonEmpty(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : void 0;
 }
 function newLocalRuntimeId(agent) {
   return `local-${agent}-${randomBytes(8).toString("hex")}`;

@@ -23,7 +23,6 @@ export type DockerRunParams = {
   volumeName: string;
   volumeMountPath: string;
   liveDir: string;
-  port: number;
 };
 
 export type DockerInspect = {
@@ -50,8 +49,6 @@ export class CliDockerRunner implements DockerRunner {
       params.envFile,
       "-e",
       `OPENCLAW_LIVE_DIR=${params.liveDir}`,
-      "-p",
-      `127.0.0.1:${params.port}:${params.port}`,
       "-v",
       `${params.volumeName}:${params.volumeMountPath}`,
       params.image,
