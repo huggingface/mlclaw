@@ -288,13 +288,13 @@ describe("hclaw CLI", () => {
       "research",
       "--gateway-token",
       "gateway-token",
-      "--no-pull",
     ], runtime)).resolves.toBe(0);
 
     const refreshed = await readManifest(runtime.configRoot, "research");
     expect(refreshed.localRuntimeId).toBe(original.localRuntimeId);
     expect(runtime.dockerRunner.calls.map((call) => call.name)).toEqual([
       "inspect",
+      "pull",
       "stop",
       "rm",
       "run",
@@ -606,6 +606,39 @@ describe("hclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(startIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+  });
+
+  it("blocks local to Space migration when another live runtime owns the lease", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    hub.calls.length = 0;
+    runtime.dockerRunner.calls.length = 0;
+    hub.bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
+      schemaVersion: 1,
+      agent: "research",
+      runtimeId: "space-someone-else",
+      gatewayLocation: "space",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      startedAt: new Date().toISOString(),
+      lastHeartbeatAt: new Date().toISOString(),
+    }) + "\n");
+
+    await expect(main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "space",
+      "--yes",
+    ], runtime)).resolves.toBe(1);
+
+    expect(stderr.join("\n")).toContain("another gateway appears active");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "stop")).toBe(false);
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
   });
 
   it("blocks Space to local migration when another live runtime owns the lease", async () => {

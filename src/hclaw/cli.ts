@@ -516,6 +516,11 @@ async function startLocalGateway(params: {
       runtime.stdout.log(`Local gateway already running: ${containerName}`);
       return;
     }
+  }
+  if (params.pull) {
+    await runtime.dockerRunner.pull(manifest.runtimeImage);
+  }
+  if (existing?.running) {
     await runtime.dockerRunner.stop(containerName);
     runtime.stdout.log(`Local gateway stopped for config refresh: ${containerName}`);
   }
@@ -526,9 +531,6 @@ async function startLocalGateway(params: {
   if (params.resetVolume) {
     await runtime.dockerRunner.rmVolume(volumeName);
     runtime.stdout.log(`Local gateway volume reset for bucket restore: ${volumeName}`);
-  }
-  if (params.pull) {
-    await runtime.dockerRunner.pull(manifest.runtimeImage);
   }
   await runtime.dockerRunner.run({
     containerName,
@@ -651,6 +653,12 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       requestedSleepTime: typeof opts.sleepTime === "number" ? opts.sleepTime : TELEGRAM_SLEEP_TIME,
       yes: Boolean(opts.yes),
       runtime,
+    });
+    await assertNoLiveForeignLease({
+      hub,
+      bucket: current.bucket,
+      runtimeId: current.localRuntimeId,
+      takeover: Boolean(opts.takeover),
     });
     await handoffAndStopLocalGateway({ manifest: current, hub, runtime });
     await deploySpaceGateway({
