@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import process from "node:process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { cancel, confirm, intro, isCancel, note, outro, password, text } from "@clack/prompts";
 import { readToken } from "./auth.js";
@@ -11,7 +12,7 @@ import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } f
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
 import { pushTemplateToSpace } from "./git.js";
 import { HubApi } from "./hub-api.js";
-import { assertNoLiveForeignLease, readRuntimeLease } from "./lease.js";
+import { assertNoLiveForeignLease, readRuntimeLease, type RuntimeLease } from "./lease.js";
 import {
   defaultConfigRoot,
   manifestExists,
@@ -32,6 +33,8 @@ export const TELEGRAM_HARDWARE = "cpu-upgrade";
 export const TELEGRAM_SLEEP_TIME = -1;
 export const DEFAULT_GATEWAY_LOCATION: GatewayLocation = "local";
 export const DEFAULT_LOCAL_PORT = 7860;
+export const SPACE_HANDOFF_TIMEOUT_MS = 120_000;
+export const SPACE_HANDOFF_POLL_MS = 5_000;
 
 const STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 const PAID_HARDWARE_COST_NOTE =
@@ -51,7 +54,7 @@ type BootstrapOptions = {
   model?: string;
   runtimeImage?: string;
   gatewayToken?: string;
-  noPull?: boolean;
+  pull?: boolean;
   takeover?: boolean;
   yes?: boolean;
 };
@@ -77,7 +80,7 @@ type GatewayCommandOptions = {
   hardware?: string;
   sleepTime?: number;
   runtimeImage?: string;
-  noPull?: boolean;
+  pull?: boolean;
   takeover?: boolean;
   yes?: boolean;
   tail?: number;
@@ -362,7 +365,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     await startLocalGateway({
       manifest,
       runtime,
-      pull: !opts.noPull,
+      pull: shouldPull(opts),
     });
   }
 
@@ -530,7 +533,7 @@ async function gatewayStart(agent: string, opts: GatewayCommandOptions, runtime:
     takeover: Boolean(opts.takeover),
   });
   if (manifest.gatewayLocation === "local") {
-    await startLocalGateway({ manifest, runtime, pull: !opts.noPull });
+    await startLocalGateway({ manifest, runtime, pull: shouldPull(opts) });
   } else {
     await hub.deleteSpaceVariable(manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED").catch(() => undefined);
     await hub.restartSpace(manifest.space, true);
@@ -548,7 +551,8 @@ async function gatewayStop(agent: string, runtime: Required<CliRuntime>): Promis
   const hub = runtime.hubFactory(token);
   await hub.addSpaceVariable(manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
   await hub.restartSpace(manifest.space, true);
-  runtime.stdout.log(`Space gateway disabled and restart requested: ${manifest.space}`);
+  await hub.pauseSpace(manifest.space);
+  runtime.stdout.log(`Space gateway disabled and pause requested: ${manifest.space}`);
 }
 
 async function gatewayStatus(agent: string, runtime: Required<CliRuntime>): Promise<void> {
@@ -637,8 +641,24 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(agent),
     });
   } else {
+    const handoffStartedAt = runtime.now();
     await hub.addSpaceVariable(current.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
     await hub.restartSpace(current.space, true);
+    runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
+    try {
+      await waitForRuntimeLease({
+        hub,
+        bucket: current.bucket,
+        runtimeId: spaceRuntimeId(current.agent),
+        since: handoffStartedAt,
+        timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+        pollMs: SPACE_HANDOFF_POLL_MS,
+      });
+      runtime.stdout.log("Space final snapshot observed");
+    } finally {
+      await hub.pauseSpace(current.space);
+      runtime.stdout.log(`Space pause requested: ${current.space}`);
+    }
     await assertNoLiveForeignLease({
       hub,
       bucket: current.bucket,
@@ -651,7 +671,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       HUGGINGCLAW_RUNTIME_ID: localRuntimeId(agent),
     });
-    await startLocalGateway({ manifest: updated, runtime, pull: !opts.noPull });
+    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts) });
   }
   await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Gateway migrated to ${target}`);
@@ -669,6 +689,30 @@ function spaceRuntimeId(agent: string): string {
   return `space-${agent}`;
 }
 
+async function waitForRuntimeLease(params: {
+  hub: HubApi;
+  bucket: string;
+  runtimeId: string;
+  since: Date;
+  timeoutMs: number;
+  pollMs: number;
+}): Promise<RuntimeLease> {
+  const started = Date.now();
+  while (true) {
+    const lease = await readRuntimeLease(params.hub, params.bucket);
+    if (
+      lease?.runtimeId === params.runtimeId &&
+      Date.parse(lease.lastHeartbeatAt) >= params.since.getTime()
+    ) {
+      return lease;
+    }
+    if (Date.now() - started >= params.timeoutMs) {
+      throw new Error(`timed out waiting for ${params.runtimeId} to upload a final snapshot`);
+    }
+    await delay(params.pollMs);
+  }
+}
+
 function requiredSecret(secrets: Record<string, string>, key: string): string {
   const value = secrets[key];
   if (!value) {
@@ -682,6 +726,10 @@ function requiredOption(value: string | undefined, label: string): string {
     throw new Error(`${label} is required`);
   }
   return value;
+}
+
+function shouldPull(opts: { pull?: boolean }): boolean {
+  return opts.pull !== false;
 }
 
 async function update(
@@ -964,7 +1012,12 @@ function isPaidHardware(hardware: string): boolean {
   return hardware !== DEFAULT_HARDWARE;
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(realpathSync(process.argv[1])).href : "";
+let invokedPath = "";
+try {
+  invokedPath = process.argv[1] ? pathToFileURL(realpathSync(process.argv[1])).href : "";
+} catch {
+  invokedPath = "";
+}
 if (import.meta.url === invokedPath) {
   main().then((code) => process.exit(code));
 }

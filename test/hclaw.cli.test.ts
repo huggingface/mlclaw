@@ -96,6 +96,22 @@ function createFakeHub() {
     },
     async restartSpace(...args: unknown[]) {
       calls.push({ name: "restartSpace", args });
+      const agent = variables.get("OPENCLAW_AGENT_NAME")?.value ?? "research";
+      const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value ?? "alice/research-data";
+      bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
+        schemaVersion: 1,
+        agent,
+        runtimeId: variables.get("HUGGINGCLAW_RUNTIME_ID")?.value ?? `space-${agent}`,
+        gatewayLocation: variables.get("HUGGINGCLAW_GATEWAY_LOCATION")?.value ?? "space",
+        runtimeImage: variables.get("HUGGINGCLAW_RUNTIME_IMAGE")?.value ?? "ghcr.io/osolmaz/huggingclaw-runtime:latest",
+        startedAt: "2026-06-16T00:00:00.000Z",
+        lastHeartbeatAt: "2026-06-16T00:00:01.000Z",
+        lastSnapshotId: `${bucket}/snapshot.tar.zst`,
+      }));
+    },
+    async pauseSpace(...args: unknown[]) {
+      calls.push({ name: "pauseSpace", args });
+      return { stage: "PAUSED", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1 };
     },
     async getSpaceRuntime(): Promise<SpaceRuntime> {
       calls.push({ name: "getSpaceRuntime", args: [] });
@@ -345,9 +361,11 @@ describe("hclaw CLI", () => {
       call.args[2] === "1"
     );
     const restartIndex = hub.calls.findIndex((call) => call.name === "restartSpace");
+    const pauseIndex = hub.calls.findIndex((call) => call.name === "pauseSpace");
     const startIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "start" || call.name === "run");
     expect(disableIndex).toBeGreaterThanOrEqual(0);
     expect(restartIndex).toBeGreaterThan(disableIndex);
+    expect(pauseIndex).toBeGreaterThan(restartIndex);
     expect(startIndex).toBeGreaterThanOrEqual(0);
   });
 });

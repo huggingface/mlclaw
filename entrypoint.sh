@@ -26,6 +26,7 @@ CONFIG_PATH="$OPENCLAW_CONFIG_PATH"
 node /app/hf-state-sync.js restore
 
 mkdir -p "$LIVE_DIR" "$WORKSPACE_DIR" "$STATE_DIR"
+chown -R node:node "$LIVE_DIR"
 
 if [ -n "${OPENCLAW_AGENT_NAME:-}" ]; then
   printf "%s\n" "$OPENCLAW_AGENT_NAME" > "$STATE_DIR/agent-name.txt"
@@ -34,10 +35,11 @@ fi
 if [ ! -f "$CONFIG_PATH" ]; then
   cp /app/openclaw.default.json "$CONFIG_PATH"
 fi
+chown -R node:node "$LIVE_DIR"
 
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_ALLOWED_USERS:-}" ]; then
   echo "[telegram-config] configuring Telegram channel"
-  node /app/scripts/configure-telegram.mjs "$CONFIG_PATH" "$TELEGRAM_ALLOWED_USERS"
+  gosu node node /app/scripts/configure-telegram.mjs "$CONFIG_PATH" "$TELEGRAM_ALLOWED_USERS"
   echo "[telegram-config] Telegram channel configured"
 fi
 
@@ -53,7 +55,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE
     if curl -fsS --connect-timeout 20 --max-time 30 "${PROBE_PROXY[@]}" \
       "${PROBE_API_ROOT}/bot${TELEGRAM_BOT_TOKEN}/getMe" \
       -o "$PROBE_OUT"; then
-      node /app/scripts/report-telegram-probe.mjs "$PROBE_OUT" || true
+      gosu node node /app/scripts/report-telegram-probe.mjs "$PROBE_OUT" || true
     else
       echo "[telegram-probe] curl getMe failed"
     fi
@@ -63,4 +65,5 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE
   fi
 fi
 
-exec node /app/hf-state-sync.js supervise -- openclaw gateway
+chown -R node:node "$LIVE_DIR"
+exec gosu node node /app/hf-state-sync.js supervise -- openclaw gateway

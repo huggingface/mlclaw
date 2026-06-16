@@ -3520,6 +3520,7 @@ import { realpathSync } from "node:fs";
 import process2 from "node:process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -9249,6 +9250,11 @@ var HubApi = class {
       headers: { "Content-Type": "application/json" }
     });
   }
+  async pauseSpace(repoId) {
+    return await this.requestJson(`/api/spaces/${repoId}/pause`, {
+      method: "POST"
+    });
+  }
   async requestSpaceHardware(repoId, hardware, sleepTimeSeconds) {
     const payload = { flavor: hardware };
     if (typeof sleepTimeSeconds === "number") {
@@ -9699,6 +9705,8 @@ var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;
 var DEFAULT_GATEWAY_LOCATION = "local";
 var DEFAULT_LOCAL_PORT = 7860;
+var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
+var SPACE_HANDOFF_POLL_MS = 5e3;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 var PAID_HARDWARE_COST_NOTE = "Telegram requires upgraded Hugging Face Space hardware today. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
@@ -9860,7 +9868,7 @@ async function bootstrap(opts, runtime) {
     await startLocalGateway({
       manifest,
       runtime,
-      pull: !opts.noPull
+      pull: shouldPull(opts)
     });
   }
   runtime.stdout.log("");
@@ -9988,7 +9996,7 @@ async function gatewayStart(agent, opts, runtime) {
     takeover: Boolean(opts.takeover)
   });
   if (manifest.gatewayLocation === "local") {
-    await startLocalGateway({ manifest, runtime, pull: !opts.noPull });
+    await startLocalGateway({ manifest, runtime, pull: shouldPull(opts) });
   } else {
     await hub.deleteSpaceVariable(manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED").catch(() => void 0);
     await hub.restartSpace(manifest.space, true);
@@ -10005,7 +10013,8 @@ async function gatewayStop(agent, runtime) {
   const hub = runtime.hubFactory(token);
   await hub.addSpaceVariable(manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
   await hub.restartSpace(manifest.space, true);
-  runtime.stdout.log(`Space gateway disabled and restart requested: ${manifest.space}`);
+  await hub.pauseSpace(manifest.space);
+  runtime.stdout.log(`Space gateway disabled and pause requested: ${manifest.space}`);
 }
 async function gatewayStatus(agent, runtime) {
   const manifest = await readManifest(runtime.configRoot, agent);
@@ -10091,8 +10100,24 @@ async function gatewayMigrate(agent, opts, runtime) {
       HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(agent)
     });
   } else {
+    const handoffStartedAt = runtime.now();
     await hub.addSpaceVariable(current.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
     await hub.restartSpace(current.space, true);
+    runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
+    try {
+      await waitForRuntimeLease({
+        hub,
+        bucket: current.bucket,
+        runtimeId: spaceRuntimeId(current.agent),
+        since: handoffStartedAt,
+        timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+        pollMs: SPACE_HANDOFF_POLL_MS
+      });
+      runtime.stdout.log("Space final snapshot observed");
+    } finally {
+      await hub.pauseSpace(current.space);
+      runtime.stdout.log(`Space pause requested: ${current.space}`);
+    }
     await assertNoLiveForeignLease({
       hub,
       bucket: current.bucket,
@@ -10105,7 +10130,7 @@ async function gatewayMigrate(agent, opts, runtime) {
       HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       HUGGINGCLAW_RUNTIME_ID: localRuntimeId(agent)
     });
-    await startLocalGateway({ manifest: updated, runtime, pull: !opts.noPull });
+    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts) });
   }
   await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Gateway migrated to ${target}`);
@@ -10119,6 +10144,19 @@ function runtimeIdFor(manifest) {
 function spaceRuntimeId(agent) {
   return `space-${agent}`;
 }
+async function waitForRuntimeLease(params) {
+  const started = Date.now();
+  while (true) {
+    const lease = await readRuntimeLease(params.hub, params.bucket);
+    if (lease?.runtimeId === params.runtimeId && Date.parse(lease.lastHeartbeatAt) >= params.since.getTime()) {
+      return lease;
+    }
+    if (Date.now() - started >= params.timeoutMs) {
+      throw new Error(`timed out waiting for ${params.runtimeId} to upload a final snapshot`);
+    }
+    await delay(params.pollMs);
+  }
+}
 function requiredSecret(secrets, key) {
   const value = secrets[key];
   if (!value) {
@@ -10131,6 +10169,9 @@ function requiredOption(value, label) {
     throw new Error(`${label} is required`);
   }
   return value;
+}
+function shouldPull(opts) {
+  return opts.pull !== false;
 }
 async function update(repoId, opts, hub, hfToken, runtime) {
   const variables = await hub.getSpaceVariables(repoId);
@@ -10370,7 +10411,12 @@ function parseInteger(value) {
 function isPaidHardware(hardware) {
   return hardware !== DEFAULT_HARDWARE;
 }
-var invokedPath = process2.argv[1] ? pathToFileURL(realpathSync(process2.argv[1])).href : "";
+var invokedPath = "";
+try {
+  invokedPath = process2.argv[1] ? pathToFileURL(realpathSync(process2.argv[1])).href : "";
+} catch {
+  invokedPath = "";
+}
 if (import.meta.url === invokedPath) {
   main().then((code) => process2.exit(code));
 }
@@ -10379,6 +10425,8 @@ export {
   DEFAULT_HARDWARE,
   DEFAULT_LOCAL_PORT,
   DEFAULT_MODEL,
+  SPACE_HANDOFF_POLL_MS,
+  SPACE_HANDOFF_TIMEOUT_MS,
   TELEGRAM_HARDWARE,
   TELEGRAM_SLEEP_TIME,
   createProgram,
