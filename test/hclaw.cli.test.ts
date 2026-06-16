@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/hclaw/cli.js";
+import { LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/hclaw/cli.js";
 import { DEFAULT_RUNTIME_IMAGE } from "../src/hclaw/runtime-image.js";
 import { readManifest, readSecretEnv, writeManifest, type DeploymentManifest } from "../src/hclaw/local-config.js";
 import type { HubApi, SpaceRuntime } from "../src/hclaw/hub-api.js";
@@ -30,7 +30,7 @@ function createPrompt(answers: PromptAnswer[], interactive = true) {
   };
 }
 
-function createFakeHub(opts: { acknowledgeHandoff?: boolean } = {}) {
+function createFakeHub(opts: { acknowledgeHandoff?: boolean; spaceRuntime?: SpaceRuntime } = {}) {
   const calls: Array<{ name: string; args: unknown[] }> = [];
   const variables = new Map<string, { value?: string }>();
   const secrets = new Map<string, { key: string }>();
@@ -131,7 +131,7 @@ function createFakeHub(opts: { acknowledgeHandoff?: boolean } = {}) {
     },
     async getSpaceRuntime(): Promise<SpaceRuntime> {
       calls.push({ name: "getSpaceRuntime", args: [] });
-      return { stage: "RUNNING", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1 };
+      return opts.spaceRuntime ?? { stage: "RUNNING", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1 };
     },
     async fetchSpaceLogs() {
       calls.push({ name: "fetchSpaceLogs", args: [] });
@@ -198,6 +198,9 @@ function createFakeDocker(): DockerRunner & { calls: Array<{ name: string; args:
       this.calls.push({ name: "rm", args });
       this.inspectValue = null;
     },
+    async rmVolume(...args: unknown[]) {
+      this.calls.push({ name: "rmVolume", args });
+    },
     async disableRestart(...args: unknown[]) {
       this.calls.push({ name: "disableRestart", args });
     },
@@ -230,6 +233,8 @@ describe("hclaw CLI", () => {
         expect.objectContaining({
           containerName: "huggingclaw-research",
           image: DEFAULT_RUNTIME_IMAGE,
+          volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
+          liveDir: LOCAL_LIVE_DIR,
         }),
       ],
     });
@@ -547,12 +552,49 @@ describe("hclaw CLI", () => {
     );
     const pauseIndex = hub.calls.findIndex((call) => call.name === "pauseSpace");
     const removeIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "rm");
+    const removeVolumeIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "rmVolume");
     const startIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "run");
     expect(disableIndex).toBeGreaterThanOrEqual(0);
     expect(handoffIndex).toBeGreaterThan(disableIndex);
     expect(pauseIndex).toBeGreaterThan(handoffIndex);
     expect(removeIndex).toBeGreaterThanOrEqual(0);
-    expect(startIndex).toBeGreaterThan(removeIndex);
+    expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
+    expect(startIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+  });
+
+  it("stops an already paused Space gateway without waiting for handoff ack", async () => {
+    const hub = createFakeHub({
+      acknowledgeHandoff: false,
+      spaceRuntime: { stage: "PAUSED", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1 },
+    });
+    const { prompt } = createPrompt([]);
+    const runtime = await createRuntime(hub, prompt);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "space",
+      model: "test-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    await expect(main(["gateway", "stop", "research"], runtime)).resolves.toBe(0);
+
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "HUGGINGCLAW_GATEWAY_DISABLED", "1"],
+    });
+    expect(hub.calls.some((call) =>
+      call.name === "bucket.uploadFiles" &&
+      Array.isArray(call.args[0]) &&
+      call.args[0].includes("openclaw-state/runtime/handoff-request.json")
+    )).toBe(false);
+    expect(hub.calls).toContainEqual({ name: "pauseSpace", args: ["alice/research"] });
   });
 });

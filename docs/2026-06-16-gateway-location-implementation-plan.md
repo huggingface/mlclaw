@@ -1,6 +1,6 @@
 # Gateway Location Implementation Plan
 
-Status: planned
+Status: implemented in PR #5; final review and CI validation in progress
 
 ## Decision
 
@@ -142,9 +142,15 @@ docker run -d \
   --name huggingclaw-<agent> \
   --restart unless-stopped \
   --env-file ~/.config/huggingclaw/secrets/<agent>.env \
-  -v huggingclaw-<agent>-live:/tmp/openclaw-live \
+  -e OPENCLAW_LIVE_DIR=/tmp/huggingclaw-local/openclaw-live \
+  -v huggingclaw-<agent>-live:/tmp/huggingclaw-local \
   ghcr.io/osolmaz/huggingclaw-runtime:<version>
 ```
+
+The volume is mounted at the parent directory, not directly at
+`OPENCLAW_LIVE_DIR`. Docker creates the mount point before the entrypoint runs;
+keeping the live dir as a child path lets bucket restore distinguish a fresh
+volume from already-restored live state.
 
 Local requirements:
 
@@ -290,10 +296,14 @@ write new runtime lease
    shutdown, waits for the child gateway to exit, and uploads a final snapshot.
    If the Space restarts, the replacement boot sees
    `HUGGINGCLAW_GATEWAY_DISABLED=1` and exits without polling Telegram.
-3. Start local Docker container with the shared runtime image.
-4. Verify restore from bucket.
-5. Set `gatewayLocation` in manifest to `local`.
-6. Update runtime lease to `local`.
+3. If the Space has no live runtime lease, skip waiting for a handoff ack; no
+   process is available to write it, so the latest bucket snapshot is the only
+   recoverable state.
+4. Reset the stale local Docker volume before starting the local gateway.
+5. Start local Docker container with the shared runtime image.
+6. Verify restore from bucket.
+7. Set `gatewayLocation` in manifest to `local`.
+8. Update runtime lease to `local`.
 
 The old target must not keep polling Telegram after migration.
 

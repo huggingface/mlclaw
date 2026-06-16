@@ -17,6 +17,7 @@ import {
   clearRuntimeHandoffRequest,
   readRuntimeHandoffAck,
   readRuntimeLease,
+  runtimeLeaseIsLive,
   writeRuntimeHandoffRequest,
   type RuntimeHandoffAck,
 } from "./lease.js";
@@ -40,6 +41,8 @@ export const TELEGRAM_HARDWARE = "cpu-upgrade";
 export const TELEGRAM_SLEEP_TIME = -1;
 export const DEFAULT_GATEWAY_LOCATION: GatewayLocation = "local";
 export const DEFAULT_LOCAL_PORT = 7860;
+export const LOCAL_VOLUME_MOUNT_PATH = "/tmp/huggingclaw-local";
+export const LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
 export const SPACE_HANDOFF_TIMEOUT_MS = 120_000;
 export const SPACE_HANDOFF_POLL_MS = 5_000;
 
@@ -497,9 +500,11 @@ async function startLocalGateway(params: {
   manifest: DeploymentManifest;
   runtime: Required<CliRuntime>;
   pull: boolean;
+  resetVolume?: boolean;
 }): Promise<void> {
   const { manifest, runtime } = params;
   const containerName = containerNameFor(manifest.agent);
+  const volumeName = volumeNameFor(manifest.agent);
   const existing = await runtime.dockerRunner.inspect(containerName);
   if (existing?.running) {
     runtime.stdout.log(`Local gateway already running: ${containerName}`);
@@ -509,6 +514,10 @@ async function startLocalGateway(params: {
     await runtime.dockerRunner.rm(containerName);
     runtime.stdout.log(`Local gateway removed for config refresh: ${containerName}`);
   }
+  if (params.resetVolume) {
+    await runtime.dockerRunner.rmVolume(volumeName);
+    runtime.stdout.log(`Local gateway volume reset for bucket restore: ${volumeName}`);
+  }
   if (params.pull) {
     await runtime.dockerRunner.pull(manifest.runtimeImage);
   }
@@ -516,7 +525,9 @@ async function startLocalGateway(params: {
     containerName,
     image: manifest.runtimeImage,
     envFile: secretEnvPath(runtime.configRoot, manifest.agent),
-    volumeName: volumeNameFor(manifest.agent),
+    volumeName,
+    volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
+    liveDir: LOCAL_LIVE_DIR,
     port: DEFAULT_LOCAL_PORT,
   });
   runtime.stdout.log(`Local gateway created: ${containerName}`);
@@ -666,7 +677,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       HUGGINGCLAW_RUNTIME_ID: updated.localRuntimeId,
     });
-    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts) });
+    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
   }
   await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Gateway migrated to ${target}`);
@@ -748,6 +759,13 @@ async function disableAndPauseSpaceGateway(params: {
   const handoffStartedAt = params.runtime.now();
   const requestId = randomBytes(16).toString("hex");
   await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
+  const shouldWaitForHandoff = await spaceGatewayCanAcknowledgeHandoff(params);
+  if (!shouldWaitForHandoff) {
+    await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket).catch(() => undefined);
+    await params.hub.pauseSpace(params.manifest.space);
+    params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
+    return;
+  }
   await writeRuntimeHandoffRequest(params.hub, params.manifest.bucket, {
     schemaVersion: 1,
     requestId,
@@ -770,6 +788,35 @@ async function disableAndPauseSpaceGateway(params: {
   params.runtime.stdout.log("Space final snapshot observed");
   await params.hub.pauseSpace(params.manifest.space);
   params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
+}
+
+async function spaceGatewayCanAcknowledgeHandoff(params: {
+  manifest: DeploymentManifest;
+  hub: HubApi;
+  runtime: Required<CliRuntime>;
+}): Promise<boolean> {
+  const expectedRuntimeId = spaceRuntimeId(params.manifest.agent);
+  const [runtimeInfo, lease] = await Promise.all([
+    params.hub.getSpaceRuntime(params.manifest.space).catch(() => null),
+    readRuntimeLease(params.hub, params.manifest.bucket).catch(() => null),
+  ]);
+  const stage = typeof runtimeInfo?.stage === "string" ? runtimeInfo.stage.toUpperCase() : "";
+  const stageCanRunGateway = !stage || stage === "RUNNING";
+  const leaseIsCurrentSpace =
+    lease?.runtimeId === expectedRuntimeId &&
+    lease.gatewayLocation === "space" &&
+    runtimeLeaseIsLive(lease, params.runtime.now());
+
+  if (stageCanRunGateway && leaseIsCurrentSpace) {
+    return true;
+  }
+
+  const stageDetail = stage ? `Space stage: ${stage}. ` : "";
+  const leaseDetail = lease
+    ? `Last lease: ${lease.gatewayLocation}/${lease.runtimeId} at ${lease.lastHeartbeatAt}.`
+    : "No runtime lease found.";
+  params.runtime.stdout.log(`${stageDetail}${leaseDetail} Skipping final snapshot handoff wait.`);
+  return false;
 }
 
 async function waitForRuntimeHandoffAck(params: {

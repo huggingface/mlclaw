@@ -9,6 +9,7 @@ export type DockerRunner = {
   start(containerName: string): Promise<void>;
   stop(containerName: string): Promise<void>;
   rm(containerName: string): Promise<void>;
+  rmVolume(volumeName: string): Promise<void>;
   disableRestart(containerName: string): Promise<void>;
   logs(containerName: string, tail?: number): Promise<string>;
   inspect(containerName: string): Promise<DockerInspect | null>;
@@ -19,6 +20,8 @@ export type DockerRunParams = {
   image: string;
   envFile: string;
   volumeName: string;
+  volumeMountPath: string;
+  liveDir: string;
   port: number;
 };
 
@@ -44,10 +47,12 @@ export class CliDockerRunner implements DockerRunner {
       "unless-stopped",
       "--env-file",
       params.envFile,
+      "-e",
+      `OPENCLAW_LIVE_DIR=${params.liveDir}`,
       "-p",
       `127.0.0.1:${params.port}:${params.port}`,
       "-v",
-      `${params.volumeName}:/tmp/openclaw-live`,
+      `${params.volumeName}:${params.volumeMountPath}`,
       params.image,
     ]);
   }
@@ -62,6 +67,17 @@ export class CliDockerRunner implements DockerRunner {
 
   async rm(containerName: string): Promise<void> {
     await docker(["rm", containerName]);
+  }
+
+  async rmVolume(volumeName: string): Promise<void> {
+    try {
+      await docker(["volume", "rm", volumeName]);
+    } catch (err) {
+      if (isMissingVolumeError(err)) {
+        return;
+      }
+      throw err;
+    }
   }
 
   async disableRestart(containerName: string): Promise<void> {
@@ -119,4 +135,9 @@ async function docker(args: string[]): Promise<{ stdout: string; stderr: string 
 function isMissingContainerError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return message.includes("No such object") || message.includes("No such container");
+}
+
+function isMissingVolumeError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes("No such volume");
 }

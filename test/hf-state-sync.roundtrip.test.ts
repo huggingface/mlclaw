@@ -82,6 +82,24 @@ describe("snapshot/restore round-trip", () => {
     expect(row.v).toBe("turn-1");
   });
 
+  it("restores into a live dir child under an existing mounted volume root", async () => {
+    const hub = createFakeHub();
+    const source = path.join(dir, "source");
+    await writeState(source, "mounted-volume-restore");
+    const snap = await runSnapshot({ config: configFor(source), hub, bootTime: BOOT });
+    expect(snap.kind).toBe("uploaded");
+
+    const mountedRoot = path.join(dir, "mounted-volume");
+    await fs.mkdir(mountedRoot);
+    const liveDir = path.join(mountedRoot, "openclaw-live");
+    const restore = await runRestore({ config: configFor(liveDir), hub });
+
+    expect(restore.kind).toBe("restored");
+    expect(await fs.readFile(path.join(liveDir, ".openclaw/openclaw.json"), "utf8")).toContain(
+      "mounted-volume-restore",
+    );
+  });
+
   it("keeps every remote object under the configured prefix", async () => {
     const hub = createFakeHub();
     const live = path.join(dir, "live");
