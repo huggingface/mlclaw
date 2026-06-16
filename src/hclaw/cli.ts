@@ -68,6 +68,7 @@ type BootstrapOptions = {
 
 type UpdateOptions = {
   force?: boolean;
+  runtimeImage?: string;
 };
 
 type DoctorOptions = {
@@ -172,7 +173,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL)
     .option("--runtime-image <image>", "Hugging Claw runtime image")
     .option("--gateway-token <token>", "OpenClaw gateway token")
-    .option("--no-pull", "Do not docker pull before starting a local gateway", false)
+    .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if a stale runtime lease is present", false)
     .option("--yes", "Confirm paid hardware prompts for automation", false)
     .action(async (opts: BootstrapOptions) => {
@@ -183,6 +184,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .command("update")
     .description("Regenerate and upload current HuggingClaw Space files")
     .argument("<owner/space>", "Hugging Face Space repo ID")
+    .option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile")
     .option("--force", "Update even if the Space does not look like HuggingClaw", false)
     .action(async (repoId: string, opts: UpdateOptions) => {
       const token = await runtime.readToken(runtime.env);
@@ -223,7 +225,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
   gateway
     .command("start")
     .argument("<agent>", "Agent name")
-    .option("--no-pull", "Do not docker pull before starting a local gateway", false)
+    .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .action(async (agent: string, opts: GatewayCommandOptions) => {
       await gatewayStart(agent, opts, runtime);
@@ -239,7 +241,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
   gateway
     .command("restart")
     .argument("<agent>", "Agent name")
-    .option("--no-pull", "Do not docker pull before starting a local gateway", false)
+    .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .action(async (agent: string, opts: GatewayCommandOptions) => {
       await gatewayStop(agent, runtime);
@@ -268,7 +270,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--hardware <flavor>", "Hugging Face Space hardware flavor", TELEGRAM_HARDWARE)
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger, TELEGRAM_SLEEP_TIME)
     .option("--runtime-image <image>", "Hugging Claw runtime image")
-    .option("--no-pull", "Do not docker pull before starting a local gateway", false)
+    .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .option("--yes", "Confirm paid hardware prompts for automation", false)
     .action(async (agent: string, opts: GatewayCommandOptions) => {
@@ -777,7 +779,7 @@ async function update(
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: repoId,
     token: hfToken,
-    runtimeImage: resolveRuntimeImage(undefined, runtime.env),
+    runtimeImage: resolveRuntimeImage(opts.runtimeImage ?? variables.get("HUGGINGCLAW_RUNTIME_IMAGE")?.value, runtime.env),
   });
   await hub.addSpaceVariable(repoId, "OPENCLAW_HF_TEMPLATE_REV", templateRev);
   await hub.restartSpace(repoId, true);

@@ -4826,6 +4826,7 @@ function positiveIntFromEnv(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 function resolveSyncConfig(env = process.env) {
+  const runId = env.HUGGINGCLAW_RUN_ID?.trim() || randomUUID();
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
@@ -4833,7 +4834,8 @@ function resolveSyncConfig(env = process.env) {
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
+    runId,
+    runtimeId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || runId,
     agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
     gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space" ? env.HUGGINGCLAW_GATEWAY_LOCATION : "unknown",
     runtimeImage: env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || "unknown"
@@ -9251,7 +9253,7 @@ async function supervise(params) {
     const status = {
       schemaVersion: 1,
       agent: config.agentName,
-      runtimeId: config.runId,
+      runtimeId: config.runtimeId,
       gatewayLocation: config.gatewayLocation,
       runtimeImage: config.runtimeImage,
       startedAt: bootTime,
@@ -9276,7 +9278,7 @@ async function supervise(params) {
         return null;
       }
       const parsed = JSON.parse(await fs6.readFile(file, "utf8"));
-      if (parsed?.schemaVersion !== 1 || parsed.agent !== config.agentName || parsed.runtimeId !== config.runId || typeof parsed.requestId !== "string" || !parsed.requestId) {
+      if (parsed?.schemaVersion !== 1 || parsed.agent !== config.agentName || parsed.runtimeId !== config.runtimeId || typeof parsed.requestId !== "string" || !parsed.requestId) {
         return null;
       }
       return parsed;
@@ -9289,7 +9291,7 @@ async function supervise(params) {
       schemaVersion: 1,
       requestId: request.requestId,
       agent: config.agentName,
-      runtimeId: config.runId,
+      runtimeId: config.runtimeId,
       gatewayLocation: config.gatewayLocation,
       completedAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...lastSnapshotId ? { lastSnapshotId } : {}

@@ -17,6 +17,8 @@ export type SyncConfig = {
   keepSnapshots: number;
   /** Identifies this container run in manifests, for observability. */
   runId: string;
+  /** Stable logical runtime identity used for leases and handoff. */
+  runtimeId: string;
   agentName: string;
   gatewayLocation: "local" | "space" | "unknown";
   runtimeImage: string;
@@ -34,6 +36,7 @@ function positiveIntFromEnv(value: string | undefined, fallback: number): number
 }
 
 export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncConfig {
+  const runId = env.HUGGINGCLAW_RUN_ID?.trim() || randomUUID();
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
@@ -41,7 +44,8 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || randomUUID(),
+    runId,
+    runtimeId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || runId,
     agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
     gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space"
       ? env.HUGGINGCLAW_GATEWAY_LOCATION

@@ -32,7 +32,7 @@ export async function supervise(params: {
     const status = {
       schemaVersion: 1,
       agent: config.agentName,
-      runtimeId: config.runId,
+      runtimeId: config.runtimeId,
       gatewayLocation: config.gatewayLocation,
       runtimeImage: config.runtimeImage,
       startedAt: bootTime,
@@ -60,7 +60,7 @@ export async function supervise(params: {
       if (
         parsed?.schemaVersion !== 1 ||
         parsed.agent !== config.agentName ||
-        parsed.runtimeId !== config.runId ||
+        parsed.runtimeId !== config.runtimeId ||
         typeof parsed.requestId !== "string" ||
         !parsed.requestId
       ) {
@@ -76,7 +76,7 @@ export async function supervise(params: {
       schemaVersion: 1,
       requestId: request.requestId,
       agent: config.agentName,
-      runtimeId: config.runId,
+      runtimeId: config.runtimeId,
       gatewayLocation: config.gatewayLocation,
       completedAt: new Date().toISOString(),
       ...(lastSnapshotId ? { lastSnapshotId } : {}),

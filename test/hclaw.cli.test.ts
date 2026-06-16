@@ -229,6 +229,20 @@ describe("hclaw CLI", () => {
     });
   });
 
+  it("pulls the runtime image by default for a new local gateway", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const runtime = await createRuntime(hub, prompt);
+
+    const code = await main(["--gateway-token", "gateway-token"], runtime);
+
+    expect(code).toBe(0);
+    expect(runtime.dockerRunner.calls).toContainEqual({
+      name: "pull",
+      args: ["ghcr.io/osolmaz/huggingclaw-runtime:latest"],
+    });
+  });
+
   it("runs bootstrap as Space gateway when requested and prompts for paid hardware", async () => {
     const hub = createFakeHub();
     const { prompt, notes } = createPrompt(["telegram-token", "7216393410", true]);
@@ -331,6 +345,27 @@ describe("hclaw CLI", () => {
       name: "requestSpaceHardware",
       args: ["alice/research", "cpu-upgrade", -1],
     });
+  });
+
+  it("preserves the configured Space runtime image during update", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
+    await hub.addSpaceVariable("alice/research", "HUGGINGCLAW_RUNTIME_IMAGE", "registry.example/huggingclaw:test");
+    const { prompt } = createPrompt([]);
+    const baseRuntime = await createRuntime(hub, prompt);
+    const pushed: Array<{ runtimeImage: string | undefined }> = [];
+    const runtime = {
+      ...baseRuntime,
+      pushTemplateToSpace: async (params: { runtimeImage?: string }) => {
+        pushed.push({ runtimeImage: params.runtimeImage });
+        return { templateRev: "test-template" };
+      },
+    };
+
+    const code = await main(["update", "alice/research"], runtime);
+
+    expect(code).toBe(0);
+    expect(pushed).toEqual([{ runtimeImage: "registry.example/huggingclaw:test" }]);
   });
 
   it("migrates local to Space and back without starting both gateways", async () => {

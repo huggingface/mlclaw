@@ -31,6 +31,7 @@ function configFor(liveDir: string, overrides?: Partial<SyncConfig>): SyncConfig
     handoffPollSeconds: 5,
     keepSnapshots: 2,
     runId: "run-test",
+    runtimeId: "local-test-agent",
     agentName: "test-agent",
     gatewayLocation: "local",
     runtimeImage: "example/runtime:test",

@@ -9760,10 +9760,10 @@ function createProgram(runtimeOverrides = {}) {
   program2.name("hclaw").description("Deploy OpenClaw to a private Hugging Face Space and bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).description("Create or update a private Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent, Space, and bucket base name").option("--gateway <local|space>", "Where the live gateway runs", DEFAULT_GATEWAY_LOCATION).option("--telegram-token <token>", "Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "Hugging Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token").option("--no-pull", "Do not docker pull before starting a local gateway", false).option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
+  program2.command("bootstrap", { isDefault: true }).description("Create or update a private Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent, Space, and bucket base name").option("--gateway <local|space>", "Where the live gateway runs", DEFAULT_GATEWAY_LOCATION).option("--telegram-token <token>", "Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "Hugging Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
-  program2.command("update").description("Regenerate and upload current HuggingClaw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--force", "Update even if the Space does not look like HuggingClaw", false).action(async (repoId, opts) => {
+  program2.command("update").description("Regenerate and upload current HuggingClaw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--force", "Update even if the Space does not look like HuggingClaw", false).action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await update(repoId, opts, hub, token, runtime);
@@ -9779,13 +9779,13 @@ function createProgram(runtimeOverrides = {}) {
     await settings(repoId, opts, hub, runtime);
   });
   const gateway = program2.command("gateway").description("Operate a Hugging Claw gateway");
-  gateway.command("start").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway", false).option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
+  gateway.command("start").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
     await gatewayStart(agent, opts, runtime);
   });
   gateway.command("stop").argument("<agent>", "Agent name").action(async (agent) => {
     await gatewayStop(agent, runtime);
   });
-  gateway.command("restart").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway", false).option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
+  gateway.command("restart").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
     await gatewayStop(agent, runtime);
     await gatewayStart(agent, opts, runtime);
   });
@@ -9795,7 +9795,7 @@ function createProgram(runtimeOverrides = {}) {
   gateway.command("logs").argument("<agent>", "Agent name").option("--tail <lines>", "Number of log lines", parseInteger, 200).action(async (agent, opts) => {
     await gatewayLogs(agent, opts, runtime);
   });
-  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor", TELEGRAM_HARDWARE).option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger, TELEGRAM_SLEEP_TIME).option("--runtime-image <image>", "Hugging Claw runtime image").option("--no-pull", "Do not docker pull before starting a local gateway", false).option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
+  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor", TELEGRAM_HARDWARE).option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger, TELEGRAM_SLEEP_TIME).option("--runtime-image <image>", "Hugging Claw runtime image").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
     await gatewayMigrate(agent, opts, runtime);
   });
   return program2;
@@ -10217,7 +10217,7 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: repoId,
     token: hfToken,
-    runtimeImage: resolveRuntimeImage(void 0, runtime.env)
+    runtimeImage: resolveRuntimeImage(opts.runtimeImage ?? variables.get("HUGGINGCLAW_RUNTIME_IMAGE")?.value, runtime.env)
   });
   await hub.addSpaceVariable(repoId, "OPENCLAW_HF_TEMPLATE_REV", templateRev);
   await hub.restartSpace(repoId, true);
