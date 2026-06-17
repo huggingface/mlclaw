@@ -1,6 +1,6 @@
 # Docker Context Binding Implementation Plan
 
-Status: planned follow-up after PR #5
+Status: implemented in PR #6
 
 ## Problem
 
