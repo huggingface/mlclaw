@@ -52,6 +52,50 @@ Avoid these names:
 - `bot mode`: too Telegram-specific.
 - `connector mode`: sounds like only messaging changes.
 
+## State Bucket Contract
+
+Treat the Hugging Face Storage Bucket as the durable agent identity/state
+pointer. Treat the agent name as the runtime/resource name.
+
+Default bootstrap derives both names from the same base:
+
+```text
+agentName = slugify(--name ?? Telegram bot username without trailing _bot/-bot/bot)
+space = <owner>/<agentName>
+bucket = <owner>/<agentName>-data
+```
+
+That default is only a convenience for a new deployment. After a deployment
+exists, the local manifest pins the bucket. Bootstrap must reuse
+`manifest.bucket` unless the user explicitly supplies a new `--bucket`.
+
+Explicit bucket adoption:
+
+```bash
+hclaw bootstrap --name onurclaw --bucket osolmaz/onurclawtest-data
+hclaw state adopt onurclaw --bucket osolmaz/onurclawtest-data
+```
+
+Use `--bucket`, not `--from-bucket`. The command points the deployment at the
+durable state bucket. It is not a copy/import operation.
+
+Rules:
+
+- If the bucket does not exist, create it private.
+- If the bucket exists and contains Hugging Claw/OpenClaw snapshots, treat it as
+  adoption.
+- Verify the bucket manifest and newest snapshot before starting a gateway.
+- If a deployment manifest already exists and its bucket differs from
+  `--bucket`, prompt for confirmation; automation requires `--yes`.
+- If the target bucket has a live foreign runtime lease, refuse unless
+  `--takeover` is supplied.
+- Update the local manifest, local env file, and Space variables so all runtime
+  targets use the same `OPENCLAW_HF_STATE_BUCKET`.
+- Reset the local Docker live volume after a bucket change so startup restores
+  from the adopted bucket instead of stale local disk.
+- Do not silently discover or adopt older buckets from Telegram tokens, bot
+  names, or account scans. Adoption must be explicit.
+
 ## User-Facing Commands
 
 Bootstrap:
@@ -59,11 +103,14 @@ Bootstrap:
 ```bash
 hclaw bootstrap --gateway local
 hclaw bootstrap --gateway space
+hclaw bootstrap --gateway local --bucket <owner/bucket>
+hclaw bootstrap --gateway space --bucket <owner/bucket>
 ```
 
 Operational commands:
 
 ```bash
+hclaw state adopt <agent> --bucket <owner/bucket>
 hclaw gateway start <agent>
 hclaw gateway stop <agent>
 hclaw gateway restart <agent>
@@ -127,7 +174,7 @@ This avoids asking users to build from source locally or inside their Space.
 Local mode creates:
 
 ```text
-private HF Storage Bucket
+private HF Storage Bucket, created or explicitly adopted
 local deployment manifest
 local secret env file
 Docker container running the shared runtime image
@@ -178,7 +225,7 @@ Store the env file with `0600` permissions.
 Space mode creates or updates:
 
 ```text
-private HF Storage Bucket
+private HF Storage Bucket, created or explicitly adopted
 private HF Docker Space
 Space variables
 Space secrets
@@ -227,6 +274,44 @@ Example:
 ```
 
 This manifest is local convenience state. The bucket remains durable state.
+Existing manifests must pin the bucket across future bootstrap/update runs.
+Renaming the runtime agent or Space must not silently move identity/state to a
+new bucket.
+
+## State Adoption Protocol
+
+Bucket adoption is a controlled state pointer change:
+
+```text
+stop current gateway
+wait for final snapshot when a current gateway is running
+validate target bucket
+update manifest and runtime configuration
+discard stale local live volume
+start gateway
+restore latest verified snapshot from adopted bucket
+verify identity/state files
+```
+
+Detailed behavior:
+
+1. Load the current deployment manifest for `<agent>`.
+2. If a gateway is running, stop it through the normal gateway stop path and
+   wait for its final snapshot.
+3. Validate that `--bucket` is reachable and private to the user.
+4. If the bucket is non-empty, require a recognizable Hugging Claw snapshot
+   manifest or OpenClaw state layout.
+5. If the bucket has a current runtime lease from another runtime, require
+   `--takeover`.
+6. Write `manifest.bucket = <owner/bucket>`.
+7. Rewrite the local env file with `OPENCLAW_HF_STATE_BUCKET=<owner/bucket>`.
+8. If the deployment has a Space, set the Space variable
+   `OPENCLAW_HF_STATE_BUCKET=<owner/bucket>`.
+9. Remove or recreate the local Docker live volume before restart.
+10. Start the selected gateway location and verify the restore log references
+    the adopted bucket.
+11. For live verification, read `IDENTITY.md`, `SOUL.md`, and `USER.md` from
+    the restored state and confirm they match the adopted bucket.
 
 ## Bucket Runtime Lease
 
@@ -336,22 +421,29 @@ Implement the feature as one coherent cutover:
 1. Add `gatewayLocation` types and parsing.
 2. Add local deployment manifest read/write.
 3. Add local secret env writer with `0600` permissions.
-4. Add Docker adapter:
+4. Add explicit state bucket handling:
+   - `bootstrap --bucket <owner/bucket>`;
+   - existing manifest bucket pinning;
+   - target bucket validation;
+   - non-empty bucket adoption confirmation;
+   - `hclaw state adopt <agent> --bucket <owner/bucket>`;
+   - local Docker live volume reset after bucket changes.
+5. Add Docker adapter:
    - detect Docker;
    - pull runtime image;
    - start/stop/restart container;
    - read logs;
    - inspect status.
-5. Add runtime image tag configuration.
-6. Change `bootstrap` to accept `--gateway local|space`.
-7. Make interactive bootstrap default to `local`.
-8. Keep Space paid-hardware confirmation only for `--gateway space`.
-9. Generate minimal Space files from the shared runtime image.
-10. Add `hclaw gateway` command group.
-11. Add migration commands with stop/snapshot/start checks.
-12. Add runtime lease read/write/heartbeat support.
-13. Update `doctor` to understand both local and Space gateway locations.
-14. Update `README.md`, `docs/COSTS.md`, and
+6. Add runtime image tag configuration.
+7. Change `bootstrap` to accept `--gateway local|space`.
+8. Make interactive bootstrap default to `local`.
+9. Keep Space paid-hardware confirmation only for `--gateway space`.
+10. Generate minimal Space files from the shared runtime image.
+11. Add `hclaw gateway` command group.
+12. Add migration commands with stop/snapshot/start checks.
+13. Add runtime lease read/write/heartbeat support.
+14. Update `doctor` to understand both local and Space gateway locations.
+15. Update `README.md`, `docs/COSTS.md`, and
     `docs/MESSAGING_EGRESS.md`.
 
 ## Testing Checklist
@@ -359,18 +451,27 @@ Implement the feature as one coherent cutover:
 Unit tests:
 
 - gateway location parsing;
+- agent name and default bucket derivation from Telegram bot username;
+- explicit `--bucket` override;
+- existing manifest bucket pinning across repeated bootstrap;
 - bootstrap defaults;
 - local manifest read/write;
 - secret env file formatting and permissions;
 - Docker command generation;
 - Space file generation uses shared runtime image;
 - paid hardware prompts only happen for Space gateway mode;
+- state adoption validation and prompt behavior;
 - migration ordering.
 
 Integration tests with fakes:
 
 - local bootstrap creates bucket and local manifest, but no Space;
 - Space bootstrap creates bucket and Space and confirms paid hardware;
+- bootstrap with `--bucket` points the deployment at the adopted bucket;
+- `hclaw state adopt` stops the current gateway, updates manifest/env/Space
+  variables, resets local volume, and restarts from the adopted bucket;
+- non-empty bucket mismatch requires confirmation;
+- live foreign lease requires `--takeover`;
 - local-to-Space migration stops local before starting Space;
 - Space-to-local migration disables Space before starting local;
 - stale lease requires `--takeover`.
@@ -382,6 +483,8 @@ Live test:
 - stop/start local gateway and verify bucket restore;
 - migrate to Space with paid hardware and verify response;
 - migrate back to local and verify response;
+- adopt a previously used identity bucket into a new runtime name and verify the
+  restored `IDENTITY.md`, `SOUL.md`, and `USER.md` content;
 - confirm only one gateway is polling at a time.
 
 Live migration round trip:
@@ -447,6 +550,9 @@ egress today.
 
 - No shared Telegram proxy as the default.
 - No mounted bucket live filesystem.
+- No implicit bucket discovery or adoption from Telegram credentials.
+- No bucket copy/import as part of `state adopt`; adoption changes the durable
+  bucket pointer.
 - No separate local OpenClaw installer path.
 - No local native OpenClaw dependency installation as the default.
 - No guarantee that two gateways can safely run against one bot at the same
