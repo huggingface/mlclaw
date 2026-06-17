@@ -3828,10 +3828,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path5, processedBytes]) => ({
-        path: path5,
-        progress: processedBytes / this.fileSize[path5],
-        lastSentProgress: ((this.fileUploadedBytes[path5] ?? 0) + (processedBytes - (this.fileUploadedBytes[path5] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path5]
+      files: Object.entries(this.fileProcessedBytes).map(([path6, processedBytes]) => ({
+        path: path6,
+        progress: processedBytes / this.fileSize[path6],
+        lastSentProgress: ((this.fileUploadedBytes[path6] ?? 0) + (processedBytes - (this.fileUploadedBytes[path6] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path6]
       }))
     };
   }
@@ -4704,7 +4704,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path5) => ({ type: "deleteFile", path: path5 })));
+    await this.batch(paths.map((path6) => ({ type: "deleteFile", path: path6 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -4720,8 +4720,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path5) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path5)}`;
+  async downloadFile(path6) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path6)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -4817,25 +4817,36 @@ function createHfBucketHub(params) {
 // src/hf-state-sync/paths.ts
 import { randomUUID } from "node:crypto";
 var DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
-var DEFAULT_PREFIX = "openclaw-state";
+var DEFAULT_BUCKET_PREFIX = "openclaw-state";
 var DEFAULT_INTERVAL_SECONDS = 60;
+var DEFAULT_HANDOFF_POLL_SECONDS = 5;
 var DEFAULT_KEEP = 5;
 function positiveIntFromEnv(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 function resolveSyncConfig(env = process.env) {
+  const runId = env.HUGGINGCLAW_RUN_ID?.trim() || randomUUID();
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
-    bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
+    bucketPrefix: normalizeBucketPrefix(env.OPENCLAW_HF_STATE_PREFIX),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
+    handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: randomUUID()
+    runId,
+    runtimeId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || runId,
+    agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
+    gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space" ? env.HUGGINGCLAW_GATEWAY_LOCATION : "unknown",
+    runtimeImage: env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || "unknown"
   };
 }
 function remotePath(config, name) {
-  return `${config.bucketPrefix}/${name}`;
+  return `${normalizeBucketPrefix(config.bucketPrefix)}/${name.replace(/^\/+/, "")}`;
+}
+function normalizeBucketPrefix(prefix) {
+  const normalized = (prefix?.trim() || DEFAULT_BUCKET_PREFIX).replace(/^\/+|\/+$/g, "");
+  return normalized || DEFAULT_BUCKET_PREFIX;
 }
 function log(message) {
   console.log(`[hf-state-sync] ${message}`);
@@ -5469,8 +5480,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -5586,11 +5597,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -9229,7 +9240,12 @@ async function runSnapshot(params) {
 
 // src/hf-state-sync/supervise.ts
 import { spawn } from "node:child_process";
+import fs6 from "node:fs/promises";
+import os3 from "node:os";
+import path5 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+var LEASE_HEARTBEAT_MS = 6e4;
+var HANDOFF_REQUEST_TTL_MS = 10 * 60 * 1e3;
 async function supervise(params) {
   const { config, hub, command } = params;
   const [binary, ...args] = command;
@@ -9237,6 +9253,73 @@ async function supervise(params) {
     throw new Error("supervise: missing child command");
   }
   const bootTime = (/* @__PURE__ */ new Date()).toISOString();
+  let lastSnapshotId;
+  const handoffState = { request: null };
+  const writeLease = async () => {
+    const status = {
+      schemaVersion: 1,
+      agent: config.agentName,
+      runtimeId: config.runtimeId,
+      gatewayLocation: config.gatewayLocation,
+      runtimeImage: config.runtimeImage,
+      startedAt: bootTime,
+      lastHeartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...lastSnapshotId ? { lastSnapshotId } : {}
+    };
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-lease-"));
+    try {
+      const file = path5.join(tmpDir, "status.json");
+      await fs6.writeFile(file, JSON.stringify(status, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/status.json"));
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const readHandoffRequest = async () => {
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-"));
+    try {
+      const file = path5.join(tmpDir, "request.json");
+      const result = await hub.download(remotePath(config, "runtime/handoff-request.json"), file);
+      if (result === "not-found") {
+        return null;
+      }
+      const parsed = JSON.parse(await fs6.readFile(file, "utf8"));
+      if (parsed?.schemaVersion !== 1 || parsed.agent !== config.agentName || parsed.runtimeId !== config.runtimeId || typeof parsed.requestedAt !== "string" || typeof parsed.requestId !== "string" || !parsed.requestId) {
+        return null;
+      }
+      const requestedAt = Date.parse(parsed.requestedAt);
+      if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > HANDOFF_REQUEST_TTL_MS) {
+        log(`ignoring expired handoff request ${parsed.requestId}`);
+        await hub.delete([remotePath(config, "runtime/handoff-request.json")]).catch((err) => {
+          logError(`failed to clear expired handoff request: ${err instanceof Error ? err.message : String(err)}`);
+        });
+        return null;
+      }
+      return parsed;
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
+  const writeHandoffAck = async (request) => {
+    const ack = {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      agent: config.agentName,
+      runtimeId: config.runtimeId,
+      gatewayLocation: config.gatewayLocation,
+      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...lastSnapshotId ? { lastSnapshotId } : {}
+    };
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-ack-"));
+    try {
+      const file = path5.join(tmpDir, "ack.json");
+      await fs6.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
+      await hub.upload(file, remotePath(config, "runtime/handoff-ack.json"));
+      await hub.delete([remotePath(config, "runtime/handoff-request.json")]);
+    } finally {
+      await fs6.rm(tmpDir, { recursive: true, force: true });
+    }
+  };
   const child = spawn(binary, args, { stdio: "inherit" });
   const childExit = new Promise((resolve) => {
     child.on("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
@@ -9252,27 +9335,33 @@ async function supervise(params) {
       const outcome = await runSnapshot({ config, hub, bootTime });
       if (outcome.kind === "failed") {
         logError(`${label}: snapshot failed: ${outcome.detail}`);
+      } else if (outcome.kind === "uploaded") {
+        lastSnapshotId = outcome.entry.path;
       }
+      await writeLease().catch((err) => {
+        logError(`${label}: lease heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+      return outcome;
     } finally {
       inFlight = null;
     }
   };
-  const snapshotInterval = () => {
+  const snapshotInterval = async () => {
     if (inFlight) {
       log("interval: previous snapshot still running, skipping");
-      return Promise.resolve();
+      return;
     }
     inFlight = runOnce("interval");
-    return inFlight;
+    await inFlight;
   };
   const snapshotFinal = async () => {
     if (inFlight) {
       await inFlight;
     }
     inFlight = runOnce("final");
-    await inFlight;
+    return await inFlight;
   };
-  const loop = (async () => {
+  const snapshotLoop = (async () => {
     while (!stopping) {
       await delay(config.intervalSeconds * 1e3);
       if (stopping) {
@@ -9281,6 +9370,41 @@ async function supervise(params) {
       await snapshotInterval();
     }
   })();
+  void snapshotLoop;
+  const heartbeatLoop = (async () => {
+    await writeLease().catch((err) => logError(`initial lease failed: ${err instanceof Error ? err.message : String(err)}`));
+    while (!stopping) {
+      await delay(LEASE_HEARTBEAT_MS);
+      if (stopping) {
+        return;
+      }
+      await writeLease().catch((err) => {
+        logError(`lease heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+  })();
+  void heartbeatLoop;
+  const handoffLoop = (async () => {
+    while (!stopping && !handoffState.request) {
+      await delay(config.handoffPollSeconds * 1e3);
+      if (stopping || handoffState.request) {
+        return;
+      }
+      try {
+        const request = await readHandoffRequest();
+        if (!request) {
+          continue;
+        }
+        handoffState.request = request;
+        log(`handoff ${request.requestId} requested for ${request.targetRuntimeId}`);
+        stopping = true;
+        child.kill("SIGTERM");
+      } catch (err) {
+        logError(`handoff poll failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  })();
+  void handoffLoop;
   const forwardSignal = (signal) => {
     log(`received ${signal}, shutting down`);
     stopping = true;
@@ -9291,8 +9415,40 @@ async function supervise(params) {
   const exitCode = await childExit;
   stopping = true;
   log(`child exited with code ${exitCode}, taking final snapshot`);
-  await snapshotFinal();
+  if (!handoffState.request) {
+    try {
+      const shutdownRequest = await readHandoffRequest();
+      if (shutdownRequest) {
+        handoffState.request = shutdownRequest;
+        log(`handoff ${shutdownRequest.requestId} requested for ${shutdownRequest.targetRuntimeId}`);
+      }
+    } catch (err) {
+      logError(`shutdown handoff check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const finalOutcome = await snapshotFinal();
+  if (handoffState.request) {
+    const request = handoffState.request;
+    if (finalOutcome.kind !== "uploaded") {
+      throw new Error(`handoff ${request.requestId} final snapshot did not upload: ${snapshotFailureDetail(finalOutcome)}`);
+    }
+    await writeHandoffAck(request).catch((err) => {
+      throw new Error(`handoff ${request.requestId} snapshot completed but ack failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    log(`handoff ${request.requestId} acknowledged`);
+    return 0;
+  }
   return exitCode;
+}
+function snapshotFailureDetail(outcome) {
+  switch (outcome.kind) {
+    case "uploaded":
+      return "uploaded";
+    case "failed":
+      return outcome.detail;
+    case "skipped":
+      return outcome.reason;
+  }
 }
 
 // src/hf-state-sync/cli.ts

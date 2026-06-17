@@ -66,6 +66,7 @@ Best current OpenClaw choices from this run:
 ```text
 huggingface/google/gemma-4-26B-A4B-it
 huggingface/google/gemma-4-31B-it
+huggingface/Qwen/Qwen3.6-35B-A3B
 huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct
 huggingface/Qwen/Qwen3-VL-8B-Instruct
 huggingface/Qwen/Qwen3-8B
@@ -124,6 +125,12 @@ Provider suffixes work for canonical router-listed IDs:
 | `Qwen/Qwen3.6-35B-A3B:featherless-ai` | 200 |
 | `Qwen/Qwen3.6-35B-A3B:cheapest` | 200 |
 | `Qwen/Qwen3.6-35B-A3B:fastest` | 200 |
+
+2026-06-17 follow-up: `Qwen/Qwen3.6-35B-A3B` was still listed by the router
+and direct chat-completions probes returned 200 for the default route,
+`:cheapest`, and `:deepinfra`. The router catalog showed DeepInfra pricing at
+$0.15/M input tokens and $0.95/M output tokens, with tool and structured-output
+support.
 
 Provider suffixes did not unlock models that were absent from the router
 catalog:
@@ -220,6 +227,7 @@ other custom runtimes, not for the shared HF router.
 | Hub model | OpenClaw model | Router model | Notes |
 | --- | --- | --- | --- |
 | `Qwen/Qwen3.5-9B` | `huggingface/Qwen/Qwen3.5-9B` | `Qwen/Qwen3.5-9B` | returned 200 |
+| `Qwen/Qwen3.6-35B-A3B` | `huggingface/Qwen/Qwen3.6-35B-A3B` | `Qwen/Qwen3.6-35B-A3B` | returned 200; DeepInfra supports tools and structured output |
 | `Qwen/Qwen3-Coder-Next` | `huggingface/Qwen/Qwen3-Coder-Next` | `qwen/qwen3-coder-next` | returned 200 |
 | `Qwen/Qwen3-Coder-30B-A3B-Instruct` | `huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct` | `qwen3-coder-30b-a3b-instruct` | returned 200 |
 | `Qwen/Qwen3-Next-80B-A3B-Thinking` | `huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking` | `qwen/qwen3-next-80b-a3b-thinking` | returns `reasoning_content` |

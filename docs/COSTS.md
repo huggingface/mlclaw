@@ -8,10 +8,10 @@ pricing pages before promising a user a specific monthly bill.
 
 ## Short Version
 
-The recommended personal deployment is:
+The recommended first deployment is:
 
 ```text
-Private Hugging Face Space: cpu-upgrade, always on
+Gateway: local Docker container
 Private Hugging Face Storage Bucket: small state snapshots
 Model inference: Hugging Face Inference Providers router
 ```
@@ -19,7 +19,7 @@ Model inference: Hugging Face Inference Providers router
 Expected fixed cost:
 
 ```text
-$0.03/hour * 730 hours/month = $21.90/month
+$0/month fixed Space cost
 ```
 
 Variable cost:
@@ -28,9 +28,9 @@ Variable cost:
 model input tokens + model output tokens, billed at the selected provider/model rate
 ```
 
-For a Telegram deployment, do not plan around free `cpu-basic`. It may be useful
-for demos and build checks, but Telegram/Discord connectivity currently needs
-paid Space hardware in practice.
+For a fully hosted Telegram deployment in a Hugging Face Space, do not plan
+around free `cpu-basic`. It may be useful for demos and build checks, but
+Telegram/Discord connectivity currently needs paid Space hardware in practice.
 
 If a local gateway mode is used instead, Telegram/Discord traffic originates
 from the user's machine. That avoids the paid-Space egress requirement, but the
@@ -74,10 +74,10 @@ Use 730 hours for a rough average month.
 | 1x Nvidia L40S | $1.80 | $1,314.00 | Larger local model serving |
 | Nvidia A100 large | $2.50 | $1,825.00 | Larger local model serving |
 
-For a normal Hugging Claw install, `cpu-upgrade` is the right default. The GPU
+For a fully hosted Space gateway, `cpu-upgrade` is the right default. The GPU
 Space tiers are included here to make the tradeoff clear: moving inference into
-the Space turns a roughly $22/month gateway into a hundreds-of-dollars/month
-always-on model server.
+the Space turns a roughly $22/month Space gateway into a
+hundreds-of-dollars/month always-on model server.
 
 ## Sleep-Time Choices
 
@@ -122,10 +122,14 @@ Cost formula:
 
 Practical guidance:
 
+Prices below are per 1M tokens from the Hugging Face Router catalog checked on
+2026-06-17. They are provider-specific and can change.
+
 | Choice | Fixed cost | Variable cost | Notes |
 | --- | ---: | ---: | --- |
-| `huggingface/Qwen/Qwen3-8B` | None beyond Space | Low relative to larger models | Good default for cheap personal use |
-| `huggingface/google/gemma-4-26B-A4B-it` | None beyond Space | Higher than small models | Better quality target, still no fixed model server |
+| `huggingface/google/gemma-4-26B-A4B-it` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Default quality target; supports tools |
+| `huggingface/Qwen/Qwen3.6-35B-A3B` | None beyond Space | DeepInfra: $0.15 input / $0.95 output | Stronger Qwen option; supports tools and structured output |
+| `huggingface/Qwen/Qwen3-8B` | None beyond Space | nscale: $0.07 input / $0.18 output | Cheaper small-model option when quality tradeoffs are acceptable |
 | `:cheapest` provider suffix | None beyond Space | Lowest available provider price for that model | Use when cost matters more than latency |
 | `:fastest` provider suffix | None beyond Space | May cost more | Use when latency matters more than cost |
 | Explicit provider suffix, e.g. `:deepinfra` | None beyond Space | Provider-specific | Use for predictable provider behavior |
@@ -240,10 +244,25 @@ can reduce small model-inference bills by increasing included credits, but the
 Default:
 
 ```text
+gatewayLocation: local
+model: huggingface/google/gemma-4-26B-A4B-it
+provider policy: default/fastest unless the user explicitly chooses cheapest
+```
+
+Configurable model examples:
+
+```text
+OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-35B-A3B
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3-8B
+```
+
+Space gateway override:
+
+```text
+gatewayLocation: space
 hardware: cpu-upgrade
 sleepTimeSeconds: -1
-model: a router-compatible Hugging Face model
-provider policy: default/fastest unless the user explicitly chooses cheapest
 ```
 
 Prompt before applying paid hardware:

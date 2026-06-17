@@ -13,14 +13,21 @@ export type SyncConfig = {
   /** Path prefix inside the bucket for all sync objects. */
   bucketPrefix: string;
   intervalSeconds: number;
+  handoffPollSeconds: number;
   keepSnapshots: number;
   /** Identifies this container run in manifests, for observability. */
   runId: string;
+  /** Stable logical runtime identity used for leases and handoff. */
+  runtimeId: string;
+  agentName: string;
+  gatewayLocation: "local" | "space" | "unknown";
+  runtimeImage: string;
 };
 
 const DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
-const DEFAULT_PREFIX = "openclaw-state";
+export const DEFAULT_BUCKET_PREFIX = "openclaw-state";
 const DEFAULT_INTERVAL_SECONDS = 60;
+const DEFAULT_HANDOFF_POLL_SECONDS = 5;
 const DEFAULT_KEEP = 5;
 
 function positiveIntFromEnv(value: string | undefined, fallback: number): number {
@@ -29,19 +36,32 @@ function positiveIntFromEnv(value: string | undefined, fallback: number): number
 }
 
 export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncConfig {
+  const runId = env.HUGGINGCLAW_RUN_ID?.trim() || randomUUID();
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
-    bucketPrefix: (env.OPENCLAW_HF_STATE_PREFIX?.trim() || DEFAULT_PREFIX).replace(/\/+$/, ""),
+    bucketPrefix: normalizeBucketPrefix(env.OPENCLAW_HF_STATE_PREFIX),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
+    handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
     keepSnapshots: positiveIntFromEnv(env.HF_STATE_SYNC_KEEP, DEFAULT_KEEP),
-    runId: randomUUID(),
+    runId,
+    runtimeId: env.HUGGINGCLAW_RUNTIME_ID?.trim() || runId,
+    agentName: env.OPENCLAW_AGENT_NAME?.trim() || "openclaw",
+    gatewayLocation: env.HUGGINGCLAW_GATEWAY_LOCATION === "local" || env.HUGGINGCLAW_GATEWAY_LOCATION === "space"
+      ? env.HUGGINGCLAW_GATEWAY_LOCATION
+      : "unknown",
+    runtimeImage: env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || "unknown",
   };
 }
 
 /** Remote object path under the configured bucket prefix. */
 export function remotePath(config: Pick<SyncConfig, "bucketPrefix">, name: string): string {
-  return `${config.bucketPrefix}/${name}`;
+  return `${normalizeBucketPrefix(config.bucketPrefix)}/${name.replace(/^\/+/, "")}`;
+}
+
+export function normalizeBucketPrefix(prefix: string | undefined): string {
+  const normalized = (prefix?.trim() || DEFAULT_BUCKET_PREFIX).replace(/^\/+|\/+$/g, "");
+  return normalized || DEFAULT_BUCKET_PREFIX;
 }
 
 export function log(message: string): void {

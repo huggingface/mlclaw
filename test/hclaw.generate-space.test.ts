@@ -15,7 +15,7 @@ async function listFiles(root: string): Promise<string[]> {
 describe("generated Space repository", () => {
   it("contains only runtime files and assets", async () => {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-space-test-"));
-    await generateSpaceRepo(process.cwd(), outDir);
+    await generateSpaceRepo(process.cwd(), outDir, { runtimeImage: "example/runtime:test" });
 
     const files = await listFiles(outDir);
     const required = [
@@ -23,16 +23,6 @@ describe("generated Space repository", () => {
       "Dockerfile",
       "README.md",
       "assets/huggingclaw.svg",
-      "entrypoint.sh",
-      "openclaw.default.json",
-      "package-lock.json",
-      "package.json",
-      "scripts/configure-telegram.mjs",
-      "scripts/report-telegram-probe.mjs",
-      "src/hf-bucket-client/client.ts",
-      "src/hf-state-sync/cli.ts",
-      "src/vendor/hfjs-xet/utils/uploadShards.ts",
-      "tsconfig.json",
     ];
 
     for (const file of required) {
@@ -43,32 +33,15 @@ describe("generated Space repository", () => {
         file === ".gitattributes" ||
           file === "Dockerfile" ||
           file === "README.md" ||
-          file === "entrypoint.sh" ||
-          file === "openclaw.default.json" ||
-          file === "package-lock.json" ||
-          file === "package.json" ||
-          file === "tsconfig.json" ||
-          file.startsWith("assets/") ||
-          file.startsWith("scripts/") ||
-          file.startsWith("src/hf-bucket-client/") ||
-          file.startsWith("src/hf-state-sync/") ||
-          file.startsWith("src/vendor/"),
+          file.startsWith("assets/"),
       ).toBe(true);
     }
 
     expect(files.some((file) => file.startsWith("src/hclaw/"))).toBe(false);
+    expect(files.some((file) => file.startsWith("src/"))).toBe(false);
     expect(files).not.toContain("scripts/parity-probe.ts");
     expect(files.some((file) => file.startsWith("dist/"))).toBe(false);
     await expect(fs.readFile(path.join(outDir, "README.md"), "utf8")).resolves.toContain("assets/huggingclaw.svg");
-    const pkg = JSON.parse(await fs.readFile(path.join(outDir, "package.json"), "utf8")) as {
-      name?: string;
-      private?: boolean;
-      bin?: unknown;
-      files?: unknown;
-    };
-    expect(pkg.name).toBe("huggingclaw-generated-space");
-    expect(pkg.private).toBe(true);
-    expect(pkg.bin).toBeUndefined();
-    expect(pkg.files).toBeUndefined();
+    await expect(fs.readFile(path.join(outDir, "Dockerfile"), "utf8")).resolves.toBe("FROM example/runtime:test\n");
   });
 });

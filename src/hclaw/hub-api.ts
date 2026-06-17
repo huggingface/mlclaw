@@ -126,6 +126,12 @@ export class HubApi {
     });
   }
 
+  async pauseSpace(repoId: string): Promise<SpaceRuntime> {
+    return await this.requestJson<SpaceRuntime>(`/api/spaces/${repoId}/pause`, {
+      method: "POST",
+    });
+  }
+
   async requestSpaceHardware(repoId: string, hardware: string, sleepTimeSeconds?: number): Promise<SpaceRuntime> {
     const payload: Record<string, unknown> = { flavor: hardware };
     if (typeof sleepTimeSeconds === "number") {

@@ -4,9 +4,14 @@
 
 `osolmaz/huggingclaw` is the single source of truth for Hugging Claw.
 
-Hugging Claw deploys a private OpenClaw agent to Hugging Face by creating a
-private Storage Bucket and a private Docker Space for each user. There is no
+Hugging Claw deploys a private OpenClaw agent backed by Hugging Face state. The
+gateway can run either locally or in a private Hugging Face Space. There is no
 maintained Hugging Face template Space required for normal operation.
+
+Gateway location is now a first-class design decision. See
+[Gateway Location Implementation Plan](2026-06-16-gateway-location-implementation-plan.md)
+for the plan to support local and Space gateway targets with the same runtime
+image and bucket state format.
 
 The local CLI is `hclaw`. It runs on the user's machine, uses the user's local
 Hugging Face token, generates the Space repository contents, uploads those
@@ -67,9 +72,39 @@ They are not the source of truth and are not required by hclaw.
 Created per user:
 
 ```text
-1 private HF Docker Space repo
 1 private HF Storage Bucket
+0 or 1 private HF Docker Space repo, depending on gateway location
 ```
+
+## State Bucket Selection
+
+The bucket is the durable identity/state pointer. The agent name controls
+runtime resources such as the local container name and Space name.
+
+Default bootstrap still derives a convenient bucket name from the agent name:
+
+```text
+agentName = slugify(--name ?? Telegram bot username without trailing _bot/-bot/bot)
+bucket = <owner>/<agentName>-data
+space = <owner>/<agentName>
+```
+
+That default is for new deployments only. Once a deployment manifest exists,
+bootstrap must reuse the manifest's pinned bucket unless the user explicitly
+changes it.
+
+Explicit adoption commands:
+
+```bash
+hclaw bootstrap --name onurclaw --bucket osolmaz/onurclawtest-data
+hclaw state adopt onurclaw --bucket osolmaz/onurclawtest-data
+```
+
+Adoption means the deployment points at that bucket. It is not a copy/import.
+After adoption, local and Space runtimes must both use the same
+`OPENCLAW_HF_STATE_BUCKET` value. See
+[Gateway Location Implementation Plan](2026-06-16-gateway-location-implementation-plan.md)
+for the full state bucket contract and migration checks.
 
 ## Repository Contents
 
@@ -78,7 +113,8 @@ README.md
 assets/
   huggingclaw.svg             # shared GitHub and generated Space branding
 docs/
-  openclaw-huggingface-implementation-plan.md
+  2026-06-11-openclaw-huggingface-implementation-plan.md
+  2026-06-16-gateway-location-implementation-plan.md
 hclaw.sh                     # Unix launcher; installs/uses pinned Node if needed
 hclaw.ps1                    # Windows launcher; installs/uses pinned Node if needed
 src/
@@ -217,8 +253,10 @@ Default command.
 3. Call Telegram `getMe` to validate the token and discover the bot username.
 4. Derive the default agent name from the bot username by removing a trailing
    `_bot`, `-bot`, or `bot`.
-5. Create a private bucket named `<agent>-data`.
-6. Create a private Docker Space named `<agent>`.
+5. Create or adopt the private state bucket:
+   - default `<agent>-data`;
+   - explicit `--bucket <owner/bucket>` when the user wants existing state.
+6. Create a private Docker Space named `<agent>` when `--gateway space`.
 7. Choose Space hardware.
    - Require upgraded hardware such as `cpu-upgrade` because Telegram is the
      main interaction surface for the deployment.
@@ -239,6 +277,16 @@ Example:
 
 ```bash
 hclaw bootstrap \
+  --telegram-token-file ~/secrets/research_bot.env \
+  --telegram-user-id 1234567890
+```
+
+Existing-state example:
+
+```bash
+hclaw bootstrap \
+  --name research \
+  --bucket osolmaz/research-archive-data \
   --telegram-token-file ~/secrets/research_bot.env \
   --telegram-user-id 1234567890
 ```
@@ -264,6 +312,26 @@ hclaw bootstrap \
 6. Run doctor checks.
 
 The update command never writes to the state bucket.
+
+### `hclaw state adopt <agent>`
+
+Switch an existing deployment to an explicit durable state bucket:
+
+```bash
+hclaw state adopt research --bucket osolmaz/research-archive-data
+```
+
+Behavior:
+
+1. Stop the current gateway and wait for a final snapshot when possible.
+2. Validate the target bucket and newest snapshot.
+3. Refuse a live foreign runtime lease unless `--takeover` is supplied.
+4. Update the local manifest bucket.
+5. Update local env files and Space variables.
+6. Reset the local Docker live volume so startup restores from the adopted
+   bucket.
+7. Restart the configured gateway location.
+8. Verify restored identity/state files.
 
 ### `hclaw doctor <owner/space>`
 

@@ -1195,8 +1195,8 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path3 = __require("node:path");
-    var fs4 = __require("node:fs");
+    var path5 = __require("node:path");
+    var fs6 = __require("node:fs");
     var process3 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
     var { CommanderError: CommanderError2 } = require_error();
@@ -2190,7 +2190,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} subcommandName
        */
       _checkForMissingExecutable(executableFile, executableDir, subcommandName) {
-        if (fs4.existsSync(executableFile)) return;
+        if (fs6.existsSync(executableFile)) return;
         const executableDirMessage = executableDir ? `searched for local subcommand relative to directory '${executableDir}'` : "no directory for search for local subcommand, use .executableDir() to supply a custom directory";
         const executableMissing = `'${executableFile}' does not exist
  - if '${subcommandName}' is not meant to be an executable command, remove description parameter from '.command()' and use '.description()' instead
@@ -2208,11 +2208,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path3.resolve(baseDir, baseName);
-          if (fs4.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path3.extname(baseName))) return void 0;
+          const localBin = path5.resolve(baseDir, baseName);
+          if (fs6.existsSync(localBin)) return localBin;
+          if (sourceExt.includes(path5.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
-            (ext) => fs4.existsSync(`${localBin}${ext}`)
+            (ext) => fs6.existsSync(`${localBin}${ext}`)
           );
           if (foundExt) return `${localBin}${foundExt}`;
           return void 0;
@@ -2224,21 +2224,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._scriptPath) {
           let resolvedScriptPath;
           try {
-            resolvedScriptPath = fs4.realpathSync(this._scriptPath);
+            resolvedScriptPath = fs6.realpathSync(this._scriptPath);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path3.resolve(
-            path3.dirname(resolvedScriptPath),
+          executableDir = path5.resolve(
+            path5.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path3.basename(
+            const legacyName = path5.basename(
               this._scriptPath,
-              path3.extname(this._scriptPath)
+              path5.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2249,7 +2249,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path3.extname(executableFile));
+        launchWithNode = sourceExt.includes(path5.extname(executableFile));
         let proc;
         if (process3.platform !== "win32") {
           if (launchWithNode) {
@@ -3164,7 +3164,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path3.basename(filename, path3.extname(filename));
+        this._name = path5.basename(filename, path5.extname(filename));
         return this;
       }
       /**
@@ -3178,9 +3178,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path4) {
-        if (path4 === void 0) return this._executableDir;
-        this._executableDir = path4;
+      executableDir(path6) {
+        if (path6 === void 0) return this._executableDir;
+        this._executableDir = path6;
         return this;
       }
       /**
@@ -3515,11 +3515,12 @@ var require_src = __commonJS({
 });
 
 // src/hclaw/cli.ts
-import fs3 from "node:fs/promises";
+import fs5 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import process2 from "node:process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay2 } from "node:timers/promises";
 
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -4302,13 +4303,127 @@ async function readToken(env = process.env) {
   throw new Error("HF token not found. Set HF_TOKEN or run `hf auth login` once.");
 }
 
-// src/hclaw/git.ts
+// src/hclaw/docker.ts
 import { execFile } from "node:child_process";
-import fs2 from "node:fs/promises";
-import os2 from "node:os";
-import path2 from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+var execFileAsync = promisify(execFile);
+var DOCKER_STOP_GRACE_SECONDS = 300;
+var CliDockerRunner = class {
+  async pull(image) {
+    await docker(["pull", image]);
+  }
+  async run(params) {
+    await docker([
+      "run",
+      "-d",
+      "--name",
+      params.containerName,
+      "--restart",
+      "unless-stopped",
+      "--env-file",
+      params.envFile,
+      "-e",
+      `OPENCLAW_LIVE_DIR=${params.liveDir}`,
+      "-v",
+      `${params.volumeName}:${params.volumeMountPath}`,
+      params.image
+    ]);
+  }
+  async start(containerName) {
+    await docker(["start", containerName]);
+  }
+  async stop(containerName) {
+    await docker(["stop", "--time", String(DOCKER_STOP_GRACE_SECONDS), containerName]);
+  }
+  async rm(containerName) {
+    await docker(["rm", containerName]);
+  }
+  async rmVolume(volumeName) {
+    try {
+      await docker(["volume", "rm", volumeName]);
+    } catch (err) {
+      if (isMissingVolumeError(err)) {
+        return;
+      }
+      throw err;
+    }
+  }
+  async disableRestart(containerName) {
+    await docker(["update", "--restart", "no", containerName]);
+  }
+  async logs(containerName, tail = 200) {
+    const { stdout, stderr } = await docker(["logs", "--tail", String(tail), containerName]);
+    return mergeDockerLogStreams(stdout, stderr);
+  }
+  async inspect(containerName) {
+    try {
+      const { stdout } = await docker([
+        "inspect",
+        containerName,
+        "--format",
+        "{{.State.Running}}	{{.State.Status}}	{{.Config.Image}}"
+      ]);
+      const [running, status, image] = stdout.trim().split("	");
+      return {
+        exists: true,
+        running: running === "true",
+        ...status ? { status } : {},
+        ...image ? { image } : {}
+      };
+    } catch (err) {
+      if (isMissingContainerError(err)) {
+        return null;
+      }
+      throw err;
+    }
+  }
+};
+function containerNameFor(agent) {
+  return `huggingclaw-${agent}`;
+}
+function volumeNameFor(agent) {
+  return `huggingclaw-${agent}-live`;
+}
+function mergeDockerLogStreams(stdout, stderr) {
+  return `${stdout}${stderr}`;
+}
+async function docker(args) {
+  try {
+    return await execFileAsync("docker", args, { encoding: "utf8" });
+  } catch (err) {
+    if (err instanceof Error && "stderr" in err && typeof err.stderr === "string") {
+      err.message = `${err.message}
+${err.stderr}`;
+    }
+    throw err;
+  }
+}
+function isMissingContainerError(err) {
+  const message = dockerErrorMessage(err);
+  return message.includes("no such object") || message.includes("no such container");
+}
+function isMissingVolumeError(err) {
+  return dockerErrorMessage(err).includes("no such volume");
+}
+function dockerErrorMessage(err) {
+  return (err instanceof Error ? err.message : String(err)).toLowerCase();
+}
+
+// src/hclaw/gateway-location.ts
+function parseGatewayLocation(value) {
+  if (value === "local" || value === "space") {
+    return value;
+  }
+  throw new Error("gateway must be one of: local, space");
+}
+
+// src/hclaw/git.ts
+import { execFile as execFile2 } from "node:child_process";
+import fs3 from "node:fs/promises";
+import os2 from "node:os";
+import path3 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { promisify as promisify2 } from "node:util";
 
 // src/vendor/hfjs-xet/error.ts
 async function createApiError(response, opts) {
@@ -8130,10 +8245,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path3, processedBytes]) => ({
-        path: path3,
-        progress: processedBytes / this.fileSize[path3],
-        lastSentProgress: ((this.fileUploadedBytes[path3] ?? 0) + (processedBytes - (this.fileUploadedBytes[path3] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path3]
+      files: Object.entries(this.fileProcessedBytes).map(([path5, processedBytes]) => ({
+        path: path5,
+        progress: processedBytes / this.fileSize[path5],
+        lastSentProgress: ((this.fileUploadedBytes[path5] ?? 0) + (processedBytes - (this.fileUploadedBytes[path5] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path5]
       }))
     };
   }
@@ -9006,7 +9121,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path3) => ({ type: "deleteFile", path: path3 })));
+    await this.batch(paths.map((path5) => ({ type: "deleteFile", path: path5 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -9022,8 +9137,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path3) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path3)}`;
+  async downloadFile(path5) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path5)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -9162,6 +9277,11 @@ var HubApi = class {
       headers: { "Content-Type": "application/json" }
     });
   }
+  async pauseSpace(repoId) {
+    return await this.requestJson(`/api/spaces/${repoId}/pause`, {
+      method: "POST"
+    });
+  }
   async requestSpaceHardware(repoId, hardware, sleepTimeSeconds) {
     const payload = { flavor: hardware };
     if (typeof sleepTimeSeconds === "number") {
@@ -9248,9 +9368,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path3) => ({
+      ...(params.deletePaths ?? []).map((path5) => ({
         key: "deletedFile",
-        value: { path: path3 }
+        value: { path: path5 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -9321,16 +9441,52 @@ function sseDataToText(raw) {
   return lines.join("");
 }
 
+// src/hclaw/runtime-image.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+import { fileURLToPath } from "node:url";
+var RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/huggingclaw-runtime";
+var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${readPackageVersion()}`;
+function resolveRuntimeImage(value, env = process.env) {
+  return value?.trim() || env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || DEFAULT_RUNTIME_IMAGE;
+}
+function readPackageVersion() {
+  let dir = path2.dirname(fileURLToPath(import.meta.url));
+  while (true) {
+    const candidate = path2.join(dir, "package.json");
+    try {
+      const parsed = JSON.parse(fs2.readFileSync(candidate, "utf8"));
+      if (typeof parsed.version === "string" && parsed.version.trim()) {
+        return parsed.version.trim();
+      }
+    } catch (err) {
+      if (!isMissingFileError(err)) {
+        throw err;
+      }
+    }
+    const parent = path2.dirname(dir);
+    if (parent === dir) {
+      throw new Error("could not find package.json while resolving default runtime image");
+    }
+    dir = parent;
+  }
+}
+function isMissingFileError(err) {
+  return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
+
 // src/hclaw/git.ts
-var execFileAsync = promisify(execFile);
+var execFileAsync2 = promisify2(execFile2);
 async function pushTemplateToSpace(params) {
-  const tempRoot = await fs2.mkdtemp(path2.join(os2.tmpdir(), "hclaw-space-"));
+  const tempRoot = await fs3.mkdtemp(path3.join(os2.tmpdir(), "hclaw-space-"));
   try {
     const sourceDir = params.sourceDir ?? process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
     const templateRev = await currentTemplateRev(sourceDir);
-    const outDir = path2.join(tempRoot, "space");
-    await fs2.mkdir(outDir, { recursive: true });
-    await generateSpaceRepo(sourceDir, outDir);
+    const outDir = path3.join(tempRoot, "space");
+    await fs3.mkdir(outDir, { recursive: true });
+    await generateSpaceRepo(sourceDir, outDir, {
+      ...params.runtimeImage ? { runtimeImage: params.runtimeImage } : {}
+    });
     const hub = new HubApi({ token: params.token });
     const [files, existingFiles] = await Promise.all([
       readFilesForCommit(outDir),
@@ -9345,52 +9501,46 @@ async function pushTemplateToSpace(params) {
     });
     return { templateRev };
   } finally {
-    await fs2.rm(tempRoot, { recursive: true, force: true });
+    await fs3.rm(tempRoot, { recursive: true, force: true });
   }
 }
 async function currentTemplateRev(sourceDir) {
   sourceDir ??= process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
   try {
-    const { stdout } = await execFileAsync("git", ["-C", sourceDir, "rev-parse", "HEAD"]);
+    const { stdout } = await execFileAsync2("git", ["-C", sourceDir, "rev-parse", "HEAD"]);
     const rev = stdout.trim();
     if (rev) {
       return rev;
     }
   } catch {
   }
-  const pkg = JSON.parse(await fs2.readFile(path2.join(sourceDir, "package.json"), "utf8"));
+  const pkg = JSON.parse(await fs3.readFile(path3.join(sourceDir, "package.json"), "utf8"));
   return `npm:${pkg.name ?? "huggingclaw"}@${pkg.version ?? "unknown"}`;
 }
-async function generateSpaceRepo(sourceDir, outDir) {
+async function generateSpaceRepo(sourceDir, outDir, options = {}) {
   const copies = [
     [".gitattributes", ".gitattributes"],
-    ["Dockerfile", "Dockerfile"],
-    ["entrypoint.sh", "entrypoint.sh"],
-    ["openclaw.default.json", "openclaw.default.json"],
-    ["package.json", "package.json"],
-    [await firstExisting(sourceDir, ["package-lock.json", "space/package-lock.json"]), "package-lock.json"],
-    ["tsconfig.json", "tsconfig.json"],
     ["assets/huggingclaw.svg", "assets/huggingclaw.svg"],
-    ["space/README.md", "README.md"],
-    ["scripts/configure-telegram.mjs", "scripts/configure-telegram.mjs"],
-    ["scripts/report-telegram-probe.mjs", "scripts/report-telegram-probe.mjs"],
-    ["src/hf-bucket-client", "src/hf-bucket-client"],
-    ["src/hf-state-sync", "src/hf-state-sync"],
-    ["src/vendor", "src/vendor"]
+    ["space/README.md", "README.md"]
   ];
   for (const [from, to] of copies) {
-    await copyExisting(path2.join(sourceDir, from), path2.join(outDir, to));
+    await copyExisting(path3.join(sourceDir, from), path3.join(outDir, to));
   }
-  await writeSpacePackageJson(path2.join(outDir, "package.json"));
+  await fs3.writeFile(
+    path3.join(outDir, "Dockerfile"),
+    `FROM ${options.runtimeImage ?? DEFAULT_RUNTIME_IMAGE}
+`,
+    "utf8"
+  );
 }
 async function findPackagedSourceRoot() {
-  const start = path2.dirname(fileURLToPath(import.meta.url));
+  const start = path3.dirname(fileURLToPath2(import.meta.url));
   let dir = start;
   while (true) {
     if (await hasPackagedSourceFiles(dir)) {
       return dir;
     }
-    const parent = path2.dirname(dir);
+    const parent = path3.dirname(dir);
     if (parent === dir) {
       throw new Error("Could not find packaged Hugging Claw source files. Reinstall the huggingclaw npm package.");
     }
@@ -9407,78 +9557,196 @@ async function hasPackagedSourceFiles(dir) {
     "src/hf-bucket-client/client.ts"
   ];
   try {
-    await Promise.all(required.map((file) => fs2.access(path2.join(dir, file))));
+    await Promise.all(required.map((file) => fs3.access(path3.join(dir, file))));
     return true;
   } catch {
     return false;
   }
 }
 async function copyExisting(from, to) {
-  const stat = await fs2.stat(from);
-  await fs2.mkdir(path2.dirname(to), { recursive: true });
+  const stat = await fs3.stat(from);
+  await fs3.mkdir(path3.dirname(to), { recursive: true });
   if (stat.isDirectory()) {
-    await fs2.cp(from, to, { recursive: true });
+    await fs3.cp(from, to, { recursive: true });
   } else {
-    await fs2.copyFile(from, to);
-    await fs2.chmod(to, stat.mode);
+    await fs3.copyFile(from, to);
+    await fs3.chmod(to, stat.mode);
   }
-}
-async function firstExisting(sourceDir, candidates) {
-  for (const candidate of candidates) {
-    try {
-      await fs2.access(path2.join(sourceDir, candidate));
-      return candidate;
-    } catch {
-    }
-  }
-  throw new Error(`None of these source files exist: ${candidates.join(", ")}`);
-}
-async function writeSpacePackageJson(file) {
-  const pkg = JSON.parse(await fs2.readFile(file, "utf8"));
-  pkg.name = "huggingclaw-generated-space";
-  pkg.private = true;
-  delete pkg.bin;
-  delete pkg.files;
-  pkg.scripts = {
-    ...pkg.scripts,
-    build: pkg.scripts?.["build:state-sync"] ?? "esbuild src/hf-state-sync/cli.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/hf-state-sync.js"
-  };
-  delete pkg.scripts["build:hclaw"];
-  delete pkg.scripts["build:probe"];
-  delete pkg.scripts["pack:check"];
-  delete pkg.scripts["prepack"];
-  await fs2.writeFile(file, `${JSON.stringify(pkg, null, 2)}
-`);
 }
 async function readFilesForCommit(root) {
   const files = [];
   for (const relativePath of await listFiles(root)) {
     files.push({
       path: relativePath,
-      content: await fs2.readFile(path2.join(root, relativePath))
+      content: await fs3.readFile(path3.join(root, relativePath))
     });
   }
   return files;
 }
 async function listFiles(root, dir = "") {
-  const absoluteDir = path2.join(root, dir);
-  const entries = await fs2.readdir(absoluteDir, { withFileTypes: true });
+  const absoluteDir = path3.join(root, dir);
+  const entries = await fs3.readdir(absoluteDir, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    const relativePath = path2.posix.join(dir.split(path2.sep).join(path2.posix.sep), entry.name);
-    const absolutePath = path2.join(root, relativePath);
+    const relativePath = path3.posix.join(dir.split(path3.sep).join(path3.posix.sep), entry.name);
+    const absolutePath = path3.join(root, relativePath);
     if (entry.isDirectory()) {
       files.push(...await listFiles(root, relativePath));
     } else if (entry.isFile()) {
       files.push(relativePath);
     } else {
-      const stat = await fs2.stat(absolutePath);
+      const stat = await fs3.stat(absolutePath);
       if (stat.isFile()) {
         files.push(relativePath);
       }
     }
   }
   return files.sort();
+}
+
+// src/hf-state-sync/paths.ts
+var DEFAULT_BUCKET_PREFIX = "openclaw-state";
+function remotePath(config, name) {
+  return `${normalizeBucketPrefix(config.bucketPrefix)}/${name.replace(/^\/+/, "")}`;
+}
+function normalizeBucketPrefix(prefix) {
+  const normalized = (prefix?.trim() || DEFAULT_BUCKET_PREFIX).replace(/^\/+|\/+$/g, "");
+  return normalized || DEFAULT_BUCKET_PREFIX;
+}
+
+// src/hclaw/lease.ts
+var RUNTIME_STATUS_NAME = "runtime/status.json";
+var RUNTIME_HANDOFF_REQUEST_NAME = "runtime/handoff-request.json";
+var RUNTIME_HANDOFF_ACK_NAME = "runtime/handoff-ack.json";
+var DEFAULT_LEASE_TTL_MS = 3 * 60 * 1e3;
+function runtimeObjectPath(name, bucketPrefix) {
+  return remotePath({ bucketPrefix: normalizeBucketPrefix(bucketPrefix) }, name);
+}
+async function readRuntimeLease(hub, bucket, bucketPrefix) {
+  const blob = await hub.bucket(bucket).downloadFile(runtimeObjectPath(RUNTIME_STATUS_NAME, bucketPrefix));
+  if (!blob) {
+    return null;
+  }
+  return JSON.parse(await blob.text());
+}
+async function writeRuntimeHandoffRequest(hub, bucket, request, bucketPrefix) {
+  await hub.bucket(bucket).uploadFiles([
+    {
+      path: runtimeObjectPath(RUNTIME_HANDOFF_REQUEST_NAME, bucketPrefix),
+      content: new Blob([JSON.stringify(request, null, 2) + "\n"], { type: "application/json" })
+    }
+  ]);
+}
+async function readRuntimeHandoffAck(hub, bucket, bucketPrefix) {
+  const blob = await hub.bucket(bucket).downloadFile(runtimeObjectPath(RUNTIME_HANDOFF_ACK_NAME, bucketPrefix));
+  if (!blob) {
+    return null;
+  }
+  return JSON.parse(await blob.text());
+}
+async function clearRuntimeHandoffRequest(hub, bucket, bucketPrefix) {
+  await hub.bucket(bucket).deleteFiles([runtimeObjectPath(RUNTIME_HANDOFF_REQUEST_NAME, bucketPrefix)]);
+}
+function runtimeLeaseIsLive(lease, now = /* @__PURE__ */ new Date(), ttlMs = DEFAULT_LEASE_TTL_MS) {
+  const last = Date.parse(lease.lastHeartbeatAt);
+  return Number.isFinite(last) && now.getTime() - last < ttlMs;
+}
+async function assertNoLiveForeignLease(params) {
+  const lease = await readRuntimeLease(params.hub, params.bucket, params.bucketPrefix);
+  if (!lease || lease.runtimeId === params.runtimeId || params.allowedRuntimeIds?.includes(lease.runtimeId) || !runtimeLeaseIsLive(lease) || params.takeover) {
+    return;
+  }
+  throw new Error(
+    `another gateway appears active (${lease.gatewayLocation}, ${lease.runtimeId}, heartbeat ${lease.lastHeartbeatAt}); pass --takeover to replace it`
+  );
+}
+
+// src/hclaw/local-config.ts
+import fs4 from "node:fs/promises";
+import os3 from "node:os";
+import path4 from "node:path";
+function defaultConfigRoot(env = process.env) {
+  const explicit = env.HUGGINGCLAW_CONFIG_HOME?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const xdg = env.XDG_CONFIG_HOME?.trim();
+  if (xdg) {
+    return path4.join(xdg, "huggingclaw");
+  }
+  return path4.join(os3.homedir(), ".config", "huggingclaw");
+}
+function localConfigPaths(root) {
+  return {
+    root,
+    deploymentsDir: path4.join(root, "deployments"),
+    secretsDir: path4.join(root, "secrets")
+  };
+}
+function manifestPath(root, agent) {
+  return path4.join(localConfigPaths(root).deploymentsDir, `${agent}.json`);
+}
+function secretEnvPath(root, agent) {
+  return path4.join(localConfigPaths(root).secretsDir, `${agent}.env`);
+}
+async function writeManifest(root, manifest) {
+  const file = manifestPath(root, manifest.agent);
+  await fs4.mkdir(path4.dirname(file), { recursive: true });
+  await fs4.writeFile(file, `${JSON.stringify(manifest, null, 2)}
+`, "utf8");
+}
+async function readManifest(root, agent) {
+  const file = manifestPath(root, agent);
+  const parsed = JSON.parse(await fs4.readFile(file, "utf8"));
+  if (parsed.version !== 1) {
+    throw new Error(`unsupported deployment manifest version in ${file}`);
+  }
+  return parsed;
+}
+async function manifestExists(root, agent) {
+  try {
+    await fs4.access(manifestPath(root, agent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function renderSecretEnv(values) {
+  return `${Object.entries(values).map(([key, value]) => renderEnvLine(key, value)).join("\n")}
+`;
+}
+async function writeSecretEnv(root, agent, values) {
+  const file = secretEnvPath(root, agent);
+  await fs4.mkdir(path4.dirname(file), { recursive: true, mode: 448 });
+  await fs4.writeFile(file, renderSecretEnv(values), { encoding: "utf8", mode: 384 });
+  await fs4.chmod(file, 384);
+}
+async function readSecretEnv(root, agent) {
+  return parseSecretEnv(await fs4.readFile(secretEnvPath(root, agent), "utf8"));
+}
+function parseSecretEnv(raw) {
+  const out = {};
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith("#")) {
+      continue;
+    }
+    const equals = line.indexOf("=");
+    if (equals <= 0) {
+      continue;
+    }
+    const key = line.slice(0, equals).trim();
+    out[key] = line.slice(equals + 1);
+  }
+  return out;
+}
+function renderEnvLine(key, value) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    throw new Error(`invalid env key: ${key}`);
+  }
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`env value for ${key} cannot contain newlines`);
+  }
+  return `${key}=${value}`;
 }
 
 // src/hclaw/naming.ts
@@ -9497,9 +9765,12 @@ function namesFor(owner, agentName) {
 }
 
 // src/hclaw/telegram.ts
-async function getTelegramBot(token, apiRoot = "https://api.telegram.org") {
+var TELEGRAM_GET_ME_TIMEOUT_MS = 3e4;
+var TELEGRAM_GET_ME_ATTEMPTS = 4;
+async function getTelegramBot(token, apiRoot = "https://api.telegram.org", fetchImpl = fetch) {
   const root = apiRoot.replace(/\/+$/, "");
-  const response = await fetch(`${root}/bot${token}/getMe`);
+  const url = `${root}/bot${token}/getMe`;
+  const response = await fetchWithRetry(url, fetchImpl);
   if (!response.ok) {
     throw new Error(`Telegram getMe failed: ${response.status} ${await response.text()}`);
   }
@@ -9509,13 +9780,38 @@ async function getTelegramBot(token, apiRoot = "https://api.telegram.org") {
   }
   return body.result;
 }
+async function fetchWithRetry(url, fetchImpl) {
+  let lastError;
+  for (let attempt = 0; attempt < TELEGRAM_GET_ME_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchImpl(url, { signal: AbortSignal.timeout(TELEGRAM_GET_ME_TIMEOUT_MS) });
+    } catch (err) {
+      lastError = err;
+      if (attempt < TELEGRAM_GET_ME_ATTEMPTS - 1) {
+        await delay(250 * 2 ** attempt);
+      }
+    }
+  }
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Telegram getMe request failed after ${TELEGRAM_GET_ME_ATTEMPTS} attempts: ${detail}`);
+}
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // src/hclaw/cli.ts
-var DEFAULT_MODEL = "huggingface/Qwen/Qwen3-8B";
+var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it";
 var DEFAULT_HARDWARE = "cpu-basic";
 var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;
+var DEFAULT_GATEWAY_LOCATION = "local";
+var DEFAULT_LOCAL_PORT = 7860;
+var LOCAL_VOLUME_MOUNT_PATH = "/tmp/huggingclaw-local";
+var LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
+var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
+var SPACE_HANDOFF_POLL_MS = 5e3;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
+var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 var PAID_HARDWARE_COST_NOTE = "Telegram requires upgraded Hugging Face Space hardware today. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
   isInteractive: () => Boolean(process2.stdin.isTTY && process2.stdout.isTTY),
@@ -9536,6 +9832,9 @@ function createRuntime(overrides = {}) {
     hubFactory: overrides.hubFactory ?? ((token) => new HubApi({ token })),
     pushTemplateToSpace: overrides.pushTemplateToSpace ?? pushTemplateToSpace,
     getTelegramBot: overrides.getTelegramBot ?? getTelegramBot,
+    dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
+    configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process2.env),
+    now: overrides.now ?? (() => /* @__PURE__ */ new Date()),
     prompt: overrides.prompt ?? defaultPrompt
   };
 }
@@ -9545,10 +9844,10 @@ function createProgram(runtimeOverrides = {}) {
   program2.name("hclaw").description("Deploy OpenClaw to a private Hugging Face Space and bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).description("Create or update a private Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent, Space, and bucket base name").option("--telegram-token <token>", "Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--gateway-token <token>", "OpenClaw gateway token").option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
+  program2.command("bootstrap", { isDefault: true }).description("Create or update a private Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs", DEFAULT_GATEWAY_LOCATION).option("--telegram-token <token>", "Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "Hugging Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
-  program2.command("update").description("Regenerate and upload current HuggingClaw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--force", "Update even if the Space does not look like HuggingClaw", false).action(async (repoId, opts) => {
+  program2.command("update").description("Regenerate and upload current HuggingClaw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--force", "Update even if the Space does not look like HuggingClaw", false).action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await update(repoId, opts, hub, token, runtime);
@@ -9558,10 +9857,34 @@ function createProgram(runtimeOverrides = {}) {
     const hub = runtime.hubFactory(token);
     await doctor(repoId, opts, hub, runtime);
   });
-  program2.command("settings").description("Update Hugging Face Space hardware and sleep settings").argument("<owner/space>", "Hugging Face Space repo ID").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (repoId, opts) => {
+  program2.command("settings").description("Update Hugging Face Space hardware and sleep settings").argument("<owner/space>", "Hugging Face Space repo ID").option("--gateway <local|space>", "Record gateway location in local manifest").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await settings(repoId, opts, hub, runtime);
+  });
+  const gateway = program2.command("gateway").description("Operate a Hugging Claw gateway");
+  gateway.command("start").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
+    await gatewayStart(agent, opts, runtime);
+  });
+  gateway.command("stop").argument("<agent>", "Agent name").action(async (agent) => {
+    await gatewayStop(agent, runtime);
+  });
+  gateway.command("restart").argument("<agent>", "Agent name").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
+    await gatewayStop(agent, runtime);
+    await gatewayStart(agent, opts, runtime);
+  });
+  gateway.command("status").argument("<agent>", "Agent name").action(async (agent) => {
+    await gatewayStatus(agent, runtime);
+  });
+  gateway.command("logs").argument("<agent>", "Agent name").option("--tail <lines>", "Number of log lines", parseInteger, 200).action(async (agent, opts) => {
+    await gatewayLogs(agent, opts, runtime);
+  });
+  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor", TELEGRAM_HARDWARE).option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger, TELEGRAM_SLEEP_TIME).option("--runtime-image <image>", "Hugging Claw runtime image").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
+    await gatewayMigrate(agent, opts, runtime);
+  });
+  const state = program2.command("state").description("Operate Hugging Claw durable state");
+  state.command("adopt").description("Point an existing deployment at a state bucket").argument("<agent>", "Agent name").requiredOption("--bucket <owner/bucket>", "State bucket to adopt").option("--no-pull", "Do not docker pull before restarting a local gateway").option("--takeover", "Adopt even if another live runtime lease is present", false).option("--yes", "Confirm adoption prompts for automation", false).action(async (agent, opts) => {
+    await stateAdopt(agent, opts, runtime);
   });
   return program2;
 }
@@ -9581,6 +9904,7 @@ async function main(argv = process2.argv.slice(2), runtimeOverrides = {}) {
 }
 async function bootstrap(opts, runtime) {
   runtime.prompt.intro("HuggingClaw bootstrap");
+  const gatewayLocation = parseGatewayLocation(opts.gateway ?? DEFAULT_GATEWAY_LOCATION);
   const hfToken = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(hfToken);
   const me2 = await hub.whoami();
@@ -9592,47 +9916,103 @@ async function bootstrap(opts, runtime) {
   if (!telegramUserId) {
     throw new Error("Telegram allowed user ID is required");
   }
-  const paidHardware = await resolveHardware({
-    ...opts.hardware ? { requestedHardware: opts.hardware } : {},
-    ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : {},
+  const names = namesFor(owner, agentName);
+  const model = opts.model ?? DEFAULT_MODEL;
+  const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
+  const providedGatewayToken = opts.gatewayToken;
+  const gatewayToken = providedGatewayToken ?? randomBytes(32).toString("base64url");
+  const now = runtime.now().toISOString();
+  const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
+  const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
+  const bucketPrefix = bootstrapBucketPrefix(existingManifest, existingSecrets, runtime);
+  const localRuntimeId = existingManifest?.localRuntimeId ?? newLocalRuntimeId(agentName);
+  const bucket = await resolveBootstrapBucket({
+    explicitBucket: opts.bucket,
+    defaultBucket: names.bucket,
+    existingManifest,
+    bucketPrefix,
+    hub,
     yes: Boolean(opts.yes),
     runtime
   });
-  const names = namesFor(owner, agentName);
-  const model = opts.model ?? DEFAULT_MODEL;
-  const providedGatewayToken = opts.gatewayToken;
-  const gatewayToken = providedGatewayToken ?? randomBytes(32).toString("base64url");
-  runtime.stdout.log(`Creating private bucket ${names.bucket}`);
-  await hub.createBucket(names.bucket, true);
-  runtime.stdout.log(`Creating private Space ${names.space}`);
-  await hub.createDockerSpace(names.space, {
-    private: true,
-    hardware: paidHardware.hardware,
-    ...typeof paidHardware.sleepTime === "number" ? { sleepTimeSeconds: paidHardware.sleepTime } : {}
+  const manifest = {
+    version: 1,
+    agent: agentName,
+    owner,
+    bucket,
+    space: names.space,
+    localRuntimeId,
+    gatewayLocation,
+    model,
+    runtimeImage,
+    createdAt: existingManifest?.createdAt ?? now,
+    updatedAt: now
+  };
+  const secrets = deploymentSecrets({
+    hfToken,
+    telegramToken,
+    telegramUserId,
+    gatewayToken,
+    bucket,
+    model,
+    agentName,
+    runtimeImage,
+    gatewayLocation,
+    runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
+    ...bucketPrefix ? { bucketPrefix } : {},
+    ...opts.telegramProxy ? { telegramProxy: opts.telegramProxy } : {},
+    ...opts.telegramApiRoot ? { telegramApiRoot: opts.telegramApiRoot } : {}
   });
-  await hub.requestSpaceHardware(names.space, paidHardware.hardware, paidHardware.sleepTime);
-  runtime.stdout.log("Generating Space files from huggingclaw source");
-  const { templateRev } = await runtime.pushTemplateToSpace({ targetRepo: names.space, token: hfToken });
-  await setDeploymentVariables(hub, names.space, {
-    OPENCLAW_HF_STATE_BUCKET: names.bucket,
-    OPENCLAW_HF_TEMPLATE_REV: templateRev,
-    OPENCLAW_MODEL: model,
-    OPENCLAW_AGENT_NAME: agentName
-  });
-  await setDeploymentSecrets(hub, names.space, {
-    OPENCLAW_GATEWAY_TOKEN: gatewayToken,
-    HF_TOKEN: hfToken,
-    TELEGRAM_BOT_TOKEN: telegramToken,
-    TELEGRAM_ALLOWED_USERS: telegramUserId,
-    ...opts.telegramProxy ? { TELEGRAM_PROXY: opts.telegramProxy } : {},
-    ...opts.telegramApiRoot ? { TELEGRAM_API_ROOT: opts.telegramApiRoot } : {}
-  });
-  await hub.restartSpace(names.space, true);
+  if (gatewayLocation === "space") {
+    await assertNoLiveForeignLease({
+      hub,
+      bucket,
+      bucketPrefix,
+      runtimeId: spaceRuntimeId(agentName),
+      takeover: Boolean(opts.takeover)
+    });
+    const paidHardware = await resolveHardware({
+      ...opts.hardware ? { requestedHardware: opts.hardware } : {},
+      ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : {},
+      yes: Boolean(opts.yes),
+      runtime
+    });
+    await deploySpaceGateway({
+      hub,
+      runtime,
+      hfToken,
+      manifest,
+      secrets,
+      hardware: paidHardware.hardware,
+      ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}
+    });
+    await writeLocalDeployment(runtime.configRoot, manifest, secrets);
+  } else {
+    await assertNoLiveForeignLease({
+      hub,
+      bucket,
+      bucketPrefix,
+      runtimeId: manifest.localRuntimeId,
+      takeover: Boolean(opts.takeover)
+    });
+    await writeLocalDeployment(runtime.configRoot, manifest, secrets);
+    await startLocalGateway({
+      manifest,
+      runtime,
+      pull: shouldPull(opts),
+      refresh: true
+    });
+  }
   runtime.stdout.log("");
-  runtime.stdout.log(`Space:  https://huggingface.co/spaces/${names.space}`);
-  runtime.stdout.log(`Bucket: https://huggingface.co/buckets/${names.bucket}`);
+  runtime.stdout.log(`Bucket: https://huggingface.co/buckets/${bucket}`);
+  if (gatewayLocation === "space") {
+    runtime.stdout.log(`Space:  https://huggingface.co/spaces/${names.space}`);
+  } else {
+    runtime.stdout.log(`Local:  ${containerNameFor(agentName)}`);
+  }
   runtime.stdout.log(`Agent:  ${agentName}${bot ? ` (@${bot.username})` : ""}`);
-  runtime.stdout.log(`Hardware: ${paidHardware.hardware}${typeof paidHardware.sleepTime === "number" ? ` (sleep-time ${paidHardware.sleepTime})` : ""}`);
+  runtime.stdout.log(`Gateway: ${gatewayLocation}`);
+  runtime.stdout.log(`Runtime image: ${runtimeImage}`);
   if (!providedGatewayToken) {
     runtime.stdout.log("");
     runtime.stdout.log("Generated OpenClaw gateway token:");
@@ -9640,20 +10020,624 @@ async function bootstrap(opts, runtime) {
     runtime.stdout.log("");
     runtime.stdout.log("Save this token now. Hugging Face stores it as a write-only Space Secret.");
   }
-  runtime.prompt.outro("Restart requested. Build logs may take a few minutes to appear.");
+  runtime.prompt.outro(gatewayLocation === "space" ? "Restart requested. Build logs may take a few minutes to appear." : "Local gateway start requested.");
+}
+async function resolveBootstrapBucket(params) {
+  const explicitBucket = params.explicitBucket ? parseBucketId(params.explicitBucket) : void 0;
+  const bucket = explicitBucket ?? params.existingManifest?.bucket ?? params.defaultBucket;
+  params.runtime.stdout.log(`Creating or adopting private bucket ${bucket}`);
+  await params.hub.createBucket(bucket, true);
+  const inspection = await inspectStateBucket(params.hub, bucket, params.bucketPrefix);
+  const existingBucket = params.existingManifest?.bucket;
+  if (explicitBucket && existingBucket && existingBucket !== explicitBucket) {
+    await confirmBucketChange({
+      message: `Change ${params.existingManifest?.agent ?? "deployment"} state bucket from ${existingBucket} to ${explicitBucket}?`,
+      yes: params.yes,
+      runtime: params.runtime
+    });
+  } else if (explicitBucket && !existingBucket && inspection.objectCount > 0) {
+    await confirmBucketChange({
+      message: `Adopt existing state bucket ${explicitBucket} with ${inspection.objectCount} object(s)?`,
+      yes: params.yes,
+      runtime: params.runtime
+    });
+  }
+  return bucket;
+}
+async function stateAdopt(agent, opts, runtime) {
+  const bucket = parseBucketId(requiredOption(opts.bucket, "--bucket"));
+  const current = await readDeploymentManifest(runtime, agent);
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  const secrets = await readSecretEnv(runtime.configRoot, agent);
+  const bucketPrefix = persistedBucketPrefix(secrets);
+  runtime.stdout.log(`Creating or adopting private bucket ${bucket}`);
+  await hub.createBucket(bucket, true);
+  await inspectStateBucket(hub, bucket, bucketPrefix);
+  await assertNoLiveForeignLease({
+    hub,
+    bucket,
+    bucketPrefix,
+    runtimeId: runtimeIdFor(current),
+    takeover: Boolean(opts.takeover)
+  });
+  const bucketChanged = current.bucket !== bucket;
+  if (bucketChanged) {
+    await confirmBucketChange({
+      message: `Adopt state bucket ${bucket} for ${agent}, replacing ${current.bucket}?`,
+      yes: Boolean(opts.yes),
+      runtime
+    });
+  }
+  if (bucketChanged) {
+    if (current.gatewayLocation === "local") {
+      await handoffAndStopLocalGateway({
+        manifest: current,
+        hub,
+        runtime,
+        bucketPrefix,
+        targetRuntimeId: current.localRuntimeId
+      });
+    } else {
+      await disableAndPauseSpaceGateway({
+        manifest: current,
+        hub,
+        runtime,
+        bucketPrefix,
+        targetRuntimeId: spaceRuntimeId(current.agent)
+      });
+    }
+  }
+  const updated = {
+    ...current,
+    bucket,
+    updatedAt: runtime.now().toISOString()
+  };
+  const updatedSecrets = {
+    ...secrets,
+    OPENCLAW_HF_STATE_BUCKET: bucket,
+    OPENCLAW_AGENT_NAME: updated.agent,
+    OPENCLAW_MODEL: updated.model,
+    HUGGINGCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
+    HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+    HUGGINGCLAW_RUNTIME_ID: runtimeIdFor(updated)
+  };
+  await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
+  if (updated.gatewayLocation === "local") {
+    if (bucketChanged) {
+      await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+    } else {
+      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+    }
+  } else {
+    await setDeploymentVariables(hub, updated.space, {
+      OPENCLAW_HF_STATE_BUCKET: bucket,
+      HUGGINGCLAW_GATEWAY_LOCATION: "space",
+      HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
+    });
+    await clearSpaceGatewayDisabled(hub, updated.space);
+    if (bucketChanged) {
+      await hub.restartSpace(updated.space, true);
+      runtime.stdout.log(`Space gateway restart requested: ${updated.space}`);
+    } else {
+      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+    }
+  }
+  runtime.stdout.log(`State bucket: ${bucket}`);
+}
+async function inspectStateBucket(hub, bucket, bucketPrefix) {
+  await hub.assertBucketAccessible(bucket);
+  const client = hub.bucket(bucket);
+  const entries = await client.listFiles();
+  const fileEntries = entries.filter((entry) => entry.type === "file");
+  const prefix = normalizeBucketPrefix(bucketPrefix);
+  const prefixWithSlash = `${prefix}/`;
+  const manifestPath2 = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
+  const stateEntries = fileEntries.filter(
+    (entry) => entry.path === manifestPath2 || entry.path.startsWith(`${prefixWithSlash}snapshots/`) || entry.path.startsWith(`${prefixWithSlash}runtime/`)
+  );
+  if (fileEntries.length > 0 && stateEntries.length === 0) {
+    throw new Error(`bucket ${bucket} contains objects but no HuggingClaw state under ${prefix}`);
+  }
+  const hasSnapshotManifest = stateEntries.some((entry) => entry.path === manifestPath2);
+  if (hasSnapshotManifest) {
+    const blob = await client.downloadFile(manifestPath2);
+    if (!blob) {
+      throw new Error(`bucket ${bucket} listed ${manifestPath2}, but it could not be downloaded`);
+    }
+    const currentSnapshotPath = parseCurrentSnapshotPath(await blob.text(), bucket, manifestPath2);
+    const filePaths = new Set(fileEntries.map((entry) => entry.path));
+    if (!filePaths.has(currentSnapshotPath)) {
+      throw new Error(`bucket ${bucket} state manifest points to missing snapshot ${currentSnapshotPath}`);
+    }
+  }
+  return {
+    objectCount: fileEntries.length
+  };
+}
+function parseCurrentSnapshotPath(raw, bucket, manifestPath2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`bucket ${bucket} has an invalid state manifest ${manifestPath2}: ${String(err)}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || !("version" in parsed) || parsed.version !== 1 || !("current" in parsed) || typeof parsed.current !== "object" || parsed.current === null || !("path" in parsed.current) || typeof parsed.current.path !== "string" || parsed.current.path.length === 0) {
+    throw new Error(`bucket ${bucket} has an invalid state manifest ${manifestPath2}: missing current snapshot path`);
+  }
+  return parsed.current.path;
+}
+async function confirmBucketChange(params) {
+  if (params.yes) {
+    return;
+  }
+  if (!params.runtime.prompt.isInteractive()) {
+    throw new Error(`${params.message} Pass --yes to confirm.`);
+  }
+  params.runtime.prompt.note("The bucket is the durable OpenClaw identity and state pointer.", "State bucket");
+  const ok = await promptConfirm(params.message, false, params.runtime);
+  if (!ok) {
+    throw new Error("state bucket adoption was not confirmed");
+  }
+}
+function parseBucketId(raw) {
+  const bucket = raw.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(bucket)) {
+    throw new Error(`expected bucket id as owner/name, got ${raw}`);
+  }
+  return bucket;
+}
+function deploymentSecrets(params) {
+  return {
+    HF_TOKEN: params.hfToken,
+    HUGGINGFACE_HUB_TOKEN: params.hfToken,
+    TELEGRAM_BOT_TOKEN: params.telegramToken,
+    TELEGRAM_ALLOWED_USERS: params.telegramUserId,
+    OPENCLAW_GATEWAY_TOKEN: params.gatewayToken,
+    OPENCLAW_HF_STATE_BUCKET: params.bucket,
+    OPENCLAW_MODEL: params.model,
+    OPENCLAW_AGENT_NAME: params.agentName,
+    HUGGINGCLAW_GATEWAY_LOCATION: params.gatewayLocation,
+    HUGGINGCLAW_RUNTIME_IMAGE: params.runtimeImage,
+    HUGGINGCLAW_RUNTIME_ID: params.runtimeId,
+    OPENCLAW_GATEWAY_PORT: String(DEFAULT_LOCAL_PORT),
+    ...params.bucketPrefix ? { OPENCLAW_HF_STATE_PREFIX: params.bucketPrefix } : {},
+    ...params.telegramProxy ? { TELEGRAM_PROXY: params.telegramProxy } : {},
+    ...params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}
+  };
+}
+async function writeLocalDeployment(configRoot, manifest, secrets) {
+  await writeManifest(configRoot, manifest);
+  await writeSecretEnv(configRoot, manifest.agent, secrets);
+}
+async function deploySpaceGateway(params) {
+  const { hub, runtime, hfToken, manifest, secrets } = params;
+  runtime.stdout.log(`Creating private Space ${manifest.space}`);
+  await hub.createDockerSpace(manifest.space, {
+    private: true,
+    hardware: params.hardware,
+    ...typeof params.sleepTime === "number" ? { sleepTimeSeconds: params.sleepTime } : {}
+  });
+  await hub.requestSpaceHardware(manifest.space, params.hardware, params.sleepTime);
+  runtime.stdout.log("Generating Space files from huggingclaw runtime image");
+  const { templateRev } = await runtime.pushTemplateToSpace({
+    targetRepo: manifest.space,
+    token: hfToken,
+    runtimeImage: manifest.runtimeImage
+  });
+  await setDeploymentVariables(hub, manifest.space, {
+    OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
+    ...secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {},
+    OPENCLAW_HF_TEMPLATE_REV: templateRev,
+    OPENCLAW_MODEL: manifest.model,
+    OPENCLAW_AGENT_NAME: manifest.agent,
+    HUGGINGCLAW_GATEWAY_LOCATION: "space",
+    HUGGINGCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
+    HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent)
+  });
+  await clearSpaceGatewayDisabled(hub, manifest.space);
+  await setDeploymentSecrets(hub, manifest.space, {
+    OPENCLAW_GATEWAY_TOKEN: requiredSecret(secrets, "OPENCLAW_GATEWAY_TOKEN"),
+    HF_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
+    HUGGINGFACE_HUB_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
+    TELEGRAM_BOT_TOKEN: requiredSecret(secrets, "TELEGRAM_BOT_TOKEN"),
+    TELEGRAM_ALLOWED_USERS: requiredSecret(secrets, "TELEGRAM_ALLOWED_USERS"),
+    ...secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {},
+    ...secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}
+  });
+  await hub.restartSpace(manifest.space, true);
+}
+async function startLocalGateway(params) {
+  const { manifest, runtime } = params;
+  const containerName = containerNameFor(manifest.agent);
+  const volumeName = volumeNameFor(manifest.agent);
+  const existing = await runtime.dockerRunner.inspect(containerName);
+  const shouldRefresh = Boolean(params.refresh || params.resetVolume);
+  if (existing?.running) {
+    if (!shouldRefresh) {
+      runtime.stdout.log(`Local gateway already running: ${containerName}`);
+      return;
+    }
+  }
+  if (params.pull) {
+    await runtime.dockerRunner.pull(manifest.runtimeImage);
+  }
+  if (existing?.running) {
+    await runtime.dockerRunner.stop(containerName);
+    runtime.stdout.log(`Local gateway stopped for config refresh: ${containerName}`);
+  }
+  if (existing) {
+    await runtime.dockerRunner.rm(containerName);
+    runtime.stdout.log(`Local gateway removed for config refresh: ${containerName}`);
+  }
+  if (params.resetVolume) {
+    await runtime.dockerRunner.rmVolume(volumeName);
+    runtime.stdout.log(`Local gateway volume reset for bucket restore: ${volumeName}`);
+  }
+  await runtime.dockerRunner.run({
+    containerName,
+    image: manifest.runtimeImage,
+    envFile: secretEnvPath(runtime.configRoot, manifest.agent),
+    volumeName,
+    volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
+    liveDir: LOCAL_LIVE_DIR
+  });
+  runtime.stdout.log(`Local gateway created: ${containerName}`);
+}
+async function stopLocalGateway(manifest, runtime) {
+  const containerName = containerNameFor(manifest.agent);
+  const existing = await runtime.dockerRunner.inspect(containerName);
+  if (!existing) {
+    runtime.stdout.log(`Local gateway does not exist: ${containerName}`);
+    return;
+  }
+  if (!existing.running) {
+    runtime.stdout.log(`Local gateway already stopped: ${containerName}`);
+    return;
+  }
+  await runtime.dockerRunner.stop(containerName);
+  runtime.stdout.log(`Local gateway stopped: ${containerName}`);
+}
+async function gatewayStart(agent, opts, runtime) {
+  const manifest = await readDeploymentManifest(runtime, agent);
+  const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  await assertNoLiveForeignLease({
+    hub,
+    bucket: manifest.bucket,
+    bucketPrefix,
+    runtimeId: runtimeIdFor(manifest),
+    takeover: Boolean(opts.takeover)
+  });
+  if (manifest.gatewayLocation === "local") {
+    await startLocalGateway({ manifest, runtime, pull: shouldPull(opts) });
+  } else {
+    await clearSpaceGatewayDisabled(hub, manifest.space);
+    await hub.restartSpace(manifest.space, true);
+    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
+  }
+}
+async function gatewayStop(agent, runtime) {
+  const manifest = await readDeploymentManifest(runtime, agent);
+  const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
+  if (manifest.gatewayLocation === "local") {
+    await stopLocalGateway(manifest, runtime);
+    return;
+  }
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  await disableAndPauseSpaceGateway({ manifest, hub, runtime, bucketPrefix });
+}
+async function gatewayStatus(agent, runtime) {
+  const manifest = await readDeploymentManifest(runtime, agent);
+  const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
+  runtime.stdout.log(`Agent: ${manifest.agent}`);
+  runtime.stdout.log(`Gateway: ${manifest.gatewayLocation}`);
+  runtime.stdout.log(`Bucket: ${manifest.bucket}`);
+  runtime.stdout.log(`Space: ${manifest.space}`);
+  if (manifest.gatewayLocation === "local") {
+    const inspect = await runtime.dockerRunner.inspect(containerNameFor(manifest.agent));
+    runtime.stdout.log(`Container: ${inspect ? inspect.status ?? "exists" : "missing"}`);
+    runtime.stdout.log(`Running: ${inspect?.running ? "yes" : "no"}`);
+  } else {
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const runtimeInfo = await hub.getSpaceRuntime(manifest.space);
+    runtime.stdout.log(`Stage: ${runtimeInfo.stage ?? "unknown"}`);
+    runtime.stdout.log(`Hardware: ${formatRuntimeValue(runtimeInfo.requested_hardware ?? runtimeInfo.hardware)}`);
+  }
+  try {
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const lease = await readRuntimeLease(hub, manifest.bucket, bucketPrefix);
+    if (lease) {
+      runtime.stdout.log(`Lease: ${lease.gatewayLocation} ${lease.runtimeId} heartbeat ${lease.lastHeartbeatAt}`);
+    } else {
+      runtime.stdout.log("Lease: missing");
+    }
+  } catch (err) {
+    runtime.stdout.log(`Lease: unavailable (${err instanceof Error ? err.message : String(err)})`);
+  }
+}
+async function gatewayLogs(agent, opts, runtime) {
+  const manifest = await readDeploymentManifest(runtime, agent);
+  if (manifest.gatewayLocation === "local") {
+    runtime.stdout.log(await runtime.dockerRunner.logs(containerNameFor(manifest.agent), opts.tail));
+    return;
+  }
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  runtime.stdout.log(await hub.fetchSpaceLogs(manifest.space, "run"));
+}
+async function gatewayMigrate(agent, opts, runtime) {
+  const target = parseGatewayLocation(requiredOption(opts.to, "--to"));
+  const current = await readDeploymentManifest(runtime, agent);
+  if (current.gatewayLocation === target) {
+    runtime.stdout.log(`Gateway already uses ${target}`);
+    return;
+  }
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  const secrets = await readSecretEnv(runtime.configRoot, agent);
+  const bucketPrefix = persistedBucketPrefix(secrets);
+  const updated = {
+    ...current,
+    gatewayLocation: target,
+    runtimeImage: resolveRuntimeImage(opts.runtimeImage ?? current.runtimeImage, runtime.env),
+    updatedAt: runtime.now().toISOString()
+  };
+  if (target === "space") {
+    const paidHardware = await resolveHardware({
+      requestedHardware: opts.hardware ?? TELEGRAM_HARDWARE,
+      requestedSleepTime: typeof opts.sleepTime === "number" ? opts.sleepTime : TELEGRAM_SLEEP_TIME,
+      yes: Boolean(opts.yes),
+      runtime
+    });
+    await assertNoLiveForeignLease({
+      hub,
+      bucket: current.bucket,
+      bucketPrefix,
+      runtimeId: current.localRuntimeId,
+      takeover: Boolean(opts.takeover)
+    });
+    await handoffAndStopLocalGateway({ manifest: current, hub, runtime, bucketPrefix });
+    await deploySpaceGateway({
+      hub,
+      runtime,
+      hfToken: token,
+      manifest: updated,
+      secrets: {
+        ...secrets,
+        HUGGINGCLAW_GATEWAY_LOCATION: "space",
+        HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage
+      },
+      hardware: paidHardware.hardware,
+      ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}
+    });
+    await writeSecretEnv(runtime.configRoot, agent, {
+      ...secrets,
+      HUGGINGCLAW_GATEWAY_LOCATION: "space",
+      HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(agent)
+    });
+  } else {
+    await assertNoLiveForeignLease({
+      hub,
+      bucket: current.bucket,
+      bucketPrefix,
+      runtimeId: updated.localRuntimeId,
+      allowedRuntimeIds: [spaceRuntimeId(current.agent)],
+      takeover: Boolean(opts.takeover)
+    });
+    await disableAndPauseSpaceGateway({ manifest: current, hub, runtime, bucketPrefix });
+    await assertNoLiveForeignLease({
+      hub,
+      bucket: current.bucket,
+      bucketPrefix,
+      runtimeId: updated.localRuntimeId,
+      allowedRuntimeIds: [spaceRuntimeId(current.agent)],
+      takeover: Boolean(opts.takeover)
+    });
+    await writeSecretEnv(runtime.configRoot, agent, {
+      ...secrets,
+      HUGGINGCLAW_GATEWAY_LOCATION: "local",
+      HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      HUGGINGCLAW_RUNTIME_ID: updated.localRuntimeId
+    });
+    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+  }
+  await writeManifest(runtime.configRoot, updated);
+  runtime.stdout.log(`Gateway migrated to ${target}`);
+}
+async function readDeploymentManifest(runtime, agent) {
+  const manifest = await readManifest(runtime.configRoot, agent);
+  if (manifest.localRuntimeId) {
+    return manifest;
+  }
+  const updated = {
+    ...manifest,
+    localRuntimeId: newLocalRuntimeId(manifest.agent),
+    updatedAt: runtime.now().toISOString()
+  };
+  await writeManifest(runtime.configRoot, updated);
+  return updated;
+}
+async function readDeploymentBucketPrefix(runtime, agent) {
+  const secrets = await readSecretEnv(runtime.configRoot, agent).catch(() => ({}));
+  return persistedBucketPrefix(secrets);
+}
+function bootstrapBucketPrefix(existingManifest, secrets, runtime) {
+  return persistedBucketPrefix(secrets) ?? (existingManifest ? void 0 : envBucketPrefix(runtime));
+}
+function persistedBucketPrefix(secrets) {
+  return nonEmpty(secrets.OPENCLAW_HF_STATE_PREFIX);
+}
+function envBucketPrefix(runtime) {
+  return nonEmpty(runtime.env.OPENCLAW_HF_STATE_PREFIX);
+}
+function nonEmpty(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : void 0;
+}
+function newLocalRuntimeId(agent) {
+  return `local-${agent}-${randomBytes(8).toString("hex")}`;
+}
+function runtimeIdFor(manifest) {
+  return manifest.gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(manifest.agent);
+}
+function spaceRuntimeId(agent) {
+  return `space-${agent}`;
+}
+async function handoffAndStopLocalGateway(params) {
+  const containerName = containerNameFor(params.manifest.agent);
+  const existing = await params.runtime.dockerRunner.inspect(containerName);
+  if (!existing) {
+    params.runtime.stdout.log(`Local gateway does not exist: ${containerName}`);
+    return;
+  }
+  if (!existing.running) {
+    params.runtime.stdout.log(`Local gateway already stopped: ${containerName}`);
+    return;
+  }
+  await params.runtime.dockerRunner.disableRestart(containerName);
+  const handoffStartedAt = params.runtime.now();
+  const requestId = randomBytes(16).toString("hex");
+  await writeRuntimeHandoffRequest(params.hub, params.manifest.bucket, {
+    schemaVersion: 1,
+    requestId,
+    agent: params.manifest.agent,
+    runtimeId: params.manifest.localRuntimeId,
+    requestedAt: handoffStartedAt.toISOString(),
+    targetRuntimeId: params.targetRuntimeId ?? spaceRuntimeId(params.manifest.agent)
+  }, params.bucketPrefix);
+  params.runtime.stdout.log("Waiting for local gateway to upload a final snapshot");
+  await waitForRuntimeHandoffAck({
+    hub: params.hub,
+    bucket: params.manifest.bucket,
+    bucketPrefix: params.bucketPrefix,
+    requestId,
+    runtimeId: params.manifest.localRuntimeId,
+    timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+    pollMs: SPACE_HANDOFF_POLL_MS
+  });
+  await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket, params.bucketPrefix).catch(() => void 0);
+  params.runtime.stdout.log("Local final snapshot observed");
+  await stopLocalGateway(params.manifest, params.runtime);
+}
+async function disableAndPauseSpaceGateway(params) {
+  const handoffStartedAt = params.runtime.now();
+  const requestId = randomBytes(16).toString("hex");
+  const shouldWaitForHandoff = await spaceGatewayCanAcknowledgeHandoff(params);
+  if (!shouldWaitForHandoff) {
+    await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
+    await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket, params.bucketPrefix).catch(() => void 0);
+    await params.hub.pauseSpace(params.manifest.space);
+    params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
+    return;
+  }
+  await writeRuntimeHandoffRequest(params.hub, params.manifest.bucket, {
+    schemaVersion: 1,
+    requestId,
+    agent: params.manifest.agent,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    requestedAt: handoffStartedAt.toISOString(),
+    targetRuntimeId: params.targetRuntimeId ?? params.manifest.localRuntimeId
+  }, params.bucketPrefix);
+  await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
+  params.runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
+  await waitForRuntimeHandoffAck({
+    hub: params.hub,
+    bucket: params.manifest.bucket,
+    bucketPrefix: params.bucketPrefix,
+    requestId,
+    runtimeId: spaceRuntimeId(params.manifest.agent),
+    timeoutMs: SPACE_HANDOFF_TIMEOUT_MS,
+    pollMs: SPACE_HANDOFF_POLL_MS
+  });
+  await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket, params.bucketPrefix).catch(() => void 0);
+  params.runtime.stdout.log("Space final snapshot observed");
+  await params.hub.pauseSpace(params.manifest.space);
+  params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
+}
+async function spaceGatewayCanAcknowledgeHandoff(params) {
+  const expectedRuntimeId = spaceRuntimeId(params.manifest.agent);
+  const [runtimeInfo, lease] = await Promise.all([
+    params.hub.getSpaceRuntime(params.manifest.space).catch(() => null),
+    readRuntimeLease(params.hub, params.manifest.bucket, params.bucketPrefix)
+  ]);
+  const stage = typeof runtimeInfo?.stage === "string" ? runtimeInfo.stage.toUpperCase() : "";
+  const stageCanRunGateway = !stage || stage === "RUNNING" || stage === "RUNNING_BUILDING";
+  const leaseIsCurrentSpace = lease?.runtimeId === expectedRuntimeId && lease.gatewayLocation === "space" && runtimeLeaseIsLive(lease, params.runtime.now());
+  if (stageCanRunGateway && leaseIsCurrentSpace) {
+    return true;
+  }
+  const stageDetail = stage ? `Space stage: ${stage}. ` : "";
+  const leaseDetail = lease ? `Last lease: ${lease.gatewayLocation}/${lease.runtimeId} at ${lease.lastHeartbeatAt}.` : "No runtime lease found.";
+  params.runtime.stdout.log(`${stageDetail}${leaseDetail} Skipping final snapshot handoff wait.`);
+  return false;
+}
+async function waitForRuntimeHandoffAck(params) {
+  const started = Date.now();
+  let lastError;
+  while (true) {
+    try {
+      const ack = await readRuntimeHandoffAck(params.hub, params.bucket, params.bucketPrefix);
+      if (ack?.requestId === params.requestId && ack.runtimeId === params.runtimeId) {
+        return ack;
+      }
+      lastError = void 0;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    if (Date.now() - started >= params.timeoutMs) {
+      const detail = lastError ? `; last ack read failed: ${lastError}` : "";
+      throw new Error(`timed out waiting for ${params.runtimeId} to acknowledge handoff ${params.requestId}${detail}`);
+    }
+    await delay2(params.pollMs);
+  }
+}
+function requiredSecret(secrets, key) {
+  const value = secrets[key];
+  if (!value) {
+    throw new Error(`missing local secret ${key}; cannot configure gateway`);
+  }
+  return value;
+}
+function requiredOption(value, label) {
+  if (!value) {
+    throw new Error(`${label} is required`);
+  }
+  return value;
+}
+function shouldPull(opts) {
+  return opts.pull !== false;
 }
 async function update(repoId, opts, hub, hfToken, runtime) {
   const variables = await hub.getSpaceVariables(repoId);
   if (!variables.has("OPENCLAW_HF_TEMPLATE_REV") && !opts.force) {
     throw new Error(`${repoId} does not look like a HuggingClaw deployment; pass --force to update anyway`);
   }
+  const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
+  const agentName = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
   runtime.stdout.log(`Generating current Space files into ${repoId}`);
-  const { templateRev } = await runtime.pushTemplateToSpace({ targetRepo: repoId, token: hfToken });
+  const { templateRev } = await runtime.pushTemplateToSpace({
+    targetRepo: repoId,
+    token: hfToken,
+    runtimeImage
+  });
   await hub.addSpaceVariable(repoId, "OPENCLAW_HF_TEMPLATE_REV", templateRev);
+  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_RUNTIME_IMAGE", runtimeImage);
+  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_GATEWAY_LOCATION", "space");
+  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   await hub.restartSpace(repoId, true);
   await doctor(repoId, { fix: true }, hub, runtime);
 }
 async function doctor(repoId, opts, hub, runtime) {
+  if (!repoId.includes("/") && await manifestExists(runtime.configRoot, repoId)) {
+    await gatewayStatus(repoId, runtime);
+    return;
+  }
   const fix = Boolean(opts.fix);
   const variables = await hub.getSpaceVariables(repoId);
   const secrets = await hub.getSpaceSecrets(repoId);
@@ -9683,6 +10667,12 @@ async function doctor(repoId, opts, hub, runtime) {
   }
   if (!variables.has("OPENCLAW_HF_TEMPLATE_REV")) {
     issues.push("OPENCLAW_HF_TEMPLATE_REV is missing; updates cannot verify template lineage");
+  }
+  if ((variables.get("HUGGINGCLAW_GATEWAY_LOCATION")?.value ?? "") !== "space") {
+    issues.push("HUGGINGCLAW_GATEWAY_LOCATION is not set to space");
+  }
+  if (!variables.has("HUGGINGCLAW_RUNTIME_IMAGE")) {
+    issues.push("HUGGINGCLAW_RUNTIME_IMAGE is missing");
   }
   if (bucket) {
     await hub.assertBucketAccessible(bucket);
@@ -9721,6 +10711,9 @@ async function doctor(repoId, opts, hub, runtime) {
   }
 }
 async function settings(repoId, opts, hub, runtime) {
+  if (opts.gateway) {
+    throw new Error("gateway location changes must use `hclaw gateway migrate` to preserve state");
+  }
   if (!opts.hardware && typeof opts.sleepTime !== "number") {
     throw new Error("usage: hclaw settings <owner/space> [--hardware flavor] [--sleep-time seconds]");
   }
@@ -9765,13 +10758,23 @@ async function setDeploymentSecrets(hub, repoId, secrets) {
     await hub.addSpaceSecret(repoId, key, value);
   }
 }
+async function clearSpaceGatewayDisabled(hub, repoId) {
+  try {
+    await hub.deleteSpaceVariable(repoId, "HUGGINGCLAW_GATEWAY_DISABLED");
+  } catch (err) {
+    if (err instanceof HubApiError2 && err.status === 404) {
+      return;
+    }
+    throw err;
+  }
+}
 async function readTelegramToken(opts, runtime) {
   const direct = opts.telegramToken ?? runtime.env.TELEGRAM_BOT_TOKEN;
   if (direct) {
     return direct;
   }
   if (opts.telegramTokenFile) {
-    const raw = await fs3.readFile(opts.telegramTokenFile, "utf8");
+    const raw = await fs5.readFile(opts.telegramTokenFile, "utf8");
     const match = raw.match(/(?:^|\n)\s*TELEGRAM_BOT_TOKEN\s*=\s*['"]?([^'"\n]+)['"]?/);
     return (match?.[1] ?? raw.trim()).trim();
   }
@@ -9852,13 +10855,24 @@ function parseInteger(value) {
 function isPaidHardware(hardware) {
   return hardware !== DEFAULT_HARDWARE;
 }
-var invokedPath = process2.argv[1] ? pathToFileURL(realpathSync(process2.argv[1])).href : "";
+var invokedPath = "";
+try {
+  invokedPath = process2.argv[1] ? pathToFileURL(realpathSync(process2.argv[1])).href : "";
+} catch {
+  invokedPath = "";
+}
 if (import.meta.url === invokedPath) {
   main().then((code) => process2.exit(code));
 }
 export {
+  DEFAULT_GATEWAY_LOCATION,
   DEFAULT_HARDWARE,
+  DEFAULT_LOCAL_PORT,
   DEFAULT_MODEL,
+  LOCAL_LIVE_DIR,
+  LOCAL_VOLUME_MOUNT_PATH,
+  SPACE_HANDOFF_POLL_MS,
+  SPACE_HANDOFF_TIMEOUT_MS,
   TELEGRAM_HARDWARE,
   TELEGRAM_SLEEP_TIME,
   createProgram,
