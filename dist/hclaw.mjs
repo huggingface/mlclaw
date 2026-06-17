@@ -10543,6 +10543,8 @@ async function gatewayRebind(agent, opts, runtime) {
       if (!opts.takeover) {
         throw err;
       }
+      await clearRuntimeHandoffRequest(hub, current.bucket, bucketPrefix).catch(() => void 0);
+      await stopLocalGateway(current, runtime);
       runtime.stdout.log(`Old Docker context handoff failed; rebinding with --takeover: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else if (!opts.takeover) {

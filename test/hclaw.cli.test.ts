@@ -1231,6 +1231,67 @@ describe("hclaw CLI", () => {
     });
   });
 
+  it("stops the old local gateway before takeover continues after handoff failure", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const runtime = await createRuntime(hub, prompt);
+    runtime.dockerRunner.inspectValue = {
+      exists: true,
+      running: true,
+      status: "running",
+      image: DEFAULT_RUNTIME_IMAGE,
+    };
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: "test-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      localGateway: {
+        engine: "docker",
+        dockerContext: "desktop-linux",
+        dockerEndpoint: "unix:///docker-desktop.sock",
+      },
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+    runtime.dockerRunner.disableRestart = async (...args: unknown[]) => {
+      runtime.dockerRunner.calls.push({ name: "disableRestart", args });
+      throw new Error("handoff setup failed");
+    };
+
+    await expect(main([
+      "gateway",
+      "rebind",
+      "research",
+      "--docker-context",
+      "colima",
+      "--takeover",
+      "--no-pull",
+    ], runtime)).resolves.toBe(0);
+
+    const stopIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "stop");
+    const runIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "run");
+    expect(stopIndex).toBeGreaterThanOrEqual(0);
+    expect(runtime.dockerRunner.calls[stopIndex]).toEqual({
+      name: "stop",
+      args: ["huggingclaw-research", "desktop-linux"],
+    });
+    expect(runIndex).toBeGreaterThan(stopIndex);
+    expect(runtime.dockerRunner.calls[runIndex]).toEqual({
+      name: "run",
+      args: [
+        expect.objectContaining({
+          context: "colima",
+        }),
+      ],
+    });
+  });
+
   it("reads runtime leases from the configured bucket prefix", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([]);
