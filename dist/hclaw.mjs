@@ -3520,7 +3520,7 @@ import { realpathSync } from "node:fs";
 import process2 from "node:process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
+import { setTimeout as delay2 } from "node:timers/promises";
 
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -9765,9 +9765,12 @@ function namesFor(owner, agentName) {
 }
 
 // src/hclaw/telegram.ts
-async function getTelegramBot(token, apiRoot = "https://api.telegram.org") {
+var TELEGRAM_GET_ME_TIMEOUT_MS = 3e4;
+var TELEGRAM_GET_ME_ATTEMPTS = 4;
+async function getTelegramBot(token, apiRoot = "https://api.telegram.org", fetchImpl = fetch) {
   const root = apiRoot.replace(/\/+$/, "");
-  const response = await fetch(`${root}/bot${token}/getMe`);
+  const url = `${root}/bot${token}/getMe`;
+  const response = await fetchWithRetry(url, fetchImpl);
   if (!response.ok) {
     throw new Error(`Telegram getMe failed: ${response.status} ${await response.text()}`);
   }
@@ -9776,6 +9779,24 @@ async function getTelegramBot(token, apiRoot = "https://api.telegram.org") {
     throw new Error(`Telegram getMe failed: ${body.description ?? "missing bot username"}`);
   }
   return body.result;
+}
+async function fetchWithRetry(url, fetchImpl) {
+  let lastError;
+  for (let attempt = 0; attempt < TELEGRAM_GET_ME_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchImpl(url, { signal: AbortSignal.timeout(TELEGRAM_GET_ME_TIMEOUT_MS) });
+    } catch (err) {
+      lastError = err;
+      if (attempt < TELEGRAM_GET_ME_ATTEMPTS - 1) {
+        await delay(250 * 2 ** attempt);
+      }
+    }
+  }
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Telegram getMe request failed after ${TELEGRAM_GET_ME_ATTEMPTS} attempts: ${detail}`);
+}
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // src/hclaw/cli.ts
@@ -10394,7 +10415,7 @@ async function waitForRuntimeHandoffAck(params) {
       const detail = lastError ? `; last ack read failed: ${lastError}` : "";
       throw new Error(`timed out waiting for ${params.runtimeId} to acknowledge handoff ${params.requestId}${detail}`);
     }
-    await delay(params.pollMs);
+    await delay2(params.pollMs);
   }
 }
 function requiredSecret(secrets, key) {
