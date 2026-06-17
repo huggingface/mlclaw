@@ -1075,8 +1075,8 @@ async function gatewayRebind(agent: string, opts: GatewayRebindOptions, runtime:
     localGateway: targetBinding,
     updatedAt: runtime.now().toISOString(),
   };
-  await writeManifest(runtime.configRoot, updated);
   await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+  await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Local gateway rebound to Docker context ${targetBinding.dockerContext}`);
 }
 
