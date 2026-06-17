@@ -24,6 +24,8 @@ const [pack] = JSON.parse(raw);
 const files = new Set(pack.files.map((file) => file.path));
 
 const required = [
+  ".agents/skills/huggingclaw/SKILL.md",
+  ".agents/skills/huggingclaw/agents/openai.yaml",
   "LICENSE",
   "README.md",
   "package.json",

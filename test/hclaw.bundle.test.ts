@@ -26,4 +26,14 @@ describe("hclaw bundle", () => {
     ]);
     expect(actual).toBe(expected);
   });
+
+  it("exposes the bundled HuggingClaw skill", async () => {
+    const list = await execFileAsync("node", ["dist/hclaw.mjs", "--skill", "list"]);
+    expect(list.stdout).toContain("huggingclaw\t");
+    expect(list.stdout).not.toContain("skillflag\t");
+
+    const show = await execFileAsync("node", ["dist/hclaw.mjs", "--skill", "show", "huggingclaw"]);
+    expect(show.stdout).toContain("# HuggingClaw");
+    expect(show.stdout).toContain("npx huggingclaw bootstrap");
+  });
 });

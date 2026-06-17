@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { cancel, confirm, intro, isCancel, note, outro, password, text } from "@clack/prompts";
+import { findSkillsRoot, handleSkillflag } from "skillflag";
 import { readToken } from "./auth.js";
 import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } from "./docker.js";
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
@@ -1672,6 +1673,16 @@ function isPaidHardware(hardware: string): boolean {
   return hardware !== DEFAULT_HARDWARE;
 }
 
+async function runCli(): Promise<number> {
+  if (process.argv.includes("--skill")) {
+    return handleSkillflag(process.argv, {
+      skillsRoot: findSkillsRoot(import.meta.url),
+      includeBundledSkill: false,
+    });
+  }
+  return main();
+}
+
 let invokedPath = "";
 try {
   invokedPath = process.argv[1] ? pathToFileURL(realpathSync(process.argv[1])).href : "";
@@ -1679,5 +1690,5 @@ try {
   invokedPath = "";
 }
 if (import.meta.url === invokedPath) {
-  main().then((code) => process.exit(code));
+  runCli().then((code) => process.exit(code));
 }
