@@ -9,11 +9,10 @@ Router chat-completions endpoint:
 https://router.huggingface.co/v1/chat/completions
 ```
 
-The goal is to identify current Gemma and Qwen models accepted by the Hugging
-Face router. For OpenClaw, use the `huggingface/` prefix shown in the tables
-below, but router acceptance is not sufficient: the OpenClaw runtime must also
-recognize the model ID in its Hugging Face provider. The direct router request
-uses the Hub model ID without that prefix.
+The goal is to identify current Gemma and Qwen models that can be used by
+OpenClaw through the Hugging Face router. For OpenClaw, use the `huggingface/`
+prefix shown in the tables below. The direct router request uses the Hub model
+ID without that prefix.
 
 Candidate selection was intentionally focused on current official
 instruction/chat-style Gemma and Qwen models relevant to OpenClaw. The probe
@@ -62,7 +61,7 @@ Probe totals:
 | Qwen | 36 | 13 | 23 |
 | Total | 58 | 17 | 41 |
 
-Router-compatible choices from this run:
+Best current OpenClaw choices from this run:
 
 ```text
 huggingface/google/gemma-4-26B-A4B-it
@@ -78,12 +77,6 @@ huggingface/Qwen/Qwen3-32B
 `huggingface/google/gemma-4-26B-A4B-it` is the important Gemma correction from
 the earlier 12B investigation: Gemma 4 12B was rejected by the router, but Gemma
 4 26B-A4B-it works.
-
-2026-06-17 live-runtime note: OpenClaw `2026.6.6` rejected
-`huggingface/google/gemma-4-26B-A4B-it` with `Unknown model` even though the HF
-router accepted the underlying `google/gemma-4-26B-A4B-it` ID. Hugging Claw
-therefore defaults to `huggingface/Qwen/Qwen3-8B`, which is listed by the
-runtime's Hugging Face provider docs.
 
 ## Router Catalog And Provider Suffixes
 
@@ -197,7 +190,7 @@ The practical conclusion is: use canonical router-listed model IDs for OpenClaw.
 Use GGUF/Unsloth repos for dedicated endpoints, llama.cpp/Ollama/LM Studio, or
 other custom runtimes, not for the shared HF router.
 
-## Gemma Models Accepted By The Router
+## Gemma Models That Worked
 
 | Hub model | OpenClaw model | Router model | Notes |
 | --- | --- | --- | --- |
@@ -280,9 +273,6 @@ other custom runtimes, not for the shared HF router.
 
 - Router compatibility is not the same as model quality. It only means the
   shared HF router currently accepts the model through `/v1/chat/completions`.
-- Router compatibility is also not the same as OpenClaw runtime compatibility.
-  Before changing Hugging Claw defaults, test the exact `huggingface/...` model
-  ID inside the runtime image that users will run.
 - Router availability can change without a HuggingClaw release. Re-run the
   probe before changing defaults or recommending paid usage.
 - Qwen thinking models may return `reasoning_content`, `content: null`, or
@@ -291,11 +281,8 @@ other custom runtimes, not for the shared HF router.
 - Models rejected as `model_not_supported` may still work through a dedicated
   Hugging Face Inference Endpoint if served by TGI or vLLM with an
   OpenAI-compatible chat API.
-- A router-compatible Gemma 4 model from this probe is:
+- A known working Gemma 4 OpenClaw setting from this probe is:
 
 ```text
 OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it
 ```
-
-Do not make it the Hugging Claw default again until a live OpenClaw runtime
-accepts that exact model ID.

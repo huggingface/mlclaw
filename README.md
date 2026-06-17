@@ -61,15 +61,11 @@ npx huggingclaw bootstrap \
   --model huggingface/Qwen/Qwen3.6-35B-A3B
 ```
 
-Current model guidance:
+Recommended router-compatible options:
 
-- `huggingface/Qwen/Qwen3-8B`: default model for the current OpenClaw
-  Hugging Face provider.
-- `huggingface/Qwen/Qwen3-32B`: larger model listed by the current OpenClaw
-  Hugging Face provider.
-- `huggingface/Qwen/Qwen3.6-35B-A3B` and
-  `huggingface/google/gemma-4-26B-A4B-it`: router-listed candidates, but verify
-  your OpenClaw runtime accepts them before using them as deployment defaults.
+- `huggingface/google/gemma-4-26B-A4B-it`: default quality target.
+- `huggingface/Qwen/Qwen3.6-35B-A3B`: stronger Qwen option with tool support.
+- `huggingface/Qwen/Qwen3-8B`: cheaper small-model option.
 
 For a fully hosted Space gateway:
 
@@ -155,9 +151,9 @@ Honest numbers, since "deploy your own agent" tends to hide them:
   Telegram/Discord. The cheapest paid CPU tier is enough for the gateway.
 - **Inference:** requests use your Hugging Face Inference Providers credits
   ($0.10/month on free accounts, $2.00 with PRO), then pay-as-you-go at
-  provider rates. The default model is `huggingface/Qwen/Qwen3-8B` because the
-  current OpenClaw Hugging Face provider recognizes it. Newer router-listed
-  models should be tested against the OpenClaw runtime before becoming defaults.
+  provider rates. The default model is
+  `huggingface/google/gemma-4-26B-A4B-it`; choose a cheaper router-compatible
+  model if message volume matters more than quality.
 
 ## Telegram notes
 
