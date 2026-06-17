@@ -1202,7 +1202,7 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path16 = __require("node:path");
+    var path15 = __require("node:path");
     var fs15 = __require("node:fs");
     var process5 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2215,9 +2215,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path16.resolve(baseDir, baseName);
+          const localBin = path15.resolve(baseDir, baseName);
           if (fs15.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path16.extname(baseName))) return void 0;
+          if (sourceExt.includes(path15.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs15.existsSync(`${localBin}${ext}`)
           );
@@ -2235,17 +2235,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path16.resolve(
-            path16.dirname(resolvedScriptPath),
+          executableDir = path15.resolve(
+            path15.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path16.basename(
+            const legacyName = path15.basename(
               this._scriptPath,
-              path16.extname(this._scriptPath)
+              path15.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2256,7 +2256,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path16.extname(executableFile));
+        launchWithNode = sourceExt.includes(path15.extname(executableFile));
         let proc;
         if (process5.platform !== "win32") {
           if (launchWithNode) {
@@ -3171,7 +3171,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path16.basename(filename, path16.extname(filename));
+        this._name = path15.basename(filename, path15.extname(filename));
         return this;
       }
       /**
@@ -3185,9 +3185,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path17) {
-        if (path17 === void 0) return this._executableDir;
-        this._executableDir = path17;
+      executableDir(path16) {
+        if (path16 === void 0) return this._executableDir;
+        this._executableDir = path16;
         return this;
       }
       /**
@@ -8953,11 +8953,10 @@ var init_cli = __esm({
 
 // src/hclaw/cli.ts
 import fs14 from "node:fs/promises";
-import { realpathSync, statSync } from "node:fs";
-import path15 from "node:path";
+import { realpathSync } from "node:fs";
 import process4 from "node:process";
 import { randomBytes } from "node:crypto";
-import { fileURLToPath as fileURLToPath4, pathToFileURL as pathToFileURL2 } from "node:url";
+import { pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
 // node_modules/commander/esm.mjs
@@ -9183,6 +9182,7 @@ import fs2 from "node:fs";
 import fsPromises2 from "node:fs/promises";
 import path2 from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+var PRODUCER_SKILLS_ROOTS = ["skills", path2.join(".agents", "skills")];
 function defaultSkillsRoot() {
   const startDir = path2.dirname(fileURLToPath(import.meta.url));
   let current = startDir;
@@ -9200,12 +9200,69 @@ function defaultSkillsRoot() {
 }
 function resolveSkillsRoot(root) {
   if (root instanceof URL) {
-    return fileURLToPath(root);
+    return path2.resolve(fileURLToPath(root));
   }
   if (root.startsWith("file:")) {
-    return fileURLToPath(new URL(root));
+    return path2.resolve(fileURLToPath(new URL(root)));
   }
   return path2.resolve(root);
+}
+function resolveSkillsRoots(roots) {
+  const inputs = Array.isArray(roots) ? roots : [roots];
+  const seen = /* @__PURE__ */ new Set();
+  const resolved = [];
+  for (const input of inputs) {
+    const root = resolveSkillsRoot(input);
+    if (!seen.has(root)) {
+      seen.add(root);
+      resolved.push(root);
+    }
+  }
+  return resolved;
+}
+function toPath(input) {
+  if (input instanceof URL) {
+    return fileURLToPath(input);
+  }
+  if (input.startsWith("file:")) {
+    return fileURLToPath(new URL(input));
+  }
+  return input;
+}
+function existingProducerRoots(dir) {
+  const roots = [];
+  for (const rel of PRODUCER_SKILLS_ROOTS) {
+    const candidate = path2.join(dir, rel);
+    if (fs2.existsSync(candidate) && fs2.statSync(candidate).isDirectory()) {
+      roots.push(pathToFileURL(candidate + path2.sep));
+    }
+  }
+  return roots;
+}
+function findSkillsRoots(start) {
+  let current = toPath(start);
+  try {
+    const stat = fs2.statSync(current);
+    if (!stat.isDirectory()) {
+      current = path2.dirname(current);
+    }
+  } catch {
+    current = path2.dirname(current);
+  }
+  while (true) {
+    const roots = existingProducerRoots(current);
+    if (roots.length > 0) {
+      return roots;
+    }
+    const parent = path2.dirname(current);
+    if (parent === current) {
+      throw new SkillflagError("Could not find a skills/ or .agents/skills/ directory. Pass skillsRoot explicitly.");
+    }
+    current = parent;
+  }
+}
+function findSkillsRoot(start) {
+  return findSkillsRoots(start)[0];
 }
 function assertValidSkillId(id) {
   if (!id || id === "." || id === "..") {
@@ -9488,10 +9545,9 @@ async function handleSkillflag(argv, opts) {
   const stderr = opts.stderr ?? process3.stderr;
   try {
     const action = parseSkillArgs(argv);
-    const skillsRoot = resolveSkillsRoot(opts.skillsRoot);
     const bundledRoot = resolveSkillsRoot(defaultSkillsRoot());
     const includeBundled = opts.includeBundledSkill !== false;
-    const rootDirs = includeBundled && bundledRoot !== skillsRoot ? [skillsRoot, bundledRoot] : [skillsRoot];
+    const rootDirs = resolveSkillsRoots(includeBundled ? [...resolveSkillsRoots(opts.skillsRoot), bundledRoot] : opts.skillsRoot);
     if (action.kind === "install") {
       return await runInstallAction(action, rootDirs, opts, stdin, stdout, stderr);
     }
@@ -13526,10 +13582,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path16, processedBytes]) => ({
-        path: path16,
-        progress: processedBytes / this.fileSize[path16],
-        lastSentProgress: ((this.fileUploadedBytes[path16] ?? 0) + (processedBytes - (this.fileUploadedBytes[path16] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path16]
+      files: Object.entries(this.fileProcessedBytes).map(([path15, processedBytes]) => ({
+        path: path15,
+        progress: processedBytes / this.fileSize[path15],
+        lastSentProgress: ((this.fileUploadedBytes[path15] ?? 0) + (processedBytes - (this.fileUploadedBytes[path15] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path15]
       }))
     };
   }
@@ -14402,7 +14458,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path16) => ({ type: "deleteFile", path: path16 })));
+    await this.batch(paths.map((path15) => ({ type: "deleteFile", path: path15 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -14418,8 +14474,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path16) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path16)}`;
+  async downloadFile(path15) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path15)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -14649,9 +14705,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path16) => ({
+      ...(params.deletePaths ?? []).map((path15) => ({
         key: "deletedFile",
-        value: { path: path16 }
+        value: { path: path15 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -16287,31 +16343,10 @@ function parseInteger(value) {
 function isPaidHardware(hardware) {
   return hardware !== DEFAULT_HARDWARE;
 }
-function hclawSkillsRoot() {
-  let current = path15.dirname(fileURLToPath4(import.meta.url));
-  while (true) {
-    const candidate = path15.join(current, ".agents", "skills");
-    if (isDirectory(candidate)) {
-      return pathToFileURL2(`${candidate}${path15.sep}`);
-    }
-    const parent = path15.dirname(current);
-    if (parent === current) {
-      return new URL("../.agents/skills/", import.meta.url);
-    }
-    current = parent;
-  }
-}
-function isDirectory(filePath) {
-  try {
-    return statSync(filePath).isDirectory();
-  } catch {
-    return false;
-  }
-}
 async function runCli() {
   if (process4.argv.includes("--skill")) {
     return handleSkillflag(process4.argv, {
-      skillsRoot: hclawSkillsRoot(),
+      skillsRoot: findSkillsRoot(import.meta.url),
       includeBundledSkill: false
     });
   }

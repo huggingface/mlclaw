@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
-import { realpathSync, statSync } from "node:fs";
-import path from "node:path";
+import { realpathSync } from "node:fs";
 import process from "node:process";
 import { randomBytes } from "node:crypto";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { cancel, confirm, intro, isCancel, note, outro, password, text } from "@clack/prompts";
-import { handleSkillflag } from "skillflag";
+import { findSkillsRoot, handleSkillflag } from "skillflag";
 import { readToken } from "./auth.js";
 import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } from "./docker.js";
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
@@ -1674,33 +1673,10 @@ function isPaidHardware(hardware: string): boolean {
   return hardware !== DEFAULT_HARDWARE;
 }
 
-function hclawSkillsRoot(): URL {
-  let current = path.dirname(fileURLToPath(import.meta.url));
-  while (true) {
-    const candidate = path.join(current, ".agents", "skills");
-    if (isDirectory(candidate)) {
-      return pathToFileURL(`${candidate}${path.sep}`);
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return new URL("../.agents/skills/", import.meta.url);
-    }
-    current = parent;
-  }
-}
-
-function isDirectory(filePath: string): boolean {
-  try {
-    return statSync(filePath).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 async function runCli(): Promise<number> {
   if (process.argv.includes("--skill")) {
     return handleSkillflag(process.argv, {
-      skillsRoot: hclawSkillsRoot(),
+      skillsRoot: findSkillsRoot(import.meta.url),
       includeBundledSkill: false,
     });
   }
