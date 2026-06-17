@@ -21,6 +21,7 @@ import {
   writeRuntimeHandoffRequest,
   type RuntimeHandoffAck,
 } from "./lease.js";
+import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 import {
   defaultConfigRoot,
   manifestExists,
@@ -47,12 +48,14 @@ export const SPACE_HANDOFF_TIMEOUT_MS = 120_000;
 export const SPACE_HANDOFF_POLL_MS = 5_000;
 
 const STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
+const SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 const PAID_HARDWARE_COST_NOTE =
   "Telegram requires upgraded Hugging Face Space hardware today. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 
 type BootstrapOptions = {
   owner?: string;
   name?: string;
+  bucket?: string;
   gateway?: string;
   telegramToken?: string;
   telegramTokenFile?: string;
@@ -95,6 +98,17 @@ type GatewayCommandOptions = {
   takeover?: boolean;
   yes?: boolean;
   tail?: number;
+};
+
+type StateAdoptOptions = {
+  bucket?: string;
+  pull?: boolean;
+  takeover?: boolean;
+  yes?: boolean;
+};
+
+type BucketStateInspection = {
+  objectCount: number;
 };
 
 type CliRuntime = {
@@ -164,7 +178,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .command("bootstrap", { isDefault: true })
     .description("Create or update a private Hugging Face OpenClaw deployment")
     .option("--owner <owner>", "Hugging Face user or organization")
-    .option("--name <name>", "Agent, Space, and bucket base name")
+    .option("--name <name>", "Agent and runtime resource base name")
+    .option("--bucket <owner/bucket>", "State bucket to create or adopt")
     .option("--gateway <local|space>", "Where the live gateway runs", DEFAULT_GATEWAY_LOCATION)
     .option("--telegram-token <token>", "Telegram bot token")
     .option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token")
@@ -280,6 +295,22 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
       await gatewayMigrate(agent, opts, runtime);
     });
 
+  const state = program
+    .command("state")
+    .description("Operate Hugging Claw durable state");
+
+  state
+    .command("adopt")
+    .description("Point an existing deployment at a state bucket")
+    .argument("<agent>", "Agent name")
+    .requiredOption("--bucket <owner/bucket>", "State bucket to adopt")
+    .option("--no-pull", "Do not docker pull before restarting a local gateway")
+    .option("--takeover", "Adopt even if another live runtime lease is present", false)
+    .option("--yes", "Confirm adoption prompts for automation", false)
+    .action(async (agent: string, opts: StateAdoptOptions) => {
+      await stateAdopt(agent, opts, runtime);
+    });
+
   return program;
 }
 
@@ -325,14 +356,21 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const bucketPrefix = bootstrapBucketPrefix(existingManifest, existingSecrets, runtime);
   const localRuntimeId = existingManifest?.localRuntimeId ?? newLocalRuntimeId(agentName);
+  const bucket = await resolveBootstrapBucket({
+    explicitBucket: opts.bucket,
+    defaultBucket: names.bucket,
+    existingManifest,
+    bucketPrefix,
+    hub,
+    yes: Boolean(opts.yes),
+    runtime,
+  });
 
-  runtime.stdout.log(`Creating private bucket ${names.bucket}`);
-  await hub.createBucket(names.bucket, true);
   const manifest: DeploymentManifest = {
     version: 1,
     agent: agentName,
     owner,
-    bucket: names.bucket,
+    bucket,
     space: names.space,
     localRuntimeId,
     gatewayLocation,
@@ -346,7 +384,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     telegramToken,
     telegramUserId,
     gatewayToken,
-    bucket: names.bucket,
+    bucket,
     model,
     agentName,
     runtimeImage,
@@ -359,7 +397,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   if (gatewayLocation === "space") {
     await assertNoLiveForeignLease({
       hub,
-      bucket: names.bucket,
+      bucket,
       bucketPrefix,
       runtimeId: spaceRuntimeId(agentName),
       takeover: Boolean(opts.takeover),
@@ -383,7 +421,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   } else {
     await assertNoLiveForeignLease({
       hub,
-      bucket: names.bucket,
+      bucket,
       bucketPrefix,
       runtimeId: manifest.localRuntimeId,
       takeover: Boolean(opts.takeover),
@@ -398,7 +436,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   }
 
   runtime.stdout.log("");
-  runtime.stdout.log(`Bucket: https://huggingface.co/buckets/${names.bucket}`);
+  runtime.stdout.log(`Bucket: https://huggingface.co/buckets/${bucket}`);
   if (gatewayLocation === "space") {
     runtime.stdout.log(`Space:  https://huggingface.co/spaces/${names.space}`);
   } else {
@@ -417,6 +455,215 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   runtime.prompt.outro(gatewayLocation === "space"
     ? "Restart requested. Build logs may take a few minutes to appear."
     : "Local gateway start requested.");
+}
+
+async function resolveBootstrapBucket(params: {
+  explicitBucket?: string | undefined;
+  defaultBucket: string;
+  existingManifest: DeploymentManifest | null;
+  bucketPrefix?: string | undefined;
+  hub: HubApi;
+  yes: boolean;
+  runtime: Required<CliRuntime>;
+}): Promise<string> {
+  const explicitBucket = params.explicitBucket ? parseBucketId(params.explicitBucket) : undefined;
+  const bucket = explicitBucket ?? params.existingManifest?.bucket ?? params.defaultBucket;
+  params.runtime.stdout.log(`Creating or adopting private bucket ${bucket}`);
+  await params.hub.createBucket(bucket, true);
+  const inspection = await inspectStateBucket(params.hub, bucket, params.bucketPrefix);
+
+  const existingBucket = params.existingManifest?.bucket;
+  if (explicitBucket && existingBucket && existingBucket !== explicitBucket) {
+    await confirmBucketChange({
+      message: `Change ${params.existingManifest?.agent ?? "deployment"} state bucket from ${existingBucket} to ${explicitBucket}?`,
+      yes: params.yes,
+      runtime: params.runtime,
+    });
+  } else if (explicitBucket && !existingBucket && inspection.objectCount > 0) {
+    await confirmBucketChange({
+      message: `Adopt existing state bucket ${explicitBucket} with ${inspection.objectCount} object(s)?`,
+      yes: params.yes,
+      runtime: params.runtime,
+    });
+  }
+  return bucket;
+}
+
+async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Required<CliRuntime>): Promise<void> {
+  const bucket = parseBucketId(requiredOption(opts.bucket, "--bucket"));
+  const current = await readDeploymentManifest(runtime, agent);
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  const secrets = await readSecretEnv(runtime.configRoot, agent);
+  const bucketPrefix = persistedBucketPrefix(secrets);
+
+  runtime.stdout.log(`Creating or adopting private bucket ${bucket}`);
+  await hub.createBucket(bucket, true);
+  await inspectStateBucket(hub, bucket, bucketPrefix);
+  await assertNoLiveForeignLease({
+    hub,
+    bucket,
+    bucketPrefix,
+    runtimeId: runtimeIdFor(current),
+    takeover: Boolean(opts.takeover),
+  });
+
+  const bucketChanged = current.bucket !== bucket;
+  if (bucketChanged) {
+    await confirmBucketChange({
+      message: `Adopt state bucket ${bucket} for ${agent}, replacing ${current.bucket}?`,
+      yes: Boolean(opts.yes),
+      runtime,
+    });
+  }
+
+  if (bucketChanged) {
+    if (current.gatewayLocation === "local") {
+      await handoffAndStopLocalGateway({
+        manifest: current,
+        hub,
+        runtime,
+        bucketPrefix,
+        targetRuntimeId: current.localRuntimeId,
+      });
+    } else {
+      await disableAndPauseSpaceGateway({
+        manifest: current,
+        hub,
+        runtime,
+        bucketPrefix,
+        targetRuntimeId: spaceRuntimeId(current.agent),
+      });
+    }
+  }
+
+  const updated: DeploymentManifest = {
+    ...current,
+    bucket,
+    updatedAt: runtime.now().toISOString(),
+  };
+  const updatedSecrets = {
+    ...secrets,
+    OPENCLAW_HF_STATE_BUCKET: bucket,
+    OPENCLAW_AGENT_NAME: updated.agent,
+    OPENCLAW_MODEL: updated.model,
+    HUGGINGCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
+    HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+    HUGGINGCLAW_RUNTIME_ID: runtimeIdFor(updated),
+  };
+  await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
+
+  if (updated.gatewayLocation === "local") {
+    if (bucketChanged) {
+      await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+    } else {
+      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+    }
+  } else {
+    await setDeploymentVariables(hub, updated.space, {
+      OPENCLAW_HF_STATE_BUCKET: bucket,
+      HUGGINGCLAW_GATEWAY_LOCATION: "space",
+      HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
+    });
+    await clearSpaceGatewayDisabled(hub, updated.space);
+    if (bucketChanged) {
+      await hub.restartSpace(updated.space, true);
+      runtime.stdout.log(`Space gateway restart requested: ${updated.space}`);
+    } else {
+      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+    }
+  }
+  runtime.stdout.log(`State bucket: ${bucket}`);
+}
+
+async function inspectStateBucket(
+  hub: HubApi,
+  bucket: string,
+  bucketPrefix?: string,
+): Promise<BucketStateInspection> {
+  await hub.assertBucketAccessible(bucket);
+  const client = hub.bucket(bucket);
+  const entries = await client.listFiles();
+  const fileEntries = entries.filter((entry) => entry.type === "file");
+  const prefix = normalizeBucketPrefix(bucketPrefix);
+  const prefixWithSlash = `${prefix}/`;
+  const manifestPath = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
+  const stateEntries = fileEntries.filter((entry) =>
+    entry.path === manifestPath ||
+    entry.path.startsWith(`${prefixWithSlash}snapshots/`) ||
+    entry.path.startsWith(`${prefixWithSlash}runtime/`)
+  );
+
+  if (fileEntries.length > 0 && stateEntries.length === 0) {
+    throw new Error(`bucket ${bucket} contains objects but no HuggingClaw state under ${prefix}`);
+  }
+
+  const hasSnapshotManifest = stateEntries.some((entry) => entry.path === manifestPath);
+  if (hasSnapshotManifest) {
+    const blob = await client.downloadFile(manifestPath);
+    if (!blob) {
+      throw new Error(`bucket ${bucket} listed ${manifestPath}, but it could not be downloaded`);
+    }
+    const currentSnapshotPath = parseCurrentSnapshotPath(await blob.text(), bucket, manifestPath);
+    const filePaths = new Set(fileEntries.map((entry) => entry.path));
+    if (!filePaths.has(currentSnapshotPath)) {
+      throw new Error(`bucket ${bucket} state manifest points to missing snapshot ${currentSnapshotPath}`);
+    }
+  }
+
+  return {
+    objectCount: fileEntries.length,
+  };
+}
+
+function parseCurrentSnapshotPath(raw: string, bucket: string, manifestPath: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`bucket ${bucket} has an invalid state manifest ${manifestPath}: ${String(err)}`);
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("version" in parsed) ||
+    parsed.version !== 1 ||
+    !("current" in parsed) ||
+    typeof parsed.current !== "object" ||
+    parsed.current === null ||
+    !("path" in parsed.current) ||
+    typeof parsed.current.path !== "string" ||
+    parsed.current.path.length === 0
+  ) {
+    throw new Error(`bucket ${bucket} has an invalid state manifest ${manifestPath}: missing current snapshot path`);
+  }
+  return parsed.current.path;
+}
+
+async function confirmBucketChange(params: {
+  message: string;
+  yes: boolean;
+  runtime: Required<CliRuntime>;
+}): Promise<void> {
+  if (params.yes) {
+    return;
+  }
+  if (!params.runtime.prompt.isInteractive()) {
+    throw new Error(`${params.message} Pass --yes to confirm.`);
+  }
+  params.runtime.prompt.note("The bucket is the durable OpenClaw identity and state pointer.", "State bucket");
+  const ok = await promptConfirm(params.message, false, params.runtime);
+  if (!ok) {
+    throw new Error("state bucket adoption was not confirmed");
+  }
+}
+
+function parseBucketId(raw: string): string {
+  const bucket = raw.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(bucket)) {
+    throw new Error(`expected bucket id as owner/name, got ${raw}`);
+  }
+  return bucket;
 }
 
 function deploymentSecrets(params: {
@@ -782,6 +1029,7 @@ async function handoffAndStopLocalGateway(params: {
   hub: HubApi;
   runtime: Required<CliRuntime>;
   bucketPrefix?: string | undefined;
+  targetRuntimeId?: string | undefined;
 }): Promise<void> {
   const containerName = containerNameFor(params.manifest.agent);
   const existing = await params.runtime.dockerRunner.inspect(containerName);
@@ -803,7 +1051,7 @@ async function handoffAndStopLocalGateway(params: {
     agent: params.manifest.agent,
     runtimeId: params.manifest.localRuntimeId,
     requestedAt: handoffStartedAt.toISOString(),
-    targetRuntimeId: spaceRuntimeId(params.manifest.agent),
+    targetRuntimeId: params.targetRuntimeId ?? spaceRuntimeId(params.manifest.agent),
   }, params.bucketPrefix);
   params.runtime.stdout.log("Waiting for local gateway to upload a final snapshot");
   await waitForRuntimeHandoffAck({
@@ -825,6 +1073,7 @@ async function disableAndPauseSpaceGateway(params: {
   hub: HubApi;
   runtime: Required<CliRuntime>;
   bucketPrefix?: string | undefined;
+  targetRuntimeId?: string | undefined;
 }): Promise<void> {
   const handoffStartedAt = params.runtime.now();
   const requestId = randomBytes(16).toString("hex");
@@ -842,7 +1091,7 @@ async function disableAndPauseSpaceGateway(params: {
     agent: params.manifest.agent,
     runtimeId: spaceRuntimeId(params.manifest.agent),
     requestedAt: handoffStartedAt.toISOString(),
-    targetRuntimeId: params.manifest.localRuntimeId,
+    targetRuntimeId: params.targetRuntimeId ?? params.manifest.localRuntimeId,
   }, params.bucketPrefix);
   await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
   params.runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");

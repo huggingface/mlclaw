@@ -75,7 +75,8 @@ function createFakeHub(opts: {
       const value = bucketObjects.get(file);
       return value ? new Blob([value]) : null;
     },
-    async listFiles() {
+    async listFiles(prefix = "") {
+      calls.push({ name: "bucket.listFiles", args: [prefix] });
       return [...bucketObjects.keys()].map((path) => ({ path, size: 0, type: "file" as const })) satisfies BucketEntry[];
     },
     async assertBucketAccessible() {
@@ -160,6 +161,24 @@ function createFakeHub(opts: {
     },
   };
   return hub as typeof hub & HubApi;
+}
+
+function seedValidStateSnapshot(hub: ReturnType<typeof createFakeHub>, prefix = "openclaw-state") {
+  const snapshotPath = `${prefix}/snapshots/state-adopted.tar.zst`;
+  hub.bucketObjects.set(`${prefix}/manifest.json`, JSON.stringify({
+    version: 1,
+    current: {
+      id: "state-adopted",
+      path: snapshotPath,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      sha256: "a".repeat(64),
+      sizeBytes: 12,
+      runId: "run-adopted",
+      bootTime: "2026-06-16T00:00:00.000Z",
+    },
+    previous: [],
+  }) + "\n");
+  hub.bucketObjects.set(snapshotPath, "snapshot-bytes");
 }
 
 async function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt>["prompt"], stderr: string[] = []) {
@@ -271,6 +290,116 @@ describe("hclaw CLI", () => {
       name: "pull",
       args: [DEFAULT_RUNTIME_IMAGE],
     });
+  });
+
+  it("uses an explicit bootstrap bucket as the durable state pointer", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const runtime = await createRuntime(hub, prompt);
+
+    const code = await main([
+      "--bucket",
+      "alice/onurclawtest-data",
+      "--gateway-token",
+      "gateway-token",
+      "--no-pull",
+    ], runtime);
+
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/onurclawtest-data", true] });
+    expect(hub.calls).not.toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/onurclawtest-data",
+      space: "alice/research",
+    });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      OPENCLAW_HF_STATE_BUCKET: "alice/onurclawtest-data",
+    });
+  });
+
+  it("pins an existing manifest bucket during repeated bootstrap", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const runtime = await createRuntime(hub, prompt);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/archive-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: "old-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-15T00:00:00.000Z",
+      updatedAt: "2026-06-15T00:00:00.000Z",
+    });
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--telegram-token",
+      "telegram-token",
+      "--telegram-user-id",
+      "7216393410",
+      "--gateway-token",
+      "gateway-token",
+      "--no-pull",
+    ], runtime);
+
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/archive-data", true] });
+    expect(hub.calls).not.toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/archive-data",
+      localRuntimeId: "local-research-existing",
+    });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      OPENCLAW_HF_STATE_BUCKET: "alice/archive-data",
+      HUGGINGCLAW_RUNTIME_ID: "local-research-existing",
+    });
+  });
+
+  it("requires confirmation before bootstrap changes a pinned bucket", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    const original: DeploymentManifest = {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/archive-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: "old-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-15T00:00:00.000Z",
+      updatedAt: "2026-06-15T00:00:00.000Z",
+    };
+    await writeManifest(runtime.configRoot, original);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--bucket",
+      "alice/new-data",
+      "--telegram-token",
+      "telegram-token",
+      "--telegram-user-id",
+      "7216393410",
+      "--gateway-token",
+      "gateway-token",
+      "--no-pull",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("Pass --yes to confirm");
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toEqual(original);
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
 
   it("refreshes a running local gateway without changing its runtime id", async () => {
@@ -653,6 +782,44 @@ describe("hclaw CLI", () => {
     expect(removeIndex).toBeGreaterThanOrEqual(0);
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(startIndex).toBeGreaterThan(removeVolumeIndex);
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+  });
+
+  it("adopts a state bucket for a local deployment and resets stale live disk", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const runtime = await createRuntime(hub, prompt);
+
+    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    seedValidStateSnapshot(hub);
+    hub.calls.length = 0;
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main([
+      "state",
+      "adopt",
+      "research",
+      "--bucket",
+      "alice/onurclawtest-data",
+      "--yes",
+      "--no-pull",
+    ], runtime)).resolves.toBe(0);
+
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/onurclawtest-data",
+      gatewayLocation: "local",
+    });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      OPENCLAW_HF_STATE_BUCKET: "alice/onurclawtest-data",
+    });
+    const stopIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "stop");
+    const removeIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "rm");
+    const removeVolumeIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "rmVolume");
+    const runIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "run");
+    expect(stopIndex).toBeGreaterThanOrEqual(0);
+    expect(removeIndex).toBeGreaterThan(stopIndex);
+    expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
+    expect(runIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
   });
 
