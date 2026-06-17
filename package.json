@@ -16,6 +16,7 @@
     "huggingclaw": "dist/hclaw.mjs"
   },
   "files": [
+    ".agents/skills/",
     ".gitattributes",
     "assets/",
     "dist/hclaw.mjs",
@@ -51,6 +52,7 @@
     "@huggingface/splitmix64-wasm": "^0.0.1",
     "@huggingface/xetchunk-wasm": "^0.0.6",
     "commander": "^14.0.3",
+    "skillflag": "^0.1.4",
     "zod": "^3.24.0"
   },
   "devDependencies": {

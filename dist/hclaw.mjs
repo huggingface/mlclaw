@@ -7,13 +7,20 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __require = /* @__PURE__ */ ((x3) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x3, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+  get: (a, b2) => (typeof require !== "undefined" ? require : a)[b2]
 }) : x3)(function(x3) {
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x3 + '" is not supported');
 });
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require2() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -231,8 +238,8 @@ var require_help = __commonJS({
           visibleCommands.push(helpCommand);
         }
         if (this.sortSubcommands) {
-          visibleCommands.sort((a, b) => {
-            return a.name().localeCompare(b.name());
+          visibleCommands.sort((a, b2) => {
+            return a.name().localeCompare(b2.name());
           });
         }
         return visibleCommands;
@@ -244,11 +251,11 @@ var require_help = __commonJS({
        * @param {Option} b
        * @returns {number}
        */
-      compareOptions(a, b) {
+      compareOptions(a, b2) {
         const getSortKey = (option) => {
           return option.short ? option.short.replace(/^-/, "") : option.long.replace(/^--/, "");
         };
-        return getSortKey(a).localeCompare(getSortKey(b));
+        return getSortKey(a).localeCompare(getSortKey(b2));
       }
       /**
        * Get an array of the visible options. Includes a placeholder for the implicit help option, if there is one.
@@ -1114,20 +1121,20 @@ var require_option = __commonJS({
 var require_suggestSimilar = __commonJS({
   "node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
-    function editDistance(a, b) {
-      if (Math.abs(a.length - b.length) > maxDistance)
-        return Math.max(a.length, b.length);
+    function editDistance(a, b2) {
+      if (Math.abs(a.length - b2.length) > maxDistance)
+        return Math.max(a.length, b2.length);
       const d = [];
       for (let i = 0; i <= a.length; i++) {
         d[i] = [i];
       }
-      for (let j2 = 0; j2 <= b.length; j2++) {
+      for (let j2 = 0; j2 <= b2.length; j2++) {
         d[0][j2] = j2;
       }
-      for (let j2 = 1; j2 <= b.length; j2++) {
+      for (let j2 = 1; j2 <= b2.length; j2++) {
         for (let i = 1; i <= a.length; i++) {
           let cost = 1;
-          if (a[i - 1] === b[j2 - 1]) {
+          if (a[i - 1] === b2[j2 - 1]) {
             cost = 0;
           } else {
             cost = 1;
@@ -1140,12 +1147,12 @@ var require_suggestSimilar = __commonJS({
             d[i - 1][j2 - 1] + cost
             // substitution
           );
-          if (i > 1 && j2 > 1 && a[i - 1] === b[j2 - 2] && a[i - 2] === b[j2 - 1]) {
+          if (i > 1 && j2 > 1 && a[i - 1] === b2[j2 - 2] && a[i - 2] === b2[j2 - 1]) {
             d[i][j2] = Math.min(d[i][j2], d[i - 2][j2 - 2] + 1);
           }
         }
       }
-      return d[a.length][b.length];
+      return d[a.length][b2.length];
     }
     function suggestSimilar(word, candidates) {
       if (!candidates || candidates.length === 0) return "";
@@ -1172,7 +1179,7 @@ var require_suggestSimilar = __commonJS({
           }
         }
       });
-      similar.sort((a, b) => a.localeCompare(b));
+      similar.sort((a, b2) => a.localeCompare(b2));
       if (searchingOptions) {
         similar = similar.map((candidate) => `--${candidate}`);
       }
@@ -1195,9 +1202,9 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path5 = __require("node:path");
-    var fs6 = __require("node:fs");
-    var process3 = __require("node:process");
+    var path16 = __require("node:path");
+    var fs15 = __require("node:fs");
+    var process5 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
     var { CommanderError: CommanderError2 } = require_error();
     var { Help: Help2, stripColor } = require_help();
@@ -1244,13 +1251,13 @@ var require_command = __commonJS({
         this._showSuggestionAfterError = true;
         this._savedState = null;
         this._outputConfiguration = {
-          writeOut: (str) => process3.stdout.write(str),
-          writeErr: (str) => process3.stderr.write(str),
+          writeOut: (str) => process5.stdout.write(str),
+          writeErr: (str) => process5.stderr.write(str),
           outputError: (str, write) => write(str),
-          getOutHelpWidth: () => process3.stdout.isTTY ? process3.stdout.columns : void 0,
-          getErrHelpWidth: () => process3.stderr.isTTY ? process3.stderr.columns : void 0,
-          getOutHasColors: () => useColor() ?? (process3.stdout.isTTY && process3.stdout.hasColors?.()),
-          getErrHasColors: () => useColor() ?? (process3.stderr.isTTY && process3.stderr.hasColors?.()),
+          getOutHelpWidth: () => process5.stdout.isTTY ? process5.stdout.columns : void 0,
+          getErrHelpWidth: () => process5.stderr.isTTY ? process5.stderr.columns : void 0,
+          getOutHasColors: () => useColor() ?? (process5.stdout.isTTY && process5.stdout.hasColors?.()),
+          getErrHasColors: () => useColor() ?? (process5.stderr.isTTY && process5.stderr.hasColors?.()),
           stripColor: (str) => stripColor(str)
         };
         this._hidden = false;
@@ -1644,7 +1651,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._exitCallback) {
           this._exitCallback(new CommanderError2(exitCode, code, message));
         }
-        process3.exit(exitCode);
+        process5.exit(exitCode);
       }
       /**
        * Register callback `fn` for the command.
@@ -2044,16 +2051,16 @@ Expecting one of '${allowedValues.join("', '")}'`);
         }
         parseOptions = parseOptions || {};
         if (argv === void 0 && parseOptions.from === void 0) {
-          if (process3.versions?.electron) {
+          if (process5.versions?.electron) {
             parseOptions.from = "electron";
           }
-          const execArgv = process3.execArgv ?? [];
+          const execArgv = process5.execArgv ?? [];
           if (execArgv.includes("-e") || execArgv.includes("--eval") || execArgv.includes("-p") || execArgv.includes("--print")) {
             parseOptions.from = "eval";
           }
         }
         if (argv === void 0) {
-          argv = process3.argv;
+          argv = process5.argv;
         }
         this.rawArgs = argv.slice();
         let userArgs;
@@ -2064,7 +2071,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
             userArgs = argv.slice(2);
             break;
           case "electron":
-            if (process3.defaultApp) {
+            if (process5.defaultApp) {
               this._scriptPath = argv[1];
               userArgs = argv.slice(2);
             } else {
@@ -2190,7 +2197,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} subcommandName
        */
       _checkForMissingExecutable(executableFile, executableDir, subcommandName) {
-        if (fs6.existsSync(executableFile)) return;
+        if (fs15.existsSync(executableFile)) return;
         const executableDirMessage = executableDir ? `searched for local subcommand relative to directory '${executableDir}'` : "no directory for search for local subcommand, use .executableDir() to supply a custom directory";
         const executableMissing = `'${executableFile}' does not exist
  - if '${subcommandName}' is not meant to be an executable command, remove description parameter from '.command()' and use '.description()' instead
@@ -2208,11 +2215,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path5.resolve(baseDir, baseName);
-          if (fs6.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path5.extname(baseName))) return void 0;
+          const localBin = path16.resolve(baseDir, baseName);
+          if (fs15.existsSync(localBin)) return localBin;
+          if (sourceExt.includes(path16.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
-            (ext) => fs6.existsSync(`${localBin}${ext}`)
+            (ext) => fs15.existsSync(`${localBin}${ext}`)
           );
           if (foundExt) return `${localBin}${foundExt}`;
           return void 0;
@@ -2224,21 +2231,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._scriptPath) {
           let resolvedScriptPath;
           try {
-            resolvedScriptPath = fs6.realpathSync(this._scriptPath);
+            resolvedScriptPath = fs15.realpathSync(this._scriptPath);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path5.resolve(
-            path5.dirname(resolvedScriptPath),
+          executableDir = path16.resolve(
+            path16.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path5.basename(
+            const legacyName = path16.basename(
               this._scriptPath,
-              path5.extname(this._scriptPath)
+              path16.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2249,13 +2256,13 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path5.extname(executableFile));
+        launchWithNode = sourceExt.includes(path16.extname(executableFile));
         let proc;
-        if (process3.platform !== "win32") {
+        if (process5.platform !== "win32") {
           if (launchWithNode) {
             args.unshift(executableFile);
-            args = incrementNodeInspectorPort(process3.execArgv).concat(args);
-            proc = childProcess.spawn(process3.argv[0], args, { stdio: "inherit" });
+            args = incrementNodeInspectorPort(process5.execArgv).concat(args);
+            proc = childProcess.spawn(process5.argv[0], args, { stdio: "inherit" });
           } else {
             proc = childProcess.spawn(executableFile, args, { stdio: "inherit" });
           }
@@ -2266,13 +2273,13 @@ Expecting one of '${allowedValues.join("', '")}'`);
             subcommand._name
           );
           args.unshift(executableFile);
-          args = incrementNodeInspectorPort(process3.execArgv).concat(args);
-          proc = childProcess.spawn(process3.execPath, args, { stdio: "inherit" });
+          args = incrementNodeInspectorPort(process5.execArgv).concat(args);
+          proc = childProcess.spawn(process5.execPath, args, { stdio: "inherit" });
         }
         if (!proc.killed) {
           const signals = ["SIGUSR1", "SIGUSR2", "SIGTERM", "SIGINT", "SIGHUP"];
           signals.forEach((signal) => {
-            process3.on(signal, () => {
+            process5.on(signal, () => {
               if (proc.killed === false && proc.exitCode === null) {
                 proc.kill(signal);
               }
@@ -2283,7 +2290,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         proc.on("close", (code) => {
           code = code ?? 1;
           if (!exitCallback) {
-            process3.exit(code);
+            process5.exit(code);
           } else {
             exitCallback(
               new CommanderError2(
@@ -2305,7 +2312,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
             throw new Error(`'${executableFile}' not executable`);
           }
           if (!exitCallback) {
-            process3.exit(1);
+            process5.exit(1);
           } else {
             const wrappedError = new CommanderError2(
               1,
@@ -2805,13 +2812,13 @@ Expecting one of '${allowedValues.join("', '")}'`);
        */
       _parseOptionsEnv() {
         this.options.forEach((option) => {
-          if (option.envVar && option.envVar in process3.env) {
+          if (option.envVar && option.envVar in process5.env) {
             const optionKey = option.attributeName();
             if (this.getOptionValue(optionKey) === void 0 || ["default", "config", "env"].includes(
               this.getOptionValueSource(optionKey)
             )) {
               if (option.required || option.optional) {
-                this.emit(`optionEnv:${option.name()}`, process3.env[option.envVar]);
+                this.emit(`optionEnv:${option.name()}`, process5.env[option.envVar]);
               } else {
                 this.emit(`optionEnv:${option.name()}`);
               }
@@ -3164,7 +3171,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path5.basename(filename, path5.extname(filename));
+        this._name = path16.basename(filename, path16.extname(filename));
         return this;
       }
       /**
@@ -3178,9 +3185,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path6) {
-        if (path6 === void 0) return this._executableDir;
-        this._executableDir = path6;
+      executableDir(path17) {
+        if (path17 === void 0) return this._executableDir;
+        this._executableDir = path17;
         return this;
       }
       /**
@@ -3335,7 +3342,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        */
       help(contextOptions) {
         this.outputHelp(contextOptions);
-        let exitCode = Number(process3.exitCode ?? 0);
+        let exitCode = Number(process5.exitCode ?? 0);
         if (exitCode === 0 && contextOptions && typeof contextOptions !== "function" && contextOptions.error) {
           exitCode = 1;
         }
@@ -3425,9 +3432,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
       });
     }
     function useColor() {
-      if (process3.env.NO_COLOR || process3.env.FORCE_COLOR === "0" || process3.env.FORCE_COLOR === "false")
+      if (process5.env.NO_COLOR || process5.env.FORCE_COLOR === "0" || process5.env.FORCE_COLOR === "false")
         return false;
-      if (process3.env.FORCE_COLOR || process3.env.CLICOLOR_FORCE !== void 0)
+      if (process5.env.FORCE_COLOR || process5.env.CLICOLOR_FORCE !== void 0)
         return true;
       return void 0;
     }
@@ -3455,6 +3462,365 @@ var require_commander = __commonJS({
     exports.CommanderError = CommanderError2;
     exports.InvalidArgumentError = InvalidArgumentError2;
     exports.InvalidOptionArgumentError = InvalidArgumentError2;
+  }
+});
+
+// node_modules/fast-string-truncated-width/dist/utils.js
+var getCodePointsLength, isFullWidth, isWideNotCJKTNotEmoji;
+var init_utils = __esm({
+  "node_modules/fast-string-truncated-width/dist/utils.js"() {
+    getCodePointsLength = /* @__PURE__ */ (() => {
+      const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
+      return (input) => {
+        let surrogatePairsNr = 0;
+        SURROGATE_PAIR_RE.lastIndex = 0;
+        while (SURROGATE_PAIR_RE.test(input)) {
+          surrogatePairsNr += 1;
+        }
+        return input.length - surrogatePairsNr;
+      };
+    })();
+    isFullWidth = (x3) => {
+      return x3 === 12288 || x3 >= 65281 && x3 <= 65376 || x3 >= 65504 && x3 <= 65510;
+    };
+    isWideNotCJKTNotEmoji = (x3) => {
+      return x3 === 8987 || x3 === 9001 || x3 >= 12272 && x3 <= 12287 || x3 >= 12289 && x3 <= 12350 || x3 >= 12441 && x3 <= 12543 || x3 >= 12549 && x3 <= 12591 || x3 >= 12593 && x3 <= 12686 || x3 >= 12688 && x3 <= 12771 || x3 >= 12783 && x3 <= 12830 || x3 >= 12832 && x3 <= 12871 || x3 >= 12880 && x3 <= 19903 || x3 >= 65040 && x3 <= 65049 || x3 >= 65072 && x3 <= 65106 || x3 >= 65108 && x3 <= 65126 || x3 >= 65128 && x3 <= 65131 || x3 >= 127488 && x3 <= 127490 || x3 >= 127504 && x3 <= 127547 || x3 >= 127552 && x3 <= 127560 || x3 >= 131072 && x3 <= 196605 || x3 >= 196608 && x3 <= 262141;
+    };
+  }
+});
+
+// node_modules/fast-string-truncated-width/dist/index.js
+var ANSI_RE, CONTROL_RE, CJKT_WIDE_RE, TAB_RE, EMOJI_RE, LATIN_RE, MODIFIER_RE, NO_TRUNCATION, getStringTruncatedWidth, dist_default;
+var init_dist = __esm({
+  "node_modules/fast-string-truncated-width/dist/index.js"() {
+    init_utils();
+    ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
+    CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
+    CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
+    TAB_RE = /\t{1,1000}/y;
+    EMOJI_RE = new RegExp("[\\u{1F1E6}-\\u{1F1FF}]{2}|\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}|(?:\\p{Emoji}\\uFE0F\\u20E3?|\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation})(?:\\u200D(?:\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F\\u20E3?))*", "yu");
+    LATIN_RE = /(?:[\x20-\x7E\xA0-\xFF](?!\uFE0F)){1,1000}/y;
+    MODIFIER_RE = new RegExp("\\p{M}+", "gu");
+    NO_TRUNCATION = { limit: Infinity, ellipsis: "" };
+    getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {}) => {
+      const LIMIT = truncationOptions.limit ?? Infinity;
+      const ELLIPSIS = truncationOptions.ellipsis ?? "";
+      const ELLIPSIS_WIDTH = truncationOptions?.ellipsisWidth ?? (ELLIPSIS ? getStringTruncatedWidth(ELLIPSIS, NO_TRUNCATION, widthOptions).width : 0);
+      const ANSI_WIDTH = 0;
+      const CONTROL_WIDTH = widthOptions.controlWidth ?? 0;
+      const TAB_WIDTH = widthOptions.tabWidth ?? 8;
+      const EMOJI_WIDTH = widthOptions.emojiWidth ?? 2;
+      const FULL_WIDTH_WIDTH = 2;
+      const REGULAR_WIDTH = widthOptions.regularWidth ?? 1;
+      const WIDE_WIDTH = widthOptions.wideWidth ?? FULL_WIDTH_WIDTH;
+      const PARSE_BLOCKS = [
+        [LATIN_RE, REGULAR_WIDTH],
+        [ANSI_RE, ANSI_WIDTH],
+        [CONTROL_RE, CONTROL_WIDTH],
+        [TAB_RE, TAB_WIDTH],
+        [EMOJI_RE, EMOJI_WIDTH],
+        [CJKT_WIDE_RE, WIDE_WIDTH]
+      ];
+      let indexPrev = 0;
+      let index = 0;
+      let length = input.length;
+      let lengthExtra = 0;
+      let truncationEnabled = false;
+      let truncationIndex = length;
+      let truncationLimit = Math.max(0, LIMIT - ELLIPSIS_WIDTH);
+      let unmatchedStart = 0;
+      let unmatchedEnd = 0;
+      let width = 0;
+      let widthExtra = 0;
+      outer: while (true) {
+        if (unmatchedEnd > unmatchedStart || index >= length && index > indexPrev) {
+          const unmatched = input.slice(unmatchedStart, unmatchedEnd) || input.slice(indexPrev, index);
+          lengthExtra = 0;
+          for (const char of unmatched.replaceAll(MODIFIER_RE, "")) {
+            const codePoint = char.codePointAt(0) || 0;
+            if (isFullWidth(codePoint)) {
+              widthExtra = FULL_WIDTH_WIDTH;
+            } else if (isWideNotCJKTNotEmoji(codePoint)) {
+              widthExtra = WIDE_WIDTH;
+            } else {
+              widthExtra = REGULAR_WIDTH;
+            }
+            if (width + widthExtra > truncationLimit) {
+              truncationIndex = Math.min(truncationIndex, Math.max(unmatchedStart, indexPrev) + lengthExtra);
+            }
+            if (width + widthExtra > LIMIT) {
+              truncationEnabled = true;
+              break outer;
+            }
+            lengthExtra += char.length;
+            width += widthExtra;
+          }
+          unmatchedStart = unmatchedEnd = 0;
+        }
+        if (index >= length) {
+          break outer;
+        }
+        for (let i = 0, l = PARSE_BLOCKS.length; i < l; i++) {
+          const [BLOCK_RE, BLOCK_WIDTH] = PARSE_BLOCKS[i];
+          BLOCK_RE.lastIndex = index;
+          if (BLOCK_RE.test(input)) {
+            lengthExtra = BLOCK_RE === CJKT_WIDE_RE ? getCodePointsLength(input.slice(index, BLOCK_RE.lastIndex)) : BLOCK_RE === EMOJI_RE ? 1 : BLOCK_RE.lastIndex - index;
+            widthExtra = lengthExtra * BLOCK_WIDTH;
+            if (width + widthExtra > truncationLimit) {
+              truncationIndex = Math.min(truncationIndex, index + Math.floor((truncationLimit - width) / BLOCK_WIDTH));
+            }
+            if (width + widthExtra > LIMIT) {
+              truncationEnabled = true;
+              break outer;
+            }
+            width += widthExtra;
+            unmatchedStart = indexPrev;
+            unmatchedEnd = index;
+            index = indexPrev = BLOCK_RE.lastIndex;
+            continue outer;
+          }
+        }
+        index += 1;
+      }
+      return {
+        width: truncationEnabled ? truncationLimit : width,
+        index: truncationEnabled ? truncationIndex : length,
+        truncated: truncationEnabled,
+        ellipsed: truncationEnabled && LIMIT >= ELLIPSIS_WIDTH
+      };
+    };
+    dist_default = getStringTruncatedWidth;
+  }
+});
+
+// node_modules/fast-string-width/dist/index.js
+var NO_TRUNCATION2, fastStringWidth, dist_default2;
+var init_dist2 = __esm({
+  "node_modules/fast-string-width/dist/index.js"() {
+    init_dist();
+    NO_TRUNCATION2 = {
+      limit: Infinity,
+      ellipsis: "",
+      ellipsisWidth: 0
+    };
+    fastStringWidth = (input, options = {}) => {
+      return dist_default(input, NO_TRUNCATION2, options).width;
+    };
+    dist_default2 = fastStringWidth;
+  }
+});
+
+// node_modules/fast-wrap-ansi/lib/main.js
+function wrapAnsi(string, columns, options) {
+  return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
+}
+var ESC, CSI, END_CODE, ANSI_ESCAPE_BELL, ANSI_CSI, ANSI_OSC, ANSI_SGR_TERMINATOR, ANSI_ESCAPE_LINK, GROUP_REGEX, getClosingCode, wrapAnsiCode, wrapAnsiHyperlink, wrapWord, stringVisibleTrimSpacesRight, exec, CRLF_OR_LF;
+var init_main = __esm({
+  "node_modules/fast-wrap-ansi/lib/main.js"() {
+    init_dist2();
+    ESC = "\x1B";
+    CSI = "\x9B";
+    END_CODE = 39;
+    ANSI_ESCAPE_BELL = "\x07";
+    ANSI_CSI = "[";
+    ANSI_OSC = "]";
+    ANSI_SGR_TERMINATOR = "m";
+    ANSI_ESCAPE_LINK = `${ANSI_OSC}8;;`;
+    GROUP_REGEX = new RegExp(`(?:\\${ANSI_CSI}(?<code>\\d+)m|\\${ANSI_ESCAPE_LINK}(?<uri>.*)${ANSI_ESCAPE_BELL})`, "y");
+    getClosingCode = (openingCode) => {
+      if (openingCode >= 30 && openingCode <= 37)
+        return 39;
+      if (openingCode >= 90 && openingCode <= 97)
+        return 39;
+      if (openingCode >= 40 && openingCode <= 47)
+        return 49;
+      if (openingCode >= 100 && openingCode <= 107)
+        return 49;
+      if (openingCode === 1 || openingCode === 2)
+        return 22;
+      if (openingCode === 3)
+        return 23;
+      if (openingCode === 4)
+        return 24;
+      if (openingCode === 7)
+        return 27;
+      if (openingCode === 8)
+        return 28;
+      if (openingCode === 9)
+        return 29;
+      if (openingCode === 0)
+        return 0;
+      return void 0;
+    };
+    wrapAnsiCode = (code) => `${ESC}${ANSI_CSI}${code}${ANSI_SGR_TERMINATOR}`;
+    wrapAnsiHyperlink = (url) => `${ESC}${ANSI_ESCAPE_LINK}${url}${ANSI_ESCAPE_BELL}`;
+    wrapWord = (rows, word, columns) => {
+      const characters = word[Symbol.iterator]();
+      let isInsideEscape = false;
+      let isInsideLinkEscape = false;
+      let lastRow = rows.at(-1);
+      let visible = lastRow === void 0 ? 0 : dist_default2(lastRow);
+      let currentCharacter = characters.next();
+      let nextCharacter = characters.next();
+      let rawCharacterIndex = 0;
+      while (!currentCharacter.done) {
+        const character = currentCharacter.value;
+        const characterLength = dist_default2(character);
+        if (visible + characterLength <= columns) {
+          rows[rows.length - 1] += character;
+        } else {
+          rows.push(character);
+          visible = 0;
+        }
+        if (character === ESC || character === CSI) {
+          isInsideEscape = true;
+          isInsideLinkEscape = word.startsWith(ANSI_ESCAPE_LINK, rawCharacterIndex + 1);
+        }
+        if (isInsideEscape) {
+          if (isInsideLinkEscape) {
+            if (character === ANSI_ESCAPE_BELL) {
+              isInsideEscape = false;
+              isInsideLinkEscape = false;
+            }
+          } else if (character === ANSI_SGR_TERMINATOR) {
+            isInsideEscape = false;
+          }
+        } else {
+          visible += characterLength;
+          if (visible === columns && !nextCharacter.done) {
+            rows.push("");
+            visible = 0;
+          }
+        }
+        currentCharacter = nextCharacter;
+        nextCharacter = characters.next();
+        rawCharacterIndex += character.length;
+      }
+      lastRow = rows.at(-1);
+      if (!visible && lastRow !== void 0 && lastRow.length && rows.length > 1) {
+        rows[rows.length - 2] += rows.pop();
+      }
+    };
+    stringVisibleTrimSpacesRight = (string) => {
+      const words = string.split(" ");
+      let last = words.length;
+      while (last) {
+        if (dist_default2(words[last - 1])) {
+          break;
+        }
+        last--;
+      }
+      if (last === words.length) {
+        return string;
+      }
+      return words.slice(0, last).join(" ") + words.slice(last).join("");
+    };
+    exec = (string, columns, options = {}) => {
+      if (options.trim !== false && string.trim() === "") {
+        return "";
+      }
+      let returnValue = "";
+      let escapeCode;
+      let escapeUrl;
+      const words = string.split(" ");
+      let rows = [""];
+      let rowLength = 0;
+      for (let index = 0; index < words.length; index++) {
+        const word = words[index];
+        if (options.trim !== false) {
+          const row = rows.at(-1) ?? "";
+          const trimmed = row.trimStart();
+          if (row.length !== trimmed.length) {
+            rows[rows.length - 1] = trimmed;
+            rowLength = dist_default2(trimmed);
+          }
+        }
+        if (index !== 0) {
+          if (rowLength >= columns && (options.wordWrap === false || options.trim === false)) {
+            rows.push("");
+            rowLength = 0;
+          }
+          if (rowLength || options.trim === false) {
+            rows[rows.length - 1] += " ";
+            rowLength++;
+          }
+        }
+        const wordLength = dist_default2(word);
+        if (options.hard && wordLength > columns) {
+          const remainingColumns = columns - rowLength;
+          const breaksStartingThisLine = 1 + Math.floor((wordLength - remainingColumns - 1) / columns);
+          const breaksStartingNextLine = Math.floor((wordLength - 1) / columns);
+          if (breaksStartingNextLine < breaksStartingThisLine) {
+            rows.push("");
+          }
+          wrapWord(rows, word, columns);
+          rowLength = dist_default2(rows.at(-1) ?? "");
+          continue;
+        }
+        if (rowLength + wordLength > columns && rowLength && wordLength) {
+          if (options.wordWrap === false && rowLength < columns) {
+            wrapWord(rows, word, columns);
+            rowLength = dist_default2(rows.at(-1) ?? "");
+            continue;
+          }
+          rows.push("");
+          rowLength = 0;
+        }
+        if (rowLength + wordLength > columns && options.wordWrap === false) {
+          wrapWord(rows, word, columns);
+          rowLength = dist_default2(rows.at(-1) ?? "");
+          continue;
+        }
+        rows[rows.length - 1] += word;
+        rowLength += wordLength;
+      }
+      if (options.trim !== false) {
+        rows = rows.map((row) => stringVisibleTrimSpacesRight(row));
+      }
+      const preString = rows.join("\n");
+      let inSurrogate = false;
+      for (let i = 0; i < preString.length; i++) {
+        const character = preString[i];
+        returnValue += character;
+        if (!inSurrogate) {
+          inSurrogate = character >= "\uD800" && character <= "\uDBFF";
+          if (inSurrogate) {
+            continue;
+          }
+        } else {
+          inSurrogate = false;
+        }
+        if (character === ESC || character === CSI) {
+          GROUP_REGEX.lastIndex = i + 1;
+          const groupsResult = GROUP_REGEX.exec(preString);
+          const groups = groupsResult?.groups;
+          if (groups?.code !== void 0) {
+            const code = Number.parseFloat(groups.code);
+            escapeCode = code === END_CODE ? void 0 : code;
+          } else if (groups?.uri !== void 0) {
+            escapeUrl = groups.uri.length === 0 ? void 0 : groups.uri;
+          }
+        }
+        if (preString[i + 1] === "\n") {
+          if (escapeUrl) {
+            returnValue += wrapAnsiHyperlink("");
+          }
+          const closingCode = escapeCode ? getClosingCode(escapeCode) : void 0;
+          if (escapeCode && closingCode) {
+            returnValue += wrapAnsiCode(closingCode);
+          }
+        } else if (character === "\n") {
+          if (escapeCode && getClosingCode(escapeCode)) {
+            returnValue += wrapAnsiCode(escapeCode);
+          }
+          if (escapeUrl) {
+            returnValue += wrapAnsiHyperlink(escapeUrl);
+          }
+        }
+      }
+      return returnValue;
+    };
+    CRLF_OR_LF = /\r?\n/;
   }
 });
 
@@ -3514,12 +3880,5084 @@ var require_src = __commonJS({
   }
 });
 
-// src/hclaw/cli.ts
+// node_modules/@clack/core/dist/index.mjs
+import { styleText as v } from "node:util";
+import { stdout as x, stdin as D } from "node:process";
+import * as b from "node:readline";
+import E from "node:readline";
+import { ReadStream as O } from "node:tty";
+function f(r, t, s) {
+  if (!s.some((o) => !o.disabled)) return r;
+  const e2 = r + t, i = Math.max(s.length - 1, 0), n = e2 < 0 ? i : e2 > i ? 0 : e2;
+  return s[n].disabled ? f(n, t < 0 ? -1 : 1, s) : n;
+}
+function I(r, t, s, e2) {
+  const i = e2.split(`
+`);
+  let n = 0, o = r;
+  for (const a of i) {
+    if (o <= a.length) break;
+    o -= a.length + 1, n++;
+  }
+  for (n = Math.max(0, Math.min(i.length - 1, n + s)), o = Math.min(o, i[n].length) + t; o < 0 && n > 0; ) n--, o += i[n].length + 1;
+  for (; o > i[n].length && n < i.length - 1; ) o -= i[n].length + 1, n++;
+  o = Math.max(0, Math.min(i[n].length, o));
+  let u = 0;
+  for (let a = 0; a < n; a++) u += i[a].length + 1;
+  return u + o;
+}
+function j(r) {
+  if (r.aliases !== void 0) {
+    const t = r.aliases;
+    for (const s in t) {
+      if (!Object.hasOwn(t, s)) continue;
+      const e2 = t[s];
+      h.actions.has(e2) && (h.aliases.has(s) || h.aliases.set(s, e2));
+    }
+  }
+  if (r.messages !== void 0) {
+    const t = r.messages;
+    t.cancel !== void 0 && (h.messages.cancel = t.cancel), t.error !== void 0 && (h.messages.error = t.error);
+  }
+  if (r.withGuide !== void 0 && (h.withGuide = r.withGuide !== false), r.date !== void 0) {
+    const t = r.date;
+    t.monthNames !== void 0 && (h.date.monthNames = [...t.monthNames]), t.messages !== void 0 && (t.messages.required !== void 0 && (h.date.messages.required = t.messages.required), t.messages.invalidMonth !== void 0 && (h.date.messages.invalidMonth = t.messages.invalidMonth), t.messages.invalidDay !== void 0 && (h.date.messages.invalidDay = t.messages.invalidDay), t.messages.afterMin !== void 0 && (h.date.messages.afterMin = t.messages.afterMin), t.messages.beforeMax !== void 0 && (h.date.messages.beforeMax = t.messages.beforeMax));
+  }
+}
+function C(r, t) {
+  if (typeof r == "string") return h.aliases.get(r) === t;
+  for (const s of r) if (s !== void 0 && C(s, t)) return true;
+  return false;
+}
+function z(r, t) {
+  if (r === t) return;
+  const s = r.split(`
+`), e2 = t.split(`
+`), i = Math.max(s.length, e2.length), n = [];
+  for (let o = 0; o < i; o++) s[o] !== e2[o] && n.push(o);
+  return { lines: n, numLinesBefore: s.length, numLinesAfter: e2.length, numLines: i };
+}
+function q(r) {
+  return r === k;
+}
+function w(r, t) {
+  const s = r;
+  s.isTTY && s.setRawMode(t);
+}
+function R({ input: r = D, output: t = x, overwrite: s = true, hideCursor: e2 = true } = {}) {
+  const i = b.createInterface({ input: r, output: t, prompt: "", tabSize: 1 });
+  b.emitKeypressEvents(r, i), r instanceof O && r.isTTY && r.setRawMode(true);
+  const n = (o, { name: u, sequence: a }) => {
+    const l = String(o);
+    if (C([l, u, a], "cancel")) {
+      e2 && t.write(import_sisteransi.cursor.show), process.exit(0);
+      return;
+    }
+    if (!s) return;
+    const c = u === "return" ? 0 : -1, y = u === "return" ? -1 : 0;
+    b.moveCursor(t, c, y, () => {
+      b.clearLine(t, 1, () => {
+        r.once("keypress", n);
+      });
+    });
+  };
+  return e2 && t.write(import_sisteransi.cursor.hide), r.once("keypress", n), () => {
+    r.off("keypress", n), e2 && t.write(import_sisteransi.cursor.show), r instanceof O && r.isTTY && !Y && r.setRawMode(false), i.terminal = false, i.close();
+  };
+}
+function W(r, t, s, e2 = s, i = s, n) {
+  const o = A(r ?? x);
+  return wrapAnsi(t, o - s.length, { hard: true, trim: false }).split(`
+`).map((u, a, l) => {
+    const c = n ? n(u, a) : u;
+    return a === 0 ? `${e2}${c}` : a === l.length - 1 ? `${i}${c}` : `${s}${c}`;
+  }).join(`
+`);
+}
+function B(r, t) {
+  if (r === void 0 || t.length === 0) return 0;
+  const s = t.findIndex((e2) => e2.value === r);
+  return s !== -1 ? s : 0;
+}
+function J(r, t) {
+  return (t.label ?? String(t.value)).toLowerCase().includes(r.toLowerCase());
+}
+function H(r, t) {
+  if (t) return r ? t : t[0];
+}
+function P(r) {
+  return [...r].map((t) => Z[t]);
+}
+function tt(r) {
+  const t = new Intl.DateTimeFormat(r, { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(2e3, 0, 15)), s = [];
+  let e2 = "/";
+  for (const i of t) i.type === "literal" ? e2 = i.value.trim() || i.value : (i.type === "year" || i.type === "month" || i.type === "day") && s.push({ type: i.type, len: i.type === "year" ? 4 : 2 });
+  return { segments: s, separator: e2 };
+}
+function $(r) {
+  return Number.parseInt((r || "0").replace(/_/g, "0"), 10) || 0;
+}
+function S(r) {
+  return { year: $(r.year), month: $(r.month), day: $(r.day) };
+}
+function U(r, t) {
+  return new Date(r || 2001, t || 1, 0).getDate();
+}
+function F(r) {
+  const { year: t, month: s, day: e2 } = S(r);
+  if (!t || t < 0 || t > 9999 || !s || s < 1 || s > 12 || !e2 || e2 < 1) return;
+  const i = new Date(Date.UTC(t, s - 1, e2));
+  if (!(i.getUTCFullYear() !== t || i.getUTCMonth() !== s - 1 || i.getUTCDate() !== e2)) return { year: t, month: s, day: e2 };
+}
+function N(r) {
+  const t = F(r);
+  return t ? new Date(Date.UTC(t.year, t.month - 1, t.day)) : void 0;
+}
+function st(r, t, s, e2) {
+  const i = s ? { year: s.getUTCFullYear(), month: s.getUTCMonth() + 1, day: s.getUTCDate() } : null, n = e2 ? { year: e2.getUTCFullYear(), month: e2.getUTCMonth() + 1, day: e2.getUTCDate() } : null;
+  return r === "year" ? { min: i?.year ?? 1, max: n?.year ?? 9999 } : r === "month" ? { min: i && t.year === i.year ? i.month : 1, max: n && t.year === n.year ? n.month : 12 } : { min: i && t.year === i.year && t.month === i.month ? i.day : 1, max: n && t.year === n.year && t.month === n.month ? n.day : U(t.year, t.month) };
+}
+var import_sisteransi, G, K, h, Y, k, A, L, m, Q, X, Z, et, it, rt, nt, ot, ut, at, ht;
+var init_dist3 = __esm({
+  "node_modules/@clack/core/dist/index.mjs"() {
+    init_main();
+    import_sisteransi = __toESM(require_src(), 1);
+    G = ["up", "down", "left", "right", "space", "enter", "cancel"];
+    K = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    h = { actions: new Set(G), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]), messages: { cancel: "Canceled", error: "Something went wrong" }, withGuide: true, date: { monthNames: [...K], messages: { required: "Please enter a valid date", invalidMonth: "There are only 12 months in a year", invalidDay: (r, t) => `There are only ${r} days in ${t}`, afterMin: (r) => `Date must be on or after ${r.toISOString().slice(0, 10)}`, beforeMax: (r) => `Date must be on or before ${r.toISOString().slice(0, 10)}` } } };
+    Y = globalThis.process.platform.startsWith("win");
+    k = Symbol("clack:cancel");
+    A = (r) => "columns" in r && typeof r.columns == "number" ? r.columns : 80;
+    L = (r) => "rows" in r && typeof r.rows == "number" ? r.rows : 20;
+    m = class {
+      input;
+      output;
+      _abortSignal;
+      rl;
+      opts;
+      _render;
+      _track = false;
+      _prevFrame = "";
+      _subscribers = /* @__PURE__ */ new Map();
+      _cursor = 0;
+      state = "initial";
+      error = "";
+      value;
+      userInput = "";
+      constructor(t, s = true) {
+        const { input: e2 = D, output: i = x, render: n, signal: o, ...u } = t;
+        this.opts = u, this.onKeypress = this.onKeypress.bind(this), this.close = this.close.bind(this), this.render = this.render.bind(this), this._render = n.bind(this), this._track = s, this._abortSignal = o, this.input = e2, this.output = i;
+      }
+      unsubscribe() {
+        this._subscribers.clear();
+      }
+      setSubscriber(t, s) {
+        const e2 = this._subscribers.get(t) ?? [];
+        e2.push(s), this._subscribers.set(t, e2);
+      }
+      on(t, s) {
+        this.setSubscriber(t, { cb: s });
+      }
+      once(t, s) {
+        this.setSubscriber(t, { cb: s, once: true });
+      }
+      emit(t, ...s) {
+        const e2 = this._subscribers.get(t) ?? [], i = [];
+        for (const n of e2) n.cb(...s), n.once && i.push(() => e2.splice(e2.indexOf(n), 1));
+        for (const n of i) n();
+      }
+      prompt() {
+        return new Promise((t) => {
+          if (this._abortSignal) {
+            if (this._abortSignal.aborted) return this.state = "cancel", this.close(), t(k);
+            this._abortSignal.addEventListener("abort", () => {
+              this.state = "cancel", this.close();
+            }, { once: true });
+          }
+          this.rl = E.createInterface({ input: this.input, tabSize: 2, prompt: "", escapeCodeTimeout: 50, terminal: true }), this.rl.prompt(), this.opts.initialUserInput !== void 0 && this._setUserInput(this.opts.initialUserInput, true), this.input.on("keypress", this.onKeypress), w(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
+            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), w(this.input, false), t(this.value);
+          }), this.once("cancel", () => {
+            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), w(this.input, false), t(k);
+          });
+        });
+      }
+      _isActionKey(t, s) {
+        return t === "	";
+      }
+      _shouldSubmit(t, s) {
+        return true;
+      }
+      _setValue(t) {
+        this.value = t, this.emit("value", this.value);
+      }
+      _setUserInput(t, s) {
+        this.userInput = t ?? "", this.emit("userInput", this.userInput), s && this._track && this.rl && (this.rl.write(this.userInput), this._cursor = this.rl.cursor);
+      }
+      _clearUserInput() {
+        this.rl?.write(null, { ctrl: true, name: "u" }), this._setUserInput("");
+      }
+      onKeypress(t, s) {
+        if (this._track && s.name !== "return" && (s.name && this._isActionKey(t, s) && this.rl?.write(null, { ctrl: true, name: "h" }), this._cursor = this.rl?.cursor ?? 0, this._setUserInput(this.rl?.line)), this.state === "error" && (this.state = "active"), s?.name && (!this._track && h.aliases.has(s.name) && this.emit("cursor", h.aliases.get(s.name)), h.actions.has(s.name) && this.emit("cursor", s.name)), t && (t.toLowerCase() === "y" || t.toLowerCase() === "n") && this.emit("confirm", t.toLowerCase() === "y"), this.emit("key", t?.toLowerCase(), s), s?.name === "return" && this._shouldSubmit(t, s)) {
+          if (this.opts.validate) {
+            const e2 = this.opts.validate(this.value);
+            e2 && (this.error = e2 instanceof Error ? e2.message : e2, this.state = "error", this.rl?.write(this.userInput));
+          }
+          this.state !== "error" && (this.state = "submit");
+        }
+        C([t, s?.name, s?.sequence], "cancel") && (this.state = "cancel"), (this.state === "submit" || this.state === "cancel") && this.emit("finalize"), this.render(), (this.state === "submit" || this.state === "cancel") && this.close();
+      }
+      close() {
+        this.input.unpipe(), this.input.removeListener("keypress", this.onKeypress), this.output.write(`
+`), w(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
+      }
+      restoreCursor() {
+        const t = wrapAnsi(this._prevFrame, process.stdout.columns, { hard: true, trim: false }).split(`
+`).length - 1;
+        this.output.write(import_sisteransi.cursor.move(-999, t * -1));
+      }
+      render() {
+        const t = wrapAnsi(this._render(this) ?? "", process.stdout.columns, { hard: true, trim: false });
+        if (t !== this._prevFrame) {
+          if (this.state === "initial") this.output.write(import_sisteransi.cursor.hide);
+          else {
+            const s = z(this._prevFrame, t), e2 = L(this.output);
+            if (this.restoreCursor(), s) {
+              const i = Math.max(0, s.numLinesAfter - e2), n = Math.max(0, s.numLinesBefore - e2);
+              let o = s.lines.find((u) => u >= i);
+              if (o === void 0) {
+                this._prevFrame = t;
+                return;
+              }
+              if (s.lines.length === 1) {
+                this.output.write(import_sisteransi.cursor.move(0, o - n)), this.output.write(import_sisteransi.erase.lines(1));
+                const u = t.split(`
+`);
+                this.output.write(u[o]), this._prevFrame = t, this.output.write(import_sisteransi.cursor.move(0, u.length - o - 1));
+                return;
+              } else if (s.lines.length > 1) {
+                if (i < n) o = i;
+                else {
+                  const a = o - n;
+                  a > 0 && this.output.write(import_sisteransi.cursor.move(0, a));
+                }
+                this.output.write(import_sisteransi.erase.down());
+                const u = t.split(`
+`).slice(o);
+                this.output.write(u.join(`
+`)), this._prevFrame = t;
+                return;
+              }
+            }
+            this.output.write(import_sisteransi.erase.down());
+          }
+          this.output.write(t), this.state === "initial" && (this.state = "active"), this._prevFrame = t;
+        }
+      }
+    };
+    Q = class extends m {
+      filteredOptions;
+      multiple;
+      isNavigating = false;
+      selectedValues = [];
+      focusedValue;
+      #s = 0;
+      #r = "";
+      #t;
+      #n;
+      #u;
+      get cursor() {
+        return this.#s;
+      }
+      get userInputWithCursor() {
+        if (!this.userInput) return v(["inverse", "hidden"], "_");
+        if (this._cursor >= this.userInput.length) return `${this.userInput}\u2588`;
+        const t = this.userInput.slice(0, this._cursor), [s, ...e2] = this.userInput.slice(this._cursor);
+        return `${t}${v("inverse", s)}${e2.join("")}`;
+      }
+      get options() {
+        return typeof this.#n == "function" ? this.#n() : this.#n;
+      }
+      constructor(t) {
+        super(t), this.#n = t.options, this.#u = t.placeholder;
+        const s = this.options;
+        this.filteredOptions = [...s], this.multiple = t.multiple === true, this.#t = typeof t.options == "function" ? t.filter : t.filter ?? J;
+        let e2;
+        if (t.initialValue && Array.isArray(t.initialValue) ? this.multiple ? e2 = t.initialValue : e2 = t.initialValue.slice(0, 1) : !this.multiple && this.options.length > 0 && (e2 = [this.options[0].value]), e2) for (const i of e2) {
+          const n = s.findIndex((o) => o.value === i);
+          n !== -1 && (this.toggleSelected(i), this.#s = n);
+        }
+        this.focusedValue = this.options[this.#s]?.value, this.on("key", (i, n) => this.#e(i, n)), this.on("userInput", (i) => this.#i(i));
+      }
+      _isActionKey(t, s) {
+        return t === "	" || this.multiple && this.isNavigating && s.name === "space" && t !== void 0 && t !== "";
+      }
+      #e(t, s) {
+        const e2 = s.name === "up", i = s.name === "down", n = s.name === "return", o = this.userInput === "" || this.userInput === "	", u = this.#u, a = this.options, l = u !== void 0 && u !== "" && a.some((c) => !c.disabled && (this.#t ? this.#t(u, c) : true));
+        if (s.name === "tab" && o && l) {
+          this.userInput === "	" && this._clearUserInput(), this._setUserInput(u, true), this.isNavigating = false;
+          return;
+        }
+        e2 || i ? (this.#s = f(this.#s, e2 ? -1 : 1, this.filteredOptions), this.focusedValue = this.filteredOptions[this.#s]?.value, this.multiple || (this.selectedValues = [this.focusedValue]), this.isNavigating = true) : n ? this.value = H(this.multiple, this.selectedValues) : this.multiple ? this.focusedValue !== void 0 && (s.name === "tab" || this.isNavigating && s.name === "space") ? this.toggleSelected(this.focusedValue) : this.isNavigating = false : (this.focusedValue && (this.selectedValues = [this.focusedValue]), this.isNavigating = false);
+      }
+      deselectAll() {
+        this.selectedValues = [];
+      }
+      toggleSelected(t) {
+        this.filteredOptions.length !== 0 && (this.multiple ? this.selectedValues.includes(t) ? this.selectedValues = this.selectedValues.filter((s) => s !== t) : this.selectedValues = [...this.selectedValues, t] : this.selectedValues = [t]);
+      }
+      #i(t) {
+        if (t !== this.#r) {
+          this.#r = t;
+          const s = this.options;
+          t && this.#t ? this.filteredOptions = s.filter((n) => this.#t?.(t, n)) : this.filteredOptions = [...s];
+          const e2 = B(this.focusedValue, this.filteredOptions);
+          this.#s = f(e2, 0, this.filteredOptions);
+          const i = this.filteredOptions[this.#s];
+          i && !i.disabled ? this.focusedValue = i.value : this.focusedValue = void 0, this.multiple || (this.focusedValue !== void 0 ? this.toggleSelected(this.focusedValue) : this.deselectAll());
+        }
+      }
+    };
+    X = class extends m {
+      get cursor() {
+        return this.value ? 0 : 1;
+      }
+      get _value() {
+        return this.cursor === 0;
+      }
+      constructor(t) {
+        super(t, false), this.value = !!t.initialValue, this.on("userInput", () => {
+          this.value = this._value;
+        }), this.on("confirm", (s) => {
+          this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = s, this.state = "submit", this.close();
+        }), this.on("cursor", () => {
+          this.value = !this.value;
+        });
+      }
+    };
+    Z = { Y: { type: "year", len: 4 }, M: { type: "month", len: 2 }, D: { type: "day", len: 2 } };
+    et = class extends m {
+      #s;
+      #r;
+      #t;
+      #n;
+      #u;
+      #e = { segmentIndex: 0, positionInSegment: 0 };
+      #i = true;
+      #o = null;
+      inlineError = "";
+      get segmentCursor() {
+        return { ...this.#e };
+      }
+      get segmentValues() {
+        return { ...this.#t };
+      }
+      get segments() {
+        return this.#s;
+      }
+      get separator() {
+        return this.#r;
+      }
+      get formattedValue() {
+        return this.#c(this.#t);
+      }
+      #c(t) {
+        return this.#s.map((s) => t[s.type]).join(this.#r);
+      }
+      #a() {
+        this._setUserInput(this.#c(this.#t)), this._setValue(N(this.#t) ?? void 0);
+      }
+      constructor(t) {
+        const s = t.format ? { segments: P(t.format), separator: t.separator ?? "/" } : tt(t.locale), e2 = t.separator ?? s.separator, i = t.format ? P(t.format) : s.segments, n = t.initialValue ?? t.defaultValue, o = n ? { year: String(n.getUTCFullYear()).padStart(4, "0"), month: String(n.getUTCMonth() + 1).padStart(2, "0"), day: String(n.getUTCDate()).padStart(2, "0") } : { year: "____", month: "__", day: "__" }, u = i.map((a) => o[a.type]).join(e2);
+        super({ ...t, initialUserInput: u }, false), this.#s = i, this.#r = e2, this.#t = o, this.#n = t.minDate, this.#u = t.maxDate, this.#a(), this.on("cursor", (a) => this.#d(a)), this.on("key", (a, l) => this.#f(a, l)), this.on("finalize", () => this.#g(t));
+      }
+      #h() {
+        const t = Math.max(0, Math.min(this.#e.segmentIndex, this.#s.length - 1)), s = this.#s[t];
+        if (s) return this.#e.positionInSegment = Math.max(0, Math.min(this.#e.positionInSegment, s.len - 1)), { segment: s, index: t };
+      }
+      #l(t) {
+        this.inlineError = "", this.#o = null;
+        const s = this.#h();
+        s && (this.#e.segmentIndex = Math.max(0, Math.min(this.#s.length - 1, s.index + t)), this.#e.positionInSegment = 0, this.#i = true);
+      }
+      #p(t) {
+        const s = this.#h();
+        if (!s) return;
+        const { segment: e2 } = s, i = this.#t[e2.type], n = !i || i.replace(/_/g, "") === "", o = Number.parseInt((i || "0").replace(/_/g, "0"), 10) || 0, u = st(e2.type, S(this.#t), this.#n, this.#u);
+        let a;
+        n ? a = t === 1 ? u.min : u.max : a = Math.max(Math.min(u.max, o + t), u.min), this.#t = { ...this.#t, [e2.type]: a.toString().padStart(e2.len, "0") }, this.#i = true, this.#o = null, this.#a();
+      }
+      #d(t) {
+        if (t) switch (t) {
+          case "right":
+            return this.#l(1);
+          case "left":
+            return this.#l(-1);
+          case "up":
+            return this.#p(1);
+          case "down":
+            return this.#p(-1);
+        }
+      }
+      #f(t, s) {
+        if (s?.name === "backspace" || s?.sequence === "\x7F" || s?.sequence === "\b" || t === "\x7F" || t === "\b") {
+          this.inlineError = "";
+          const e2 = this.#h();
+          if (!e2) return;
+          if (!this.#t[e2.segment.type].replace(/_/g, "")) {
+            this.#l(-1);
+            return;
+          }
+          this.#t[e2.segment.type] = "_".repeat(e2.segment.len), this.#i = true, this.#e.positionInSegment = 0, this.#a();
+          return;
+        }
+        if (s?.name === "tab") {
+          this.inlineError = "";
+          const e2 = this.#h();
+          if (!e2) return;
+          const i = s.shift ? -1 : 1, n = e2.index + i;
+          n >= 0 && n < this.#s.length && (this.#e.segmentIndex = n, this.#e.positionInSegment = 0, this.#i = true);
+          return;
+        }
+        if (t && /^[0-9]$/.test(t)) {
+          const e2 = this.#h();
+          if (!e2) return;
+          const { segment: i } = e2, n = !this.#t[i.type].replace(/_/g, "");
+          if (this.#i && this.#o !== null && !n) {
+            const d = this.#o + t, g = { ...this.#t, [i.type]: d }, _ = this.#m(g, i);
+            if (_) {
+              this.inlineError = _, this.#o = null, this.#i = false;
+              return;
+            }
+            this.inlineError = "", this.#t[i.type] = d, this.#o = null, this.#i = false, this.#a(), e2.index < this.#s.length - 1 && (this.#e.segmentIndex = e2.index + 1, this.#e.positionInSegment = 0, this.#i = true);
+            return;
+          }
+          this.#i && !n && (this.#t[i.type] = "_".repeat(i.len), this.#e.positionInSegment = 0), this.#i = false, this.#o = null;
+          const o = this.#t[i.type], u = o.indexOf("_"), a = u >= 0 ? u : Math.min(this.#e.positionInSegment, i.len - 1);
+          if (a < 0 || a >= i.len) return;
+          let l = o.slice(0, a) + t + o.slice(a + 1), c = false;
+          if (a === 0 && o === "__" && (i.type === "month" || i.type === "day")) {
+            const d = Number.parseInt(t, 10);
+            l = `0${t}`, c = d <= (i.type === "month" ? 1 : 2);
+          }
+          if (i.type === "year" && (l = (o.replace(/_/g, "") + t).padStart(i.len, "_")), !l.includes("_")) {
+            const d = { ...this.#t, [i.type]: l }, g = this.#m(d, i);
+            if (g) {
+              this.inlineError = g;
+              return;
+            }
+          }
+          this.inlineError = "", this.#t[i.type] = l;
+          const y = l.includes("_") ? void 0 : F(this.#t);
+          if (y) {
+            const { year: d, month: g } = y, _ = U(d, g);
+            this.#t = { year: String(Math.max(0, Math.min(9999, d))).padStart(4, "0"), month: String(Math.max(1, Math.min(12, g))).padStart(2, "0"), day: String(Math.max(1, Math.min(_, y.day))).padStart(2, "0") };
+          }
+          this.#a();
+          const T = l.indexOf("_");
+          c ? (this.#i = true, this.#o = t) : T >= 0 ? this.#e.positionInSegment = T : u >= 0 && e2.index < this.#s.length - 1 ? (this.#e.segmentIndex = e2.index + 1, this.#e.positionInSegment = 0, this.#i = true) : this.#e.positionInSegment = Math.min(a + 1, i.len - 1);
+        }
+      }
+      #m(t, s) {
+        const { month: e2, day: i } = S(t);
+        if (s.type === "month" && (e2 < 0 || e2 > 12)) return h.date.messages.invalidMonth;
+        if (s.type === "day" && (i < 0 || i > 31)) return h.date.messages.invalidDay(31, "any month");
+      }
+      #g(t) {
+        const { year: s, month: e2, day: i } = S(this.#t);
+        if (s && e2 && i) {
+          const n = U(s, e2);
+          this.#t = { ...this.#t, day: String(Math.min(i, n)).padStart(2, "0") };
+        }
+        this.value = N(this.#t) ?? t.defaultValue ?? void 0;
+      }
+    };
+    it = class extends m {
+      options;
+      cursor = 0;
+      #s;
+      getGroupItems(t) {
+        return this.options.filter((s) => s.group === t);
+      }
+      isGroupSelected(t) {
+        const s = this.getGroupItems(t), e2 = this.value;
+        return e2 === void 0 ? false : s.every((i) => e2.includes(i.value));
+      }
+      toggleValue() {
+        const t = this.options[this.cursor];
+        if (this.value === void 0 && (this.value = []), t.group === true) {
+          const s = t.value, e2 = this.getGroupItems(s);
+          this.isGroupSelected(s) ? this.value = this.value.filter((i) => e2.findIndex((n) => n.value === i) === -1) : this.value = [...this.value, ...e2.map((i) => i.value)], this.value = Array.from(new Set(this.value));
+        } else {
+          const s = this.value.includes(t.value);
+          this.value = s ? this.value.filter((e2) => e2 !== t.value) : [...this.value, t.value];
+        }
+      }
+      constructor(t) {
+        super(t, false);
+        const { options: s } = t;
+        this.#s = t.selectableGroups !== false, this.options = Object.entries(s).flatMap(([e2, i]) => [{ value: e2, group: true, label: e2 }, ...i.map((n) => ({ ...n, group: e2 }))]), this.value = [...t.initialValues ?? []], this.cursor = Math.max(this.options.findIndex(({ value: e2 }) => e2 === t.cursorAt), this.#s ? 0 : 1), this.on("cursor", (e2) => {
+          switch (e2) {
+            case "left":
+            case "up": {
+              this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
+              const i = this.options[this.cursor]?.group === true;
+              !this.#s && i && (this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1);
+              break;
+            }
+            case "down":
+            case "right": {
+              this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
+              const i = this.options[this.cursor]?.group === true;
+              !this.#s && i && (this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1);
+              break;
+            }
+            case "space":
+              this.toggleValue();
+              break;
+          }
+        });
+      }
+    };
+    rt = class extends m {
+      #s = false;
+      #r;
+      focused = "editor";
+      get userInputWithCursor() {
+        if (this.state === "submit") return this.userInput;
+        const t = this.userInput;
+        if (this.cursor >= t.length) return `${t}\u2588`;
+        const s = t.slice(0, this.cursor), e2 = t[this.cursor], i = t.slice(this.cursor + 1);
+        return e2 === `
+` ? `${s}\u2588
+${i}` : `${s}${v("inverse", e2)}${i}`;
+      }
+      get cursor() {
+        return this._cursor;
+      }
+      #t(t) {
+        if (this.userInput.length === 0) {
+          this._setUserInput(t);
+          return;
+        }
+        this._setUserInput(this.userInput.slice(0, this.cursor) + t + this.userInput.slice(this.cursor));
+      }
+      #n(t) {
+        const s = this.value ?? "";
+        switch (t) {
+          case "up":
+            this._cursor = I(this._cursor, 0, -1, s);
+            return;
+          case "down":
+            this._cursor = I(this._cursor, 0, 1, s);
+            return;
+          case "left":
+            this._cursor = I(this._cursor, -1, 0, s);
+            return;
+          case "right":
+            this._cursor = I(this._cursor, 1, 0, s);
+            return;
+        }
+      }
+      _shouldSubmit(t, s) {
+        if (this.#r) return this.focused === "submit" ? true : (this.#t(`
+`), this._cursor++, false);
+        const e2 = this.#s;
+        return this.#s = true, e2 ? (this.userInput[this.cursor - 1] === `
+` && (this._setUserInput(this.userInput.slice(0, this.cursor - 1) + this.userInput.slice(this.cursor)), this._cursor--), true) : (this.#t(`
+`), this._cursor++, false);
+      }
+      constructor(t) {
+        super(t, false), this.#r = t.showSubmit ?? false, this.on("key", (s, e2) => {
+          if (e2?.name && h.actions.has(e2.name)) {
+            this.#n(e2.name);
+            return;
+          }
+          if (s === "	" && this.#r) {
+            this.focused = this.focused === "editor" ? "submit" : "editor";
+            return;
+          }
+          if (e2?.name !== "return") {
+            if (this.#s = false, e2?.name === "backspace" && this.cursor > 0) {
+              this._setUserInput(this.userInput.slice(0, this.cursor - 1) + this.userInput.slice(this.cursor)), this._cursor--;
+              return;
+            }
+            if (e2?.name === "delete" && this.cursor < this.userInput.length) {
+              this._setUserInput(this.userInput.slice(0, this.cursor) + this.userInput.slice(this.cursor + 1));
+              return;
+            }
+            s && (this.#r && this.focused === "submit" && (this.focused = "editor"), this.#t(s ?? ""), this._cursor++);
+          }
+        }), this.on("userInput", (s) => {
+          this._setValue(s);
+        }), this.on("finalize", () => {
+          this.value || (this.value = t.defaultValue), this.value === void 0 && (this.value = "");
+        });
+      }
+    };
+    nt = class extends m {
+      options;
+      cursor = 0;
+      get _value() {
+        return this.options[this.cursor].value;
+      }
+      get _enabledOptions() {
+        return this.options.filter((t) => t.disabled !== true);
+      }
+      toggleAll() {
+        const t = this._enabledOptions, s = this.value !== void 0 && this.value.length === t.length;
+        this.value = s ? [] : t.map((e2) => e2.value);
+      }
+      toggleInvert() {
+        const t = this.value;
+        if (!t) return;
+        const s = this._enabledOptions.filter((e2) => !t.includes(e2.value));
+        this.value = s.map((e2) => e2.value);
+      }
+      toggleValue() {
+        this.value === void 0 && (this.value = []);
+        const t = this.value.includes(this._value);
+        this.value = t ? this.value.filter((s) => s !== this._value) : [...this.value, this._value];
+      }
+      constructor(t) {
+        super(t, false), this.options = t.options, this.value = [...t.initialValues ?? []];
+        const s = Math.max(this.options.findIndex(({ value: e2 }) => e2 === t.cursorAt), 0);
+        this.cursor = this.options[s].disabled ? f(s, 1, this.options) : s, this.on("key", (e2) => {
+          e2 === "a" && this.toggleAll(), e2 === "i" && this.toggleInvert();
+        }), this.on("cursor", (e2) => {
+          switch (e2) {
+            case "left":
+            case "up":
+              this.cursor = f(this.cursor, -1, this.options);
+              break;
+            case "down":
+            case "right":
+              this.cursor = f(this.cursor, 1, this.options);
+              break;
+            case "space":
+              this.toggleValue();
+              break;
+          }
+        });
+      }
+    };
+    ot = class extends m {
+      _mask = "\u2022";
+      get cursor() {
+        return this._cursor;
+      }
+      get masked() {
+        return this.userInput.replaceAll(/./g, this._mask);
+      }
+      get userInputWithCursor() {
+        if (this.state === "submit" || this.state === "cancel") return this.masked;
+        const t = this.userInput;
+        if (this.cursor >= t.length) return `${this.masked}${v(["inverse", "hidden"], "_")}`;
+        const s = this.masked, e2 = s.slice(0, this.cursor), i = s.slice(this.cursor);
+        return `${e2}${v("inverse", i[0])}${i.slice(1)}`;
+      }
+      clear() {
+        this._clearUserInput();
+      }
+      constructor({ mask: t, ...s }) {
+        super(s), this._mask = t ?? "\u2022", this.on("userInput", (e2) => {
+          this._setValue(e2);
+        });
+      }
+    };
+    ut = class extends m {
+      options;
+      cursor = 0;
+      get _selectedValue() {
+        return this.options[this.cursor];
+      }
+      changeValue() {
+        this.value = this._selectedValue.value;
+      }
+      constructor(t) {
+        super(t, false), this.options = t.options;
+        const s = this.options.findIndex(({ value: i }) => i === t.initialValue), e2 = s === -1 ? 0 : s;
+        this.cursor = this.options[e2].disabled ? f(e2, 1, this.options) : e2, this.changeValue(), this.on("cursor", (i) => {
+          switch (i) {
+            case "left":
+            case "up":
+              this.cursor = f(this.cursor, -1, this.options);
+              break;
+            case "down":
+            case "right":
+              this.cursor = f(this.cursor, 1, this.options);
+              break;
+          }
+          this.changeValue();
+        });
+      }
+    };
+    at = class extends m {
+      options;
+      cursor = 0;
+      constructor(t) {
+        super(t, false), this.options = t.options;
+        const s = t.caseSensitive === true, e2 = this.options.map(({ value: [i] }) => s ? i : i?.toLowerCase());
+        this.cursor = Math.max(e2.indexOf(t.initialValue), 0), this.on("key", (i, n) => {
+          if (!i) return;
+          const o = s && n.shift ? i.toUpperCase() : i;
+          if (!e2.includes(o)) return;
+          const u = this.options.find(({ value: [a] }) => s ? a === o : a?.toLowerCase() === i);
+          u && (this.value = u.value, this.state = "submit", this.emit("submit"));
+        });
+      }
+    };
+    ht = class extends m {
+      get userInputWithCursor() {
+        if (this.state === "submit") return this.userInput;
+        const t = this.userInput;
+        if (this.cursor >= t.length) return `${this.userInput}\u2588`;
+        const s = t.slice(0, this.cursor), [e2, ...i] = t.slice(this.cursor);
+        return `${s}${v("inverse", e2)}${i.join("")}`;
+      }
+      get cursor() {
+        return this._cursor;
+      }
+      constructor(t) {
+        super({ ...t, initialUserInput: t.initialUserInput ?? t.initialValue }), this.on("userInput", (s) => {
+          this._setValue(s);
+        }), this.on("finalize", () => {
+          this.value || (this.value = t.defaultValue), this.value === void 0 && (this.value = "");
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@clack/prompts/dist/index.mjs
+var dist_exports = {};
+__export(dist_exports, {
+  S_BAR: () => $2,
+  S_BAR_END: () => x2,
+  S_BAR_END_RIGHT: () => xt,
+  S_BAR_H: () => st2,
+  S_BAR_START: () => lt,
+  S_BAR_START_RIGHT: () => _t,
+  S_CHECKBOX_ACTIVE: () => et2,
+  S_CHECKBOX_INACTIVE: () => Y2,
+  S_CHECKBOX_SELECTED: () => K2,
+  S_CONNECT_LEFT: () => Gt,
+  S_CORNER_BOTTOM_LEFT: () => dt,
+  S_CORNER_BOTTOM_RIGHT: () => $t,
+  S_CORNER_TOP_LEFT: () => Mt,
+  S_CORNER_TOP_RIGHT: () => ct,
+  S_ERROR: () => gt,
+  S_INFO: () => ht2,
+  S_PASSWORD_MASK: () => Et,
+  S_RADIO_ACTIVE: () => z2,
+  S_RADIO_INACTIVE: () => U2,
+  S_STEP_ACTIVE: () => Tt,
+  S_STEP_CANCEL: () => at2,
+  S_STEP_ERROR: () => ut2,
+  S_STEP_SUBMIT: () => H2,
+  S_SUCCESS: () => pt,
+  S_WARN: () => mt,
+  autocomplete: () => At,
+  autocompleteMultiselect: () => ie,
+  box: () => ae,
+  cancel: () => me,
+  confirm: () => ue,
+  date: () => le,
+  group: () => he,
+  groupMultiselect: () => pe,
+  intro: () => ge,
+  isCI: () => ot2,
+  isCancel: () => q,
+  isTTY: () => It,
+  limitOptions: () => F2,
+  log: () => R2,
+  multiline: () => fe,
+  multiselect: () => ve,
+  note: () => Se,
+  outro: () => ye,
+  password: () => Ce,
+  path: () => Ie,
+  progress: () => _e,
+  select: () => xe,
+  selectKey: () => Ee,
+  settings: () => h,
+  spinner: () => ft,
+  stream: () => q2,
+  symbol: () => P2,
+  symbolBar: () => yt,
+  taskLog: () => Oe,
+  tasks: () => Ge,
+  text: () => Pe,
+  unicode: () => tt2,
+  unicodeOr: () => w2,
+  updateSettings: () => j
+});
+import { styleText as e, stripVTControlCharacters as nt2 } from "node:util";
+import V2 from "node:process";
+import { existsSync as Qt, lstatSync as wt, readdirSync as Zt } from "node:fs";
+import { dirname as bt, join as te } from "node:path";
+function ee() {
+  return V2.platform !== "win32" ? V2.env.TERM !== "linux" : !!V2.env.CI || !!V2.env.WT_SESSION || !!V2.env.TERMINUS_SUBLIME || V2.env.ConEmuTask === "{cmd::Cmder}" || V2.env.TERM_PROGRAM === "Terminus-Sublime" || V2.env.TERM_PROGRAM === "vscode" || V2.env.TERM === "xterm-256color" || V2.env.TERM === "alacritty" || V2.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
+}
+function Pt(t) {
+  return t.label ?? String(t.value ?? "");
+}
+function Rt(t, i) {
+  if (!t) return true;
+  const s = (i.label ?? String(i.value ?? "")).toLowerCase(), r = (i.hint ?? "").toLowerCase(), u = String(i.value).toLowerCase(), n = t.toLowerCase();
+  return s.includes(n) || r.includes(n) || u.includes(n);
+}
+function se(t, i) {
+  const s = [];
+  for (const r of i) t.includes(r.value) && s.push(r);
+  return s;
+}
+function Vt(t, i, s, r) {
+  let u = s, n = s;
+  return r === "center" ? u = Math.floor((i - t) / 2) : r === "right" && (u = i - t - s), n = i - u - t, [u, n];
+}
+function ce(t, i) {
+  const s = t.segmentValues, r = t.segmentCursor;
+  if (i === "submit" || i === "cancel") return t.formattedValue;
+  const u = e("gray", t.separator);
+  return t.segments.map((n, a) => {
+    const c = a === r.segmentIndex && !["submit", "cancel"].includes(i), o = de[n.type];
+    return $e(s[n.type], { isActive: c, label: o });
+  }).join(u);
+}
+function $e(t, i) {
+  const s = !t || t.replace(/_/g, "") === "";
+  return i.isActive ? e("inverse", s ? i.label : t.replace(/_/g, " ")) : s ? e("dim", i.label) : t.replace(/_/g, e("dim", " "));
+}
+function _e({ style: t = "heavy", max: i = 100, size: s = 40, ...r } = {}) {
+  const u = ft(r);
+  let n = 0, a = "";
+  const c = Math.max(1, i), o = Math.max(1, s), l = (f2) => {
+    switch (f2) {
+      case "initial":
+      case "active":
+        return (h2) => e("magenta", h2);
+      case "error":
+      case "cancel":
+        return (h2) => e("red", h2);
+      case "submit":
+        return (h2) => e("green", h2);
+      default:
+        return (h2) => e("magenta", h2);
+    }
+  }, d = (f2, h2) => {
+    const I2 = Math.floor(n / c * o);
+    return `${l(f2)(jt[t].repeat(I2))}${e("dim", jt[t].repeat(o - I2))} ${h2}`;
+  }, g = (f2 = "") => {
+    a = f2, u.start(d("initial", f2));
+  }, p2 = (f2 = 1, h2) => {
+    n = Math.min(c, f2 + n), u.message(d("active", h2 ?? a)), a = h2 ?? a;
+  };
+  return { start: g, stop: u.stop, cancel: u.cancel, error: u.error, clear: u.clear, advance: p2, isCancelled: u.isCancelled, message: (f2) => p2(0, f2) };
+}
+var import_sisteransi2, tt2, ot2, It, w2, Tt, at2, ut2, H2, lt, $2, x2, _t, xt, z2, U2, et2, K2, Y2, Et, st2, ct, Gt, $t, dt, Mt, ht2, pt, mt, gt, P2, yt, Ot, F2, At, ie, re, ne, oe, ae, ue, le, de, he, pe, R2, me, ge, ye, fe, Q2, ve, we, be, Se, Ce, Ie, Te, ft, jt, it2, xe, Ee, Nt, q2, Ge, Me, Oe, Pe;
+var init_dist4 = __esm({
+  "node_modules/@clack/prompts/dist/index.mjs"() {
+    init_dist3();
+    init_dist3();
+    init_main();
+    init_dist2();
+    import_sisteransi2 = __toESM(require_src(), 1);
+    tt2 = ee();
+    ot2 = () => process.env.CI === "true";
+    It = (t) => t.isTTY === true;
+    w2 = (t, i) => tt2 ? t : i;
+    Tt = w2("\u25C6", "*");
+    at2 = w2("\u25A0", "x");
+    ut2 = w2("\u25B2", "x");
+    H2 = w2("\u25C7", "o");
+    lt = w2("\u250C", "T");
+    $2 = w2("\u2502", "|");
+    x2 = w2("\u2514", "\u2014");
+    _t = w2("\u2510", "T");
+    xt = w2("\u2518", "\u2014");
+    z2 = w2("\u25CF", ">");
+    U2 = w2("\u25CB", " ");
+    et2 = w2("\u25FB", "[\u2022]");
+    K2 = w2("\u25FC", "[+]");
+    Y2 = w2("\u25FB", "[ ]");
+    Et = w2("\u25AA", "\u2022");
+    st2 = w2("\u2500", "-");
+    ct = w2("\u256E", "+");
+    Gt = w2("\u251C", "+");
+    $t = w2("\u256F", "+");
+    dt = w2("\u2570", "+");
+    Mt = w2("\u256D", "+");
+    ht2 = w2("\u25CF", "\u2022");
+    pt = w2("\u25C6", "*");
+    mt = w2("\u25B2", "!");
+    gt = w2("\u25A0", "x");
+    P2 = (t) => {
+      switch (t) {
+        case "initial":
+        case "active":
+          return e("cyan", Tt);
+        case "cancel":
+          return e("red", at2);
+        case "error":
+          return e("yellow", ut2);
+        case "submit":
+          return e("green", H2);
+      }
+    };
+    yt = (t) => {
+      switch (t) {
+        case "initial":
+        case "active":
+          return e("cyan", $2);
+        case "cancel":
+          return e("red", $2);
+        case "error":
+          return e("yellow", $2);
+        case "submit":
+          return e("green", $2);
+      }
+    };
+    Ot = (t, i, s, r, u, n = false) => {
+      let a = i, c = 0;
+      if (n) for (let o = r - 1; o >= s && (a -= t[o].length, c++, !(a <= u)); o--) ;
+      else for (let o = s; o < r && (a -= t[o].length, c++, !(a <= u)); o++) ;
+      return { lineCount: a, removals: c };
+    };
+    F2 = ({ cursor: t, options: i, style: s, output: r = process.stdout, maxItems: u = Number.POSITIVE_INFINITY, columnPadding: n = 0, rowPadding: a = 4 }) => {
+      const c = A(r) - n, o = L(r), l = e("dim", "..."), d = Math.max(o - a, 0), g = Math.max(Math.min(u, d), 5);
+      let p2 = 0;
+      t >= g - 3 && (p2 = Math.max(Math.min(t - g + 3, i.length - g), 0));
+      let f2 = g < i.length && p2 > 0, h2 = g < i.length && p2 + g < i.length;
+      const I2 = Math.min(p2 + g, i.length), m2 = [];
+      let y = 0;
+      f2 && y++, h2 && y++;
+      const v2 = p2 + (f2 ? 1 : 0), C2 = I2 - (h2 ? 1 : 0);
+      for (let b2 = v2; b2 < C2; b2++) {
+        const G2 = wrapAnsi(s(i[b2], b2 === t), c, { hard: true, trim: false }).split(`
+`);
+        m2.push(G2), y += G2.length;
+      }
+      if (y > d) {
+        let b2 = 0, G2 = 0, M = y;
+        const N2 = t - v2;
+        let O2 = d;
+        const j2 = () => Ot(m2, M, 0, N2, O2), k2 = () => Ot(m2, M, N2 + 1, m2.length, O2, true);
+        f2 ? ({ lineCount: M, removals: b2 } = j2(), M > O2 && (h2 || (O2 -= 1), { lineCount: M, removals: G2 } = k2())) : (h2 || (O2 -= 1), { lineCount: M, removals: G2 } = k2(), M > O2 && (O2 -= 1, { lineCount: M, removals: b2 } = j2())), b2 > 0 && (f2 = true, m2.splice(0, b2)), G2 > 0 && (h2 = true, m2.splice(m2.length - G2, G2));
+      }
+      const S2 = [];
+      f2 && S2.push(l);
+      for (const b2 of m2) for (const G2 of b2) S2.push(G2);
+      return h2 && S2.push(l), S2;
+    };
+    At = (t) => new Q({ options: t.options, initialValue: t.initialValue ? [t.initialValue] : void 0, initialUserInput: t.initialUserInput, placeholder: t.placeholder, filter: t.filter ?? ((i, s) => Rt(i, s)), signal: t.signal, input: t.input, output: t.output, validate: t.validate, render() {
+      const i = t.withGuide ?? h.withGuide, s = i ? [`${e("gray", $2)}`, `${P2(this.state)}  ${t.message}`] : [`${P2(this.state)}  ${t.message}`], r = this.userInput, u = this.options, n = t.placeholder, a = r === "" && n !== void 0, c = (o, l) => {
+        const d = Pt(o), g = o.hint && o.value === this.focusedValue ? e("dim", ` (${o.hint})`) : "";
+        switch (l) {
+          case "active":
+            return `${e("green", z2)} ${d}${g}`;
+          case "inactive":
+            return `${e("dim", U2)} ${e("dim", d)}`;
+          case "disabled":
+            return `${e("gray", U2)} ${e(["strikethrough", "gray"], d)}`;
+        }
+      };
+      switch (this.state) {
+        case "submit": {
+          const o = se(this.selectedValues, u), l = o.length > 0 ? `  ${e("dim", o.map(Pt).join(", "))}` : "", d = i ? e("gray", $2) : "";
+          return `${s.join(`
+`)}
+${d}${l}`;
+        }
+        case "cancel": {
+          const o = r ? `  ${e(["strikethrough", "dim"], r)}` : "", l = i ? e("gray", $2) : "";
+          return `${s.join(`
+`)}
+${l}${o}`;
+        }
+        default: {
+          const o = this.state === "error" ? "yellow" : "cyan", l = i ? `${e(o, $2)}  ` : "", d = i ? e(o, x2) : "";
+          let g = "";
+          if (this.isNavigating || a) {
+            const v2 = a ? n : r;
+            g = v2 !== "" ? ` ${e("dim", v2)}` : "";
+          } else g = ` ${this.userInputWithCursor}`;
+          const p2 = this.filteredOptions.length !== u.length ? e("dim", ` (${this.filteredOptions.length} match${this.filteredOptions.length === 1 ? "" : "es"})`) : "", f2 = this.filteredOptions.length === 0 && r ? [`${l}${e("yellow", "No matches found")}`] : [], h2 = this.state === "error" ? [`${l}${e("yellow", this.error)}`] : [];
+          i && s.push(`${l.trimEnd()}`), s.push(`${l}${e("dim", "Search:")}${g}${p2}`, ...f2, ...h2);
+          const I2 = [`${e("dim", "\u2191/\u2193")} to select`, `${e("dim", "Enter:")} confirm`, `${e("dim", "Type:")} to search`], m2 = [`${l}${I2.join(" \u2022 ")}`, d], y = this.filteredOptions.length === 0 ? [] : F2({ cursor: this.cursor, options: this.filteredOptions, columnPadding: i ? 3 : 0, rowPadding: s.length + m2.length, style: (v2, C2) => c(v2, v2.disabled ? "disabled" : C2 ? "active" : "inactive"), maxItems: t.maxItems, output: t.output });
+          return [...s, ...y.map((v2) => `${l}${v2}`), ...m2].join(`
+`);
+        }
+      }
+    } }).prompt();
+    ie = (t) => {
+      const i = (r, u, n, a) => {
+        const c = n.includes(r.value), o = r.label ?? String(r.value ?? ""), l = r.hint && a !== void 0 && r.value === a ? e("dim", ` (${r.hint})`) : "", d = c ? e("green", K2) : e("dim", Y2);
+        return r.disabled ? `${e("gray", Y2)} ${e(["strikethrough", "gray"], o)}` : u ? `${d} ${o}${l}` : `${d} ${e("dim", o)}`;
+      }, s = new Q({ options: t.options, multiple: true, placeholder: t.placeholder, filter: t.filter ?? ((r, u) => Rt(r, u)), validate: () => {
+        if (t.required && s.selectedValues.length === 0) return "Please select at least one item";
+      }, initialValue: t.initialValues, signal: t.signal, input: t.input, output: t.output, render() {
+        const r = t.withGuide ?? h.withGuide, u = `${r ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  ${t.message}
+`, n = this.userInput, a = t.placeholder, c = n === "" && a !== void 0, o = this.isNavigating || c ? e("dim", c ? a : n) : this.userInputWithCursor, l = this.options, d = this.filteredOptions.length !== l.length ? e("dim", ` (${this.filteredOptions.length} match${this.filteredOptions.length === 1 ? "" : "es"})`) : "";
+        switch (this.state) {
+          case "submit":
+            return `${u}${r ? `${e("gray", $2)}  ` : ""}${e("dim", `${this.selectedValues.length} items selected`)}`;
+          case "cancel":
+            return `${u}${r ? `${e("gray", $2)}  ` : ""}${e(["strikethrough", "dim"], n)}`;
+          default: {
+            const g = this.state === "error" ? "yellow" : "cyan", p2 = r ? `${e(g, $2)}  ` : "", f2 = r ? e(g, x2) : "", h2 = [`${e("dim", "\u2191/\u2193")} to navigate`, `${e("dim", this.isNavigating ? "Space/Tab:" : "Tab:")} select`, `${e("dim", "Enter:")} confirm`, `${e("dim", "Type:")} to search`], I2 = this.filteredOptions.length === 0 && n ? [`${p2}${e("yellow", "No matches found")}`] : [], m2 = this.state === "error" ? [`${p2}${e("yellow", this.error)}`] : [], y = [...`${u}${r ? e(g, $2) : ""}`.split(`
+`), `${p2}${e("dim", "Search:")} ${o}${d}`, ...I2, ...m2], v2 = [`${p2}${h2.join(" \u2022 ")}`, f2], C2 = F2({ cursor: this.cursor, options: this.filteredOptions, style: (S2, b2) => i(S2, b2, this.selectedValues, this.focusedValue), maxItems: t.maxItems, output: t.output, rowPadding: y.length + v2.length });
+            return [...y, ...C2.map((S2) => `${p2}${S2}`), ...v2].join(`
+`);
+          }
+        }
+      } });
+      return s.prompt();
+    };
+    re = [Mt, ct, dt, $t];
+    ne = [lt, _t, x2, xt];
+    oe = (t) => t;
+    ae = (t = "", i = "", s) => {
+      const r = s?.output ?? process.stdout, u = A(r), n = 2, a = s?.titlePadding ?? 1, c = s?.contentPadding ?? 2, o = s?.width === void 0 || s.width === "auto" ? 1 : Math.min(1, s.width), l = s?.withGuide ?? h.withGuide ? `${$2} ` : "", d = s?.formatBorder ?? oe, g = (s?.rounded ? re : ne).map(d), p2 = d(st2), f2 = d($2), h2 = dist_default2(l), I2 = dist_default2(i), m2 = u - h2;
+      let y = Math.floor(u * o) - h2;
+      if (s?.width === "auto") {
+        const O2 = t.split(`
+`);
+        let j2 = I2 + a * 2;
+        for (const rt2 of O2) {
+          const W2 = dist_default2(rt2) + c * 2;
+          W2 > j2 && (j2 = W2);
+        }
+        const k2 = j2 + n;
+        k2 < y && (y = k2);
+      }
+      y % 2 !== 0 && (y < m2 ? y++ : y--);
+      const v2 = y - n, C2 = v2 - a * 2, S2 = I2 > C2 ? `${i.slice(0, C2 - 3)}...` : i, [b2, G2] = Vt(dist_default2(S2), v2, a, s?.titleAlign), M = wrapAnsi(t, v2 - c * 2, { hard: true, trim: false });
+      r.write(`${l}${g[0]}${p2.repeat(b2)}${S2}${p2.repeat(G2)}${g[1]}
+`);
+      const N2 = M.split(`
+`);
+      for (const O2 of N2) {
+        const [j2, k2] = Vt(dist_default2(O2), v2, c, s?.contentAlign);
+        r.write(`${l}${f2}${" ".repeat(j2)}${O2}${" ".repeat(k2)}${f2}
+`);
+      }
+      r.write(`${l}${g[2]}${p2.repeat(v2)}${g[3]}
+`);
+    };
+    ue = (t) => {
+      const i = t.active ?? "Yes", s = t.inactive ?? "No";
+      return new X({ active: i, inactive: s, signal: t.signal, input: t.input, output: t.output, initialValue: t.initialValue ?? true, render() {
+        const r = t.withGuide ?? h.withGuide, u = `${P2(this.state)}  `, n = r ? `${e("gray", $2)}  ` : "", a = W(t.output, t.message, n, u), c = `${r ? `${e("gray", $2)}
+` : ""}${a}
+`, o = this.value ? i : s;
+        switch (this.state) {
+          case "submit": {
+            const l = r ? `${e("gray", $2)}  ` : "";
+            return `${c}${l}${e("dim", o)}`;
+          }
+          case "cancel": {
+            const l = r ? `${e("gray", $2)}  ` : "";
+            return `${c}${l}${e(["strikethrough", "dim"], o)}${r ? `
+${e("gray", $2)}` : ""}`;
+          }
+          default: {
+            const l = r ? `${e("cyan", $2)}  ` : "", d = r ? e("cyan", x2) : "";
+            return `${c}${l}${this.value ? `${e("green", z2)} ${i}` : `${e("dim", U2)} ${e("dim", i)}`}${t.vertical ? r ? `
+${e("cyan", $2)}  ` : `
+` : ` ${e("dim", "/")} `}${this.value ? `${e("dim", U2)} ${e("dim", s)}` : `${e("green", z2)} ${s}`}
+${d}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    le = (t) => {
+      const i = t.validate;
+      return new et({ ...t, validate(s) {
+        if (s === void 0) return t.defaultValue !== void 0 ? void 0 : i ? i(s) : h.date.messages.required;
+        const r = (u) => u.toISOString().slice(0, 10);
+        if (t.minDate && r(s) < r(t.minDate)) return h.date.messages.afterMin(t.minDate);
+        if (t.maxDate && r(s) > r(t.maxDate)) return h.date.messages.beforeMax(t.maxDate);
+        if (i) return i(s);
+      }, render() {
+        const s = (t?.withGuide ?? h.withGuide) !== false, r = `${`${s ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  `}${t.message}
+`, u = this.state !== "initial" ? this.state : "active", n = ce(this, u), a = this.value instanceof Date ? this.formattedValue : "";
+        switch (this.state) {
+          case "error": {
+            const c = this.error ? `  ${e("yellow", this.error)}` : "", o = s ? `${e("yellow", $2)}  ` : "", l = s ? e("yellow", x2) : "";
+            return `${r.trim()}
+${o}${n}
+${l}${c}
+`;
+          }
+          case "submit": {
+            const c = a ? `  ${e("dim", a)}` : "", o = s ? e("gray", $2) : "";
+            return `${r}${o}${c}`;
+          }
+          case "cancel": {
+            const c = a ? `  ${e(["strikethrough", "dim"], a)}` : "", o = s ? e("gray", $2) : "";
+            return `${r}${o}${c}${a.trim() ? `
+${o}` : ""}`;
+          }
+          default: {
+            const c = s ? `${e("cyan", $2)}  ` : "", o = s ? e("cyan", x2) : "", l = s ? `${e("cyan", $2)}  ` : "", d = this.inlineError ? `
+${l}${e("yellow", this.inlineError)}` : "";
+            return `${r}${c}${n}${d}
+${o}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    de = { year: "yyyy", month: "mm", day: "dd" };
+    he = async (t, i) => {
+      const s = {}, r = Object.keys(t);
+      for (const u of r) {
+        const n = t[u], a = await n({ results: s })?.catch((c) => {
+          throw c;
+        });
+        if (typeof i?.onCancel == "function" && q(a)) {
+          s[u] = "canceled", i.onCancel({ results: s });
+          continue;
+        }
+        s[u] = a;
+      }
+      return s;
+    };
+    pe = (t) => {
+      const { selectableGroups: i = true, groupSpacing: s = 0 } = t, r = (n, a, c = []) => {
+        const o = n.label ?? String(n.value), l = typeof n.group == "string", d = l && (c[c.indexOf(n) + 1] ?? { group: true }), g = l && d && d.group === true;
+        let p2 = "", f2 = "";
+        l && (i ? (p2 = g ? `${x2} ` : `${$2} `, f2 = g ? "  " : `${$2} `) : p2 = "  ");
+        let h2 = "";
+        if (s > 0 && !l && (h2 = `
+`.repeat(s)), a === "active") return W(t.output, `${o}${n.hint ? ` ${e("dim", `(${n.hint})`)}` : ""}`, `${h2}${e("dim", p2)} `, `${h2}${e("dim", p2)}${e("cyan", et2)} `, `${h2}${e("dim", f2)} `);
+        if (a === "group-active") return W(t.output, o, `${h2}${p2} `, `${h2}${p2}${e("cyan", et2)} `, `${h2}${f2} `, (m2) => e("dim", m2));
+        if (a === "group-active-selected") return W(t.output, o, `${h2}${p2} `, `${h2}${p2}${e("green", K2)} `, `${h2}${f2} `, (m2) => e("dim", m2));
+        if (a === "selected") {
+          const m2 = l || i ? e("green", K2) : "";
+          return W(t.output, `${o}${n.hint ? ` (${n.hint})` : ""}`, `${h2}${e("dim", p2)} `, `${h2}${e("dim", p2)}${m2} `, `${h2}${e("dim", f2)} `, (y) => e("dim", y));
+        }
+        if (a === "cancelled") return `${e(["strikethrough", "dim"], o)}`;
+        if (a === "active-selected") return W(t.output, `${o}${n.hint ? ` ${e("dim", `(${n.hint})`)}` : ""}`, `${h2}${e("dim", p2)} `, `${h2}${e("dim", p2)}${e("green", K2)} `, `${h2}${e("dim", f2)} `);
+        if (a === "submitted") return `${e("dim", o)}`;
+        const I2 = l || i ? e("dim", Y2) : "";
+        return W(t.output, o, `${h2}${e("dim", p2)} `, `${h2}${e("dim", p2)}${I2} `, `${h2}${e("dim", f2)} `, (m2) => e("dim", m2));
+      }, u = t.required ?? true;
+      return new it({ options: t.options, signal: t.signal, input: t.input, output: t.output, initialValues: t.initialValues, required: u, cursorAt: t.cursorAt, selectableGroups: i, validate(n) {
+        if (u && (n === void 0 || n.length === 0)) return `Please select at least one option.
+${e("reset", e("dim", `Press ${e(["gray", "bgWhite", "inverse"], " space ")} to select, ${e("gray", e(["bgWhite", "inverse"], " enter "))} to submit`))}`;
+      }, render() {
+        const n = t.withGuide ?? h.withGuide, a = `${n ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  ${t.message}
+`, c = this.value ?? [], o = (l, d) => {
+          const g = this.options, p2 = c.includes(l.value) || l.group === true && this.isGroupSelected(`${l.value}`);
+          return !d && typeof l.group == "string" && this.options[this.cursor].value === l.group ? r(l, p2 ? "group-active-selected" : "group-active", g) : d && p2 ? r(l, "active-selected", g) : p2 ? r(l, "selected", g) : r(l, d ? "active" : "inactive", g);
+        };
+        switch (this.state) {
+          case "submit": {
+            const l = this.options.filter(({ value: g }) => c.includes(g)).map((g) => r(g, "submitted")), d = l.length === 0 ? "" : `  ${l.join(e("dim", ", "))}`;
+            return `${a}${n ? e("gray", $2) : ""}${d}`;
+          }
+          case "cancel": {
+            const l = this.options.filter(({ value: d }) => c.includes(d)).map((d) => r(d, "cancelled")).join(e("dim", ", "));
+            return `${a}${n ? `${e("gray", $2)}  ` : ""}${l.trim() ? `${l}${n ? `
+${e("gray", $2)}` : ""}` : ""}`;
+          }
+          case "error": {
+            const l = n ? `${e("yellow", $2)}  ` : "", d = this.error.split(`
+`).map((h2, I2) => I2 === 0 ? `${n ? `${e("yellow", x2)}  ` : ""}${e("yellow", h2)}` : `   ${h2}`).join(`
+`), g = a.split(`
+`).length, p2 = d.split(`
+`).length + 1, f2 = F2({ output: t.output, options: this.options, cursor: this.cursor, maxItems: t.maxItems, columnPadding: l.length, rowPadding: g + p2, style: o }).join(`
+${l}`);
+            return `${a}${l}${f2}
+${d}
+`;
+          }
+          default: {
+            const l = n ? `${e("cyan", $2)}  ` : "", d = a.split(`
+`).length, g = (n ? 1 : 0) + 1, p2 = F2({ output: t.output, options: this.options, cursor: this.cursor, maxItems: t.maxItems, columnPadding: l.length, rowPadding: d + g, style: o }).join(`
+${l}`);
+            return `${a}${l}${p2}
+${n ? e("cyan", x2) : ""}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    R2 = { message: (t = [], { symbol: i = e("gray", $2), secondarySymbol: s = e("gray", $2), output: r = process.stdout, spacing: u = 1, withGuide: n } = {}) => {
+      const a = [], c = n ?? h.withGuide, o = c ? s : "", l = c ? `${i}  ` : "", d = c ? `${s}  ` : "";
+      for (let p2 = 0; p2 < u; p2++) a.push(o);
+      const g = Array.isArray(t) ? t : t.split(`
+`);
+      if (g.length > 0) {
+        const [p2, ...f2] = g;
+        p2.length > 0 ? a.push(`${l}${p2}`) : a.push(c ? i : "");
+        for (const h2 of f2) h2.length > 0 ? a.push(`${d}${h2}`) : a.push(c ? s : "");
+      }
+      r.write(`${a.join(`
+`)}
+`);
+    }, info: (t, i) => {
+      R2.message(t, { ...i, symbol: e("blue", ht2) });
+    }, success: (t, i) => {
+      R2.message(t, { ...i, symbol: e("green", pt) });
+    }, step: (t, i) => {
+      R2.message(t, { ...i, symbol: e("green", H2) });
+    }, warn: (t, i) => {
+      R2.message(t, { ...i, symbol: e("yellow", mt) });
+    }, warning: (t, i) => {
+      R2.warn(t, i);
+    }, error: (t, i) => {
+      R2.message(t, { ...i, symbol: e("red", gt) });
+    } };
+    me = (t = "", i) => {
+      const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", x2)}  ` : "";
+      s.write(`${r}${e("red", t)}
+
+`);
+    };
+    ge = (t = "", i) => {
+      const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", lt)}  ` : "";
+      s.write(`${r}${t}
+`);
+    };
+    ye = (t = "", i) => {
+      const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", $2)}
+${e("gray", x2)}  ` : "";
+      s.write(`${r}${t}
+
+`);
+    };
+    fe = (t) => new rt({ validate: t.validate, placeholder: t.placeholder, defaultValue: t.defaultValue, initialValue: t.initialValue, showSubmit: t.showSubmit, output: t.output, signal: t.signal, input: t.input, render() {
+      const i = t?.withGuide ?? h.withGuide, s = `${`${i ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  `}${t.message}
+`, r = t.placeholder ? e("inverse", t.placeholder[0]) + e("dim", t.placeholder.slice(1)) : e(["inverse", "hidden"], "_"), u = this.userInput ? this.userInputWithCursor : r, n = this.value ?? "", a = t.showSubmit ? `
+  ${e(this.focused === "submit" ? "cyan" : "dim", "[ submit ]")}` : "";
+      switch (this.state) {
+        case "error": {
+          const c = `${e("yellow", $2)}  `, o = i ? W(t.output, u, c, void 0) : u, l = e("yellow", x2);
+          return `${s}${o}
+${l}  ${e("yellow", this.error)}${a}
+`;
+        }
+        case "submit": {
+          const c = `${e("gray", $2)}  `, o = i ? W(t.output, n, c, void 0, void 0, (l) => e("dim", l)) : n ? e("dim", n) : "";
+          return `${s}${o}`;
+        }
+        case "cancel": {
+          const c = `${e("gray", $2)}  `, o = i ? W(t.output, n, c, void 0, void 0, (l) => e(["strikethrough", "dim"], l)) : n ? e(["strikethrough", "dim"], n) : "";
+          return `${s}${o}`;
+        }
+        default: {
+          const c = i ? `${e("cyan", $2)}  ` : "", o = i ? e("cyan", x2) : "", l = i ? W(t.output, u, c) : u;
+          return `${s}${l}
+${o}${a}
+`;
+        }
+      }
+    } }).prompt();
+    Q2 = (t, i) => t.split(`
+`).map((s) => i(s)).join(`
+`);
+    ve = (t) => {
+      const i = (r, u) => {
+        const n = r.label ?? String(r.value);
+        return u === "disabled" ? `${e("gray", Y2)} ${Q2(n, (a) => e(["strikethrough", "gray"], a))}${r.hint ? ` ${e("dim", `(${r.hint ?? "disabled"})`)}` : ""}` : u === "active" ? `${e("cyan", et2)} ${n}${r.hint ? ` ${e("dim", `(${r.hint})`)}` : ""}` : u === "selected" ? `${e("green", K2)} ${Q2(n, (a) => e("dim", a))}${r.hint ? ` ${e("dim", `(${r.hint})`)}` : ""}` : u === "cancelled" ? `${Q2(n, (a) => e(["strikethrough", "dim"], a))}` : u === "active-selected" ? `${e("green", K2)} ${n}${r.hint ? ` ${e("dim", `(${r.hint})`)}` : ""}` : u === "submitted" ? `${Q2(n, (a) => e("dim", a))}` : `${e("dim", Y2)} ${Q2(n, (a) => e("dim", a))}`;
+      }, s = t.required ?? true;
+      return new nt({ options: t.options, signal: t.signal, input: t.input, output: t.output, initialValues: t.initialValues, required: s, cursorAt: t.cursorAt, validate(r) {
+        if (s && (r === void 0 || r.length === 0)) return `Please select at least one option.
+${e("reset", e("dim", `Press ${e(["gray", "bgWhite", "inverse"], " space ")} to select, ${e("gray", e("bgWhite", e("inverse", " enter ")))} to submit`))}`;
+      }, render() {
+        const r = t.withGuide ?? h.withGuide, u = W(t.output, t.message, r ? `${yt(this.state)}  ` : "", `${P2(this.state)}  `), n = `${r ? `${e("gray", $2)}
+` : ""}${u}
+`, a = this.value ?? [], c = (o, l) => {
+          if (o.disabled) return i(o, "disabled");
+          const d = a.includes(o.value);
+          return l && d ? i(o, "active-selected") : d ? i(o, "selected") : i(o, l ? "active" : "inactive");
+        };
+        switch (this.state) {
+          case "submit": {
+            const o = this.options.filter(({ value: d }) => a.includes(d)).map((d) => i(d, "submitted")).join(e("dim", ", ")) || e("dim", "none"), l = W(t.output, o, r ? `${e("gray", $2)}  ` : "");
+            return `${n}${l}`;
+          }
+          case "cancel": {
+            const o = this.options.filter(({ value: d }) => a.includes(d)).map((d) => i(d, "cancelled")).join(e("dim", ", "));
+            if (o.trim() === "") return `${n}${e("gray", $2)}`;
+            const l = W(t.output, o, r ? `${e("gray", $2)}  ` : "");
+            return `${n}${l}${r ? `
+${e("gray", $2)}` : ""}`;
+          }
+          case "error": {
+            const o = r ? `${e("yellow", $2)}  ` : "", l = this.error.split(`
+`).map((p2, f2) => f2 === 0 ? `${r ? `${e("yellow", x2)}  ` : ""}${e("yellow", p2)}` : `   ${p2}`).join(`
+`), d = n.split(`
+`).length, g = l.split(`
+`).length + 1;
+            return `${n}${o}${F2({ output: t.output, options: this.options, cursor: this.cursor, maxItems: t.maxItems, columnPadding: o.length, rowPadding: d + g, style: c }).join(`
+${o}`)}
+${l}
+`;
+          }
+          default: {
+            const o = r ? `${e("cyan", $2)}  ` : "", l = n.split(`
+`).length, d = r ? 2 : 1;
+            return `${n}${o}${F2({ output: t.output, options: this.options, cursor: this.cursor, maxItems: t.maxItems, columnPadding: o.length, rowPadding: l + d, style: c }).join(`
+${o}`)}
+${r ? e("cyan", x2) : ""}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    we = (t) => e("dim", t);
+    be = (t, i, s) => {
+      const r = { hard: true, trim: false }, u = wrapAnsi(t, i, r).split(`
+`), n = u.reduce((o, l) => Math.max(dist_default2(l), o), 0), a = u.map(s).reduce((o, l) => Math.max(dist_default2(l), o), 0), c = i - (a - n);
+      return wrapAnsi(t, c, r);
+    };
+    Se = (t = "", i = "", s) => {
+      const r = s?.output ?? V2.stdout, u = s?.withGuide ?? h.withGuide, n = s?.format ?? we, a = ["", ...be(t, A(r) - 6, n).split(`
+`).map(n), ""], c = dist_default2(i), o = Math.max(a.reduce((p2, f2) => {
+        const h2 = dist_default2(f2);
+        return h2 > p2 ? h2 : p2;
+      }, 0), c) + 2, l = a.map((p2) => `${e("gray", $2)}  ${p2}${" ".repeat(o - dist_default2(p2))}${e("gray", $2)}`).join(`
+`), d = u ? `${e("gray", $2)}
+` : "", g = u ? Gt : dt;
+      r.write(`${d}${e("green", H2)}  ${e("reset", i)} ${e("gray", st2.repeat(Math.max(o - c - 1, 1)) + ct)}
+${l}
+${e("gray", g + st2.repeat(o + 2) + $t)}
+`);
+    };
+    Ce = (t) => new ot({ validate: t.validate, mask: t.mask ?? Et, signal: t.signal, input: t.input, output: t.output, render() {
+      const i = t.withGuide ?? h.withGuide, s = `${i ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  ${t.message}
+`, r = this.userInputWithCursor, u = this.masked;
+      switch (this.state) {
+        case "error": {
+          const n = i ? `${e("yellow", $2)}  ` : "", a = i ? `${e("yellow", x2)}  ` : "", c = u ?? "";
+          return t.clearOnError && this.clear(), `${s.trim()}
+${n}${c}
+${a}${e("yellow", this.error)}
+`;
+        }
+        case "submit": {
+          const n = i ? `${e("gray", $2)}  ` : "", a = u ? e("dim", u) : "";
+          return `${s}${n}${a}`;
+        }
+        case "cancel": {
+          const n = i ? `${e("gray", $2)}  ` : "", a = u ? e(["strikethrough", "dim"], u) : "";
+          return `${s}${n}${a}${u && i ? `
+${e("gray", $2)}` : ""}`;
+        }
+        default: {
+          const n = i ? `${e("cyan", $2)}  ` : "", a = i ? e("cyan", x2) : "";
+          return `${s}${n}${r}
+${a}
+`;
+        }
+      }
+    } }).prompt();
+    Ie = (t) => {
+      const i = t.validate;
+      return At({ ...t, initialUserInput: t.initialValue ?? t.root ?? process.cwd(), maxItems: 5, validate(s) {
+        if (!Array.isArray(s)) {
+          if (!s) return "Please select a path";
+          if (i) return i(s);
+        }
+      }, options() {
+        const s = this.userInput;
+        if (s === "") return [];
+        try {
+          let r;
+          Qt(s) ? wt(s).isDirectory() && (!t.directory || s.endsWith("/")) ? r = s : r = bt(s) : r = bt(s);
+          const u = s.length > 1 && s.endsWith("/") ? s.slice(0, -1) : s;
+          return Zt(r).map((n) => {
+            const a = te(r, n), c = wt(a);
+            return { name: n, path: a, isDirectory: c.isDirectory() };
+          }).filter(({ path: n, isDirectory: a }) => n.startsWith(u) && (a || !t.directory)).map((n) => ({ value: n.path }));
+        } catch {
+          return [];
+        }
+      } });
+    };
+    Te = (t) => e("magenta", t);
+    ft = ({ indicator: t = "dots", onCancel: i, output: s = process.stdout, cancelMessage: r, errorMessage: u, frames: n = tt2 ? ["\u25D2", "\u25D0", "\u25D3", "\u25D1"] : ["\u2022", "o", "O", "0"], delay: a = tt2 ? 80 : 120, signal: c, ...o } = {}) => {
+      const l = ot2();
+      let d, g, p2 = false, f2 = false, h2 = "", I2, m2 = performance.now();
+      const y = A(s), v2 = o?.styleFrame ?? Te, C2 = (_) => {
+        const A2 = _ > 1 ? u ?? h.messages.error : r ?? h.messages.cancel;
+        f2 = _ === 1, p2 && (W2(A2, _), f2 && typeof i == "function" && i());
+      }, S2 = () => C2(2), b2 = () => C2(1), G2 = () => {
+        process.on("uncaughtExceptionMonitor", S2), process.on("unhandledRejection", S2), process.on("SIGINT", b2), process.on("SIGTERM", b2), process.on("exit", C2), c && c.addEventListener("abort", b2);
+      }, M = () => {
+        process.removeListener("uncaughtExceptionMonitor", S2), process.removeListener("unhandledRejection", S2), process.removeListener("SIGINT", b2), process.removeListener("SIGTERM", b2), process.removeListener("exit", C2), c && c.removeEventListener("abort", b2);
+      }, N2 = () => {
+        if (I2 === void 0) return;
+        l && s.write(`
+`);
+        const _ = wrapAnsi(I2, y, { hard: true, trim: false }).split(`
+`);
+        _.length > 1 && s.write(import_sisteransi2.cursor.up(_.length - 1)), s.write(import_sisteransi2.cursor.to(0)), s.write(import_sisteransi2.erase.down());
+      }, O2 = (_) => _.replace(/\.+$/, ""), j2 = (_) => {
+        const A2 = (performance.now() - _) / 1e3, L2 = Math.floor(A2 / 60), D2 = Math.floor(A2 % 60);
+        return L2 > 0 ? `[${L2}m ${D2}s]` : `[${D2}s]`;
+      }, k2 = o.withGuide ?? h.withGuide, rt2 = (_ = "") => {
+        p2 = true, d = R({ output: s }), h2 = O2(_), m2 = performance.now(), k2 && s.write(`${e("gray", $2)}
+`);
+        let A2 = 0, L2 = 0;
+        G2(), g = setInterval(() => {
+          if (l && h2 === I2) return;
+          N2(), I2 = h2;
+          const D2 = v2(n[A2]);
+          let Z2;
+          if (l) Z2 = `${D2}  ${h2}...`;
+          else if (t === "timer") Z2 = `${D2}  ${h2} ${j2(m2)}`;
+          else {
+            const kt = ".".repeat(Math.floor(L2)).slice(0, 3);
+            Z2 = `${D2}  ${h2}${kt}`;
+          }
+          const Bt = wrapAnsi(Z2, y, { hard: true, trim: false });
+          s.write(Bt), A2 = A2 + 1 < n.length ? A2 + 1 : 0, L2 = L2 < 4 ? L2 + 0.125 : 0;
+        }, a);
+      }, W2 = (_ = "", A2 = 0, L2 = false) => {
+        if (!p2) return;
+        p2 = false, clearInterval(g), N2();
+        const D2 = A2 === 0 ? e("green", H2) : A2 === 1 ? e("red", at2) : e("red", ut2);
+        h2 = _ ?? h2, L2 || (t === "timer" ? s.write(`${D2}  ${h2} ${j2(m2)}
+`) : s.write(`${D2}  ${h2}
+`)), M(), d();
+      };
+      return { start: rt2, stop: (_ = "") => W2(_, 0), message: (_ = "") => {
+        h2 = O2(_ ?? h2);
+      }, cancel: (_ = "") => W2(_, 1), error: (_ = "") => W2(_, 2), clear: () => W2("", 0, true), get isCancelled() {
+        return f2;
+      } };
+    };
+    jt = { light: w2("\u2500", "-"), heavy: w2("\u2501", "="), block: w2("\u2588", "#") };
+    it2 = (t, i) => t.includes(`
+`) ? t.split(`
+`).map((s) => i(s)).join(`
+`) : i(t);
+    xe = (t) => {
+      const i = (s, r) => {
+        const u = s.label ?? String(s.value);
+        switch (r) {
+          case "disabled":
+            return `${e("gray", U2)} ${it2(u, (n) => e("gray", n))}${s.hint ? ` ${e("dim", `(${s.hint ?? "disabled"})`)}` : ""}`;
+          case "selected":
+            return `${it2(u, (n) => e("dim", n))}`;
+          case "active":
+            return `${e("green", z2)} ${u}${s.hint ? ` ${e("dim", `(${s.hint})`)}` : ""}`;
+          case "cancelled":
+            return `${it2(u, (n) => e(["strikethrough", "dim"], n))}`;
+          default:
+            return `${e("dim", U2)} ${it2(u, (n) => e("dim", n))}`;
+        }
+      };
+      return new ut({ options: t.options, signal: t.signal, input: t.input, output: t.output, initialValue: t.initialValue, render() {
+        const s = t.withGuide ?? h.withGuide, r = `${P2(this.state)}  `, u = `${yt(this.state)}  `, n = W(t.output, t.message, u, r), a = `${s ? `${e("gray", $2)}
+` : ""}${n}
+`;
+        switch (this.state) {
+          case "submit": {
+            const c = s ? `${e("gray", $2)}  ` : "", o = W(t.output, i(this.options[this.cursor], "selected"), c);
+            return `${a}${o}`;
+          }
+          case "cancel": {
+            const c = s ? `${e("gray", $2)}  ` : "", o = W(t.output, i(this.options[this.cursor], "cancelled"), c);
+            return `${a}${o}${s ? `
+${e("gray", $2)}` : ""}`;
+          }
+          default: {
+            const c = s ? `${e("cyan", $2)}  ` : "", o = s ? e("cyan", x2) : "", l = a.split(`
+`).length, d = s ? 2 : 1;
+            return `${a}${c}${F2({ output: t.output, cursor: this.cursor, options: this.options, maxItems: t.maxItems, columnPadding: c.length, rowPadding: l + d, style: (g, p2) => i(g, g.disabled ? "disabled" : p2 ? "active" : "inactive") }).join(`
+${c}`)}
+${o}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    Ee = (t) => {
+      const i = (s, r = "inactive") => {
+        const u = s.label ?? String(s.value);
+        return r === "selected" ? `${e("dim", u)}` : r === "cancelled" ? `${e(["strikethrough", "dim"], u)}` : r === "active" ? `${e(["bgCyan", "gray"], ` ${s.value} `)} ${u}${s.hint ? ` ${e("dim", `(${s.hint})`)}` : ""}` : `${e(["gray", "bgWhite", "inverse"], ` ${s.value} `)} ${u}${s.hint ? ` ${e("dim", `(${s.hint})`)}` : ""}`;
+      };
+      return new at({ options: t.options, signal: t.signal, input: t.input, output: t.output, initialValue: t.initialValue, caseSensitive: t.caseSensitive, render() {
+        const s = t.withGuide ?? h.withGuide, r = `${s ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  ${t.message}
+`;
+        switch (this.state) {
+          case "submit": {
+            const u = s ? `${e("gray", $2)}  ` : "", n = this.options.find((c) => c.value === this.value) ?? t.options[0], a = W(t.output, i(n, "selected"), u);
+            return `${r}${a}`;
+          }
+          case "cancel": {
+            const u = s ? `${e("gray", $2)}  ` : "", n = W(t.output, i(this.options[0], "cancelled"), u);
+            return `${r}${n}${s ? `
+${e("gray", $2)}` : ""}`;
+          }
+          default: {
+            const u = s ? `${e("cyan", $2)}  ` : "", n = s ? e("cyan", x2) : "", a = this.options.map((c, o) => W(t.output, i(c, o === this.cursor ? "active" : "inactive"), u)).join(`
+`);
+            return `${r}${a}
+${n}
+`;
+          }
+        }
+      } }).prompt();
+    };
+    Nt = `${e("gray", $2)}  `;
+    q2 = { message: async (t, { symbol: i = e("gray", $2) } = {}) => {
+      process.stdout.write(`${e("gray", $2)}
+${i}  `);
+      let s = 3;
+      for await (let r of t) {
+        r = r.replace(/\n/g, `
+${Nt}`), r.includes(`
+`) && (s = 3 + nt2(r.slice(r.lastIndexOf(`
+`))).length);
+        const u = nt2(r).length;
+        s + u < process.stdout.columns ? (s += u, process.stdout.write(r)) : (process.stdout.write(`
+${Nt}${r.trimStart()}`), s = 3 + nt2(r.trimStart()).length);
+      }
+      process.stdout.write(`
+`);
+    }, info: (t) => q2.message(t, { symbol: e("blue", ht2) }), success: (t) => q2.message(t, { symbol: e("green", pt) }), step: (t) => q2.message(t, { symbol: e("green", H2) }), warn: (t) => q2.message(t, { symbol: e("yellow", mt) }), warning: (t) => q2.warn(t), error: (t) => q2.message(t, { symbol: e("red", gt) }) };
+    Ge = async (t, i) => {
+      for (const s of t) {
+        if (s.enabled === false) continue;
+        const r = ft(i);
+        r.start(s.title);
+        const u = await s.task(r.message);
+        r.stop(u || s.title);
+      }
+    };
+    Me = (t) => t.replace(/\x1b\[(?:\d+;)*\d*[ABCDEFGHfJKSTsu]|\x1b\[(s|u)/g, "");
+    Oe = (t) => {
+      const i = t.output ?? process.stdout, s = A(i), r = e("gray", $2), u = t.spacing ?? 1, n = 3, a = t.retainLog === true, c = !ot2() && It(i);
+      i.write(`${r}
+`), i.write(`${e("green", H2)}  ${t.title}
+`);
+      for (let m2 = 0; m2 < u; m2++) i.write(`${r}
+`);
+      const o = [{ value: "", full: "" }];
+      let l = false;
+      const d = (m2) => {
+        if (o.length === 0) return;
+        let y = 0;
+        m2 && (y += u + 2);
+        for (const v2 of o) {
+          const { value: C2, result: S2 } = v2;
+          let b2 = S2?.message ?? C2;
+          if (b2.length === 0) continue;
+          S2 === void 0 && v2.header !== void 0 && v2.header !== "" && (b2 += `
+${v2.header}`);
+          const G2 = b2.split(`
+`).reduce((M, N2) => N2 === "" ? M + 1 : M + Math.ceil((N2.length + n) / s), 0);
+          y += G2;
+        }
+        y > 0 && (y += 1, i.write(import_sisteransi2.erase.lines(y)));
+      }, g = (m2, y, v2) => {
+        const C2 = v2 ? `${m2.full}
+${m2.value}` : m2.value;
+        m2.header !== void 0 && m2.header !== "" && R2.message(m2.header.split(`
+`).map((S2) => e("bold", S2)), { output: i, secondarySymbol: r, symbol: r, spacing: 0 }), R2.message(C2.split(`
+`).map((S2) => e("dim", S2)), { output: i, secondarySymbol: r, symbol: r, spacing: y ?? u });
+      }, p2 = () => {
+        for (const m2 of o) {
+          const { header: y, value: v2, full: C2 } = m2;
+          (y === void 0 || y.length === 0) && v2.length === 0 || g(m2, void 0, a === true && C2.length > 0);
+        }
+      }, f2 = (m2, y, v2) => {
+        if (d(false), (v2?.raw !== true || !l) && m2.value !== "" && (m2.value += `
+`), m2.value += Me(y), l = v2?.raw === true, t.limit !== void 0) {
+          const C2 = m2.value.split(`
+`), S2 = C2.length - t.limit;
+          if (S2 > 0) {
+            const b2 = C2.splice(0, S2);
+            a && (m2.full += (m2.full === "" ? "" : `
+`) + b2.join(`
+`));
+          }
+          m2.value = C2.join(`
+`);
+        }
+        c && h2();
+      }, h2 = () => {
+        for (const m2 of o) m2.result ? m2.result.status === "error" ? R2.error(m2.result.message, { output: i, secondarySymbol: r, spacing: 0 }) : R2.success(m2.result.message, { output: i, secondarySymbol: r, spacing: 0 }) : m2.value !== "" && g(m2, 0);
+      }, I2 = (m2, y) => {
+        d(false), m2.result = y, c && h2();
+      };
+      return { message(m2, y) {
+        f2(o[0], m2, y);
+      }, group(m2) {
+        const y = { header: m2, value: "", full: "" };
+        return o.push(y), { message(v2, C2) {
+          f2(y, v2, C2);
+        }, error(v2) {
+          I2(y, { status: "error", message: v2 });
+        }, success(v2) {
+          I2(y, { status: "success", message: v2 });
+        } };
+      }, error(m2, y) {
+        d(true), R2.error(m2, { output: i, secondarySymbol: r, spacing: 1 }), y?.showLog !== false && p2(), o.splice(1, o.length - 1), o[0].value = "", o[0].full = "";
+      }, success(m2, y) {
+        d(true), R2.success(m2, { output: i, secondarySymbol: r, spacing: 1 }), y?.showLog === true && p2(), o.splice(1, o.length - 1), o[0].value = "", o[0].full = "";
+      } };
+    };
+    Pe = (t) => new ht({ validate: t.validate, placeholder: t.placeholder, defaultValue: t.defaultValue, initialValue: t.initialValue, output: t.output, signal: t.signal, input: t.input, render() {
+      const i = t?.withGuide ?? h.withGuide, s = `${`${i ? `${e("gray", $2)}
+` : ""}${P2(this.state)}  `}${t.message}
+`, r = t.placeholder ? e("inverse", t.placeholder[0]) + e("dim", t.placeholder.slice(1)) : e(["inverse", "hidden"], "_"), u = this.userInput ? this.userInputWithCursor : r, n = this.value ?? "";
+      switch (this.state) {
+        case "error": {
+          const a = this.error ? `  ${e("yellow", this.error)}` : "", c = i ? `${e("yellow", $2)}  ` : "", o = i ? e("yellow", x2) : "";
+          return `${s.trim()}
+${c}${u}
+${o}${a}
+`;
+        }
+        case "submit": {
+          const a = n ? `  ${e("dim", n)}` : "", c = i ? e("gray", $2) : "";
+          return `${s}${c}${a}`;
+        }
+        case "cancel": {
+          const a = n ? `  ${e(["strikethrough", "dim"], n)}` : "", c = i ? e("gray", $2) : "";
+          return `${s}${c}${a}${n.trim() ? `
+${c}` : ""}`;
+        }
+        default: {
+          const a = i ? `${e("cyan", $2)}  ` : "", c = i ? e("cyan", x2) : "";
+          return `${s}${a}${u}
+${c}
+`;
+        }
+      }
+    } }).prompt();
+  }
+});
+
+// node_modules/events-universal/default.js
+var require_default = __commonJS({
+  "node_modules/events-universal/default.js"(exports, module) {
+    module.exports = __require("events");
+  }
+});
+
+// node_modules/fast-fifo/fixed-size.js
+var require_fixed_size = __commonJS({
+  "node_modules/fast-fifo/fixed-size.js"(exports, module) {
+    module.exports = class FixedFIFO {
+      constructor(hwm) {
+        if (!(hwm > 0) || (hwm - 1 & hwm) !== 0) throw new Error("Max size for a FixedFIFO should be a power of two");
+        this.buffer = new Array(hwm);
+        this.mask = hwm - 1;
+        this.top = 0;
+        this.btm = 0;
+        this.next = null;
+      }
+      clear() {
+        this.top = this.btm = 0;
+        this.next = null;
+        this.buffer.fill(void 0);
+      }
+      push(data) {
+        if (this.buffer[this.top] !== void 0) return false;
+        this.buffer[this.top] = data;
+        this.top = this.top + 1 & this.mask;
+        return true;
+      }
+      shift() {
+        const last = this.buffer[this.btm];
+        if (last === void 0) return void 0;
+        this.buffer[this.btm] = void 0;
+        this.btm = this.btm + 1 & this.mask;
+        return last;
+      }
+      peek() {
+        return this.buffer[this.btm];
+      }
+      isEmpty() {
+        return this.buffer[this.btm] === void 0;
+      }
+    };
+  }
+});
+
+// node_modules/fast-fifo/index.js
+var require_fast_fifo = __commonJS({
+  "node_modules/fast-fifo/index.js"(exports, module) {
+    var FixedFIFO = require_fixed_size();
+    module.exports = class FastFIFO {
+      constructor(hwm) {
+        this.hwm = hwm || 16;
+        this.head = new FixedFIFO(this.hwm);
+        this.tail = this.head;
+        this.length = 0;
+      }
+      clear() {
+        this.head = this.tail;
+        this.head.clear();
+        this.length = 0;
+      }
+      push(val) {
+        this.length++;
+        if (!this.head.push(val)) {
+          const prev = this.head;
+          this.head = prev.next = new FixedFIFO(2 * this.head.buffer.length);
+          this.head.push(val);
+        }
+      }
+      shift() {
+        if (this.length !== 0) this.length--;
+        const val = this.tail.shift();
+        if (val === void 0 && this.tail.next) {
+          const next = this.tail.next;
+          this.tail.next = null;
+          this.tail = next;
+          return this.tail.shift();
+        }
+        return val;
+      }
+      peek() {
+        const val = this.tail.peek();
+        if (val === void 0 && this.tail.next) return this.tail.next.peek();
+        return val;
+      }
+      isEmpty() {
+        return this.length === 0;
+      }
+    };
+  }
+});
+
+// node_modules/b4a/index.js
+var require_b4a = __commonJS({
+  "node_modules/b4a/index.js"(exports, module) {
+    function isBuffer(value) {
+      return Buffer.isBuffer(value) || value instanceof Uint8Array;
+    }
+    function isEncoding(encoding) {
+      return Buffer.isEncoding(encoding);
+    }
+    function alloc(size, fill2, encoding) {
+      return Buffer.alloc(size, fill2, encoding);
+    }
+    function allocUnsafe(size) {
+      return Buffer.allocUnsafe(size);
+    }
+    function allocUnsafeSlow(size) {
+      return Buffer.allocUnsafeSlow(size);
+    }
+    function byteLength(string, encoding) {
+      return Buffer.byteLength(string, encoding);
+    }
+    function compare(a, b2) {
+      return Buffer.compare(a, b2);
+    }
+    function concat(buffers, totalLength) {
+      return Buffer.concat(buffers, totalLength);
+    }
+    function copy(source, target, targetStart, start, end) {
+      return toBuffer(source).copy(target, targetStart, start, end);
+    }
+    function equals(a, b2) {
+      return toBuffer(a).equals(b2);
+    }
+    function fill(buffer, value, offset, end, encoding) {
+      return toBuffer(buffer).fill(value, offset, end, encoding);
+    }
+    function from(value, encodingOrOffset, length) {
+      return Buffer.from(value, encodingOrOffset, length);
+    }
+    function includes(buffer, value, byteOffset, encoding) {
+      return toBuffer(buffer).includes(value, byteOffset, encoding);
+    }
+    function indexOf(buffer, value, byfeOffset, encoding) {
+      return toBuffer(buffer).indexOf(value, byfeOffset, encoding);
+    }
+    function lastIndexOf(buffer, value, byteOffset, encoding) {
+      return toBuffer(buffer).lastIndexOf(value, byteOffset, encoding);
+    }
+    function swap16(buffer) {
+      return toBuffer(buffer).swap16();
+    }
+    function swap32(buffer) {
+      return toBuffer(buffer).swap32();
+    }
+    function swap64(buffer) {
+      return toBuffer(buffer).swap64();
+    }
+    function toBuffer(buffer) {
+      if (Buffer.isBuffer(buffer)) return buffer;
+      return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    }
+    function toString(buffer, encoding, start, end) {
+      return toBuffer(buffer).toString(encoding, start, end);
+    }
+    function write(buffer, string, offset, length, encoding) {
+      return toBuffer(buffer).write(string, offset, length, encoding);
+    }
+    function readDoubleBE(buffer, offset) {
+      return toBuffer(buffer).readDoubleBE(offset);
+    }
+    function readDoubleLE(buffer, offset) {
+      return toBuffer(buffer).readDoubleLE(offset);
+    }
+    function readFloatBE(buffer, offset) {
+      return toBuffer(buffer).readFloatBE(offset);
+    }
+    function readFloatLE(buffer, offset) {
+      return toBuffer(buffer).readFloatLE(offset);
+    }
+    function readInt32BE(buffer, offset) {
+      return toBuffer(buffer).readInt32BE(offset);
+    }
+    function readInt32LE(buffer, offset) {
+      return toBuffer(buffer).readInt32LE(offset);
+    }
+    function readUInt32BE(buffer, offset) {
+      return toBuffer(buffer).readUInt32BE(offset);
+    }
+    function readUInt32LE(buffer, offset) {
+      return toBuffer(buffer).readUInt32LE(offset);
+    }
+    function writeDoubleBE(buffer, value, offset) {
+      return toBuffer(buffer).writeDoubleBE(value, offset);
+    }
+    function writeDoubleLE(buffer, value, offset) {
+      return toBuffer(buffer).writeDoubleLE(value, offset);
+    }
+    function writeFloatBE(buffer, value, offset) {
+      return toBuffer(buffer).writeFloatBE(value, offset);
+    }
+    function writeFloatLE(buffer, value, offset) {
+      return toBuffer(buffer).writeFloatLE(value, offset);
+    }
+    function writeInt32BE(buffer, value, offset) {
+      return toBuffer(buffer).writeInt32BE(value, offset);
+    }
+    function writeInt32LE(buffer, value, offset) {
+      return toBuffer(buffer).writeInt32LE(value, offset);
+    }
+    function writeUInt32BE(buffer, value, offset) {
+      return toBuffer(buffer).writeUInt32BE(value, offset);
+    }
+    function writeUInt32LE(buffer, value, offset) {
+      return toBuffer(buffer).writeUInt32LE(value, offset);
+    }
+    module.exports = {
+      isBuffer,
+      isEncoding,
+      alloc,
+      allocUnsafe,
+      allocUnsafeSlow,
+      byteLength,
+      compare,
+      concat,
+      copy,
+      equals,
+      fill,
+      from,
+      includes,
+      indexOf,
+      lastIndexOf,
+      swap16,
+      swap32,
+      swap64,
+      toBuffer,
+      toString,
+      write,
+      readDoubleBE,
+      readDoubleLE,
+      readFloatBE,
+      readFloatLE,
+      readInt32BE,
+      readInt32LE,
+      readUInt32BE,
+      readUInt32LE,
+      writeDoubleBE,
+      writeDoubleLE,
+      writeFloatBE,
+      writeFloatLE,
+      writeInt32BE,
+      writeInt32LE,
+      writeUInt32BE,
+      writeUInt32LE
+    };
+  }
+});
+
+// node_modules/text-decoder/lib/pass-through-decoder.js
+var require_pass_through_decoder = __commonJS({
+  "node_modules/text-decoder/lib/pass-through-decoder.js"(exports, module) {
+    var b4a = require_b4a();
+    module.exports = class PassThroughDecoder {
+      constructor(encoding) {
+        this.encoding = encoding;
+      }
+      get remaining() {
+        return 0;
+      }
+      decode(data) {
+        return b4a.toString(data, this.encoding);
+      }
+      flush() {
+        return "";
+      }
+    };
+  }
+});
+
+// node_modules/text-decoder/lib/utf8-decoder.js
+var require_utf8_decoder = __commonJS({
+  "node_modules/text-decoder/lib/utf8-decoder.js"(exports, module) {
+    var b4a = require_b4a();
+    module.exports = class UTF8Decoder {
+      constructor() {
+        this._reset();
+      }
+      get remaining() {
+        return this.bytesSeen;
+      }
+      decode(data) {
+        if (data.byteLength === 0) return "";
+        if (this.bytesNeeded === 0 && trailingIncomplete(data, 0) === 0) {
+          this.bytesSeen = trailingBytesSeen(data);
+          return b4a.toString(data, "utf8");
+        }
+        let result = "";
+        let start = 0;
+        if (this.bytesNeeded > 0) {
+          while (start < data.byteLength) {
+            const byte = data[start];
+            if (byte < this.lowerBoundary || byte > this.upperBoundary) {
+              result += "\uFFFD";
+              this._reset();
+              break;
+            }
+            this.lowerBoundary = 128;
+            this.upperBoundary = 191;
+            this.codePoint = this.codePoint << 6 | byte & 63;
+            this.bytesSeen++;
+            start++;
+            if (this.bytesSeen === this.bytesNeeded) {
+              result += String.fromCodePoint(this.codePoint);
+              this._reset();
+              break;
+            }
+          }
+          if (this.bytesNeeded > 0) return result;
+        }
+        const trailing = trailingIncomplete(data, start);
+        const end = data.byteLength - trailing;
+        if (end > start) result += b4a.toString(data, "utf8", start, end);
+        for (let i = end; i < data.byteLength; i++) {
+          const byte = data[i];
+          if (this.bytesNeeded === 0) {
+            if (byte <= 127) {
+              this.bytesSeen = 0;
+              result += String.fromCharCode(byte);
+            } else if (byte >= 194 && byte <= 223) {
+              this.bytesNeeded = 2;
+              this.bytesSeen = 1;
+              this.codePoint = byte & 31;
+            } else if (byte >= 224 && byte <= 239) {
+              if (byte === 224) this.lowerBoundary = 160;
+              else if (byte === 237) this.upperBoundary = 159;
+              this.bytesNeeded = 3;
+              this.bytesSeen = 1;
+              this.codePoint = byte & 15;
+            } else if (byte >= 240 && byte <= 244) {
+              if (byte === 240) this.lowerBoundary = 144;
+              else if (byte === 244) this.upperBoundary = 143;
+              this.bytesNeeded = 4;
+              this.bytesSeen = 1;
+              this.codePoint = byte & 7;
+            } else {
+              this.bytesSeen = 1;
+              result += "\uFFFD";
+            }
+            continue;
+          }
+          if (byte < this.lowerBoundary || byte > this.upperBoundary) {
+            result += "\uFFFD";
+            i--;
+            this._reset();
+            continue;
+          }
+          this.lowerBoundary = 128;
+          this.upperBoundary = 191;
+          this.codePoint = this.codePoint << 6 | byte & 63;
+          this.bytesSeen++;
+          if (this.bytesSeen === this.bytesNeeded) {
+            result += String.fromCodePoint(this.codePoint);
+            this._reset();
+          }
+        }
+        return result;
+      }
+      flush() {
+        const result = this.bytesNeeded > 0 ? "\uFFFD" : "";
+        this._reset();
+        return result;
+      }
+      _reset() {
+        this.codePoint = 0;
+        this.bytesNeeded = 0;
+        this.bytesSeen = 0;
+        this.lowerBoundary = 128;
+        this.upperBoundary = 191;
+      }
+    };
+    function trailingIncomplete(data, start) {
+      const len = data.byteLength;
+      if (len <= start) return 0;
+      const limit = Math.max(start, len - 4);
+      let i = len - 1;
+      while (i > limit && (data[i] & 192) === 128) i--;
+      if (i < start) return 0;
+      const byte = data[i];
+      let needed;
+      if (byte <= 127) return 0;
+      if (byte >= 194 && byte <= 223) needed = 2;
+      else if (byte >= 224 && byte <= 239) needed = 3;
+      else if (byte >= 240 && byte <= 244) needed = 4;
+      else return 0;
+      const available = len - i;
+      return available < needed ? available : 0;
+    }
+    function trailingBytesSeen(data) {
+      const len = data.byteLength;
+      if (len === 0) return 0;
+      const last = data[len - 1];
+      if (last <= 127) return 0;
+      if ((last & 192) !== 128) return 1;
+      const limit = Math.max(0, len - 4);
+      let i = len - 2;
+      while (i >= limit && (data[i] & 192) === 128) i--;
+      if (i < 0) return 1;
+      const first = data[i];
+      let needed;
+      if (first >= 194 && first <= 223) needed = 2;
+      else if (first >= 224 && first <= 239) needed = 3;
+      else if (first >= 240 && first <= 244) needed = 4;
+      else return 1;
+      if (len - i !== needed) return 1;
+      if (needed >= 3) {
+        const second = data[i + 1];
+        if (first === 224 && second < 160) return 1;
+        if (first === 237 && second > 159) return 1;
+        if (first === 240 && second < 144) return 1;
+        if (first === 244 && second > 143) return 1;
+      }
+      return 0;
+    }
+  }
+});
+
+// node_modules/text-decoder/index.js
+var require_text_decoder = __commonJS({
+  "node_modules/text-decoder/index.js"(exports, module) {
+    var PassThroughDecoder = require_pass_through_decoder();
+    var UTF8Decoder = require_utf8_decoder();
+    module.exports = class TextDecoder {
+      constructor(encoding = "utf8") {
+        this.encoding = normalizeEncoding(encoding);
+        switch (this.encoding) {
+          case "utf8":
+            this.decoder = new UTF8Decoder();
+            break;
+          case "utf16le":
+          case "base64":
+            throw new Error("Unsupported encoding: " + this.encoding);
+          default:
+            this.decoder = new PassThroughDecoder(this.encoding);
+        }
+      }
+      get remaining() {
+        return this.decoder.remaining;
+      }
+      push(data) {
+        if (typeof data === "string") return data;
+        return this.decoder.decode(data);
+      }
+      // For Node.js compatibility
+      write(data) {
+        return this.push(data);
+      }
+      end(data) {
+        let result = "";
+        if (data) result = this.push(data);
+        result += this.decoder.flush();
+        return result;
+      }
+    };
+    function normalizeEncoding(encoding) {
+      encoding = encoding.toLowerCase();
+      switch (encoding) {
+        case "utf8":
+        case "utf-8":
+          return "utf8";
+        case "ucs2":
+        case "ucs-2":
+        case "utf16le":
+        case "utf-16le":
+          return "utf16le";
+        case "latin1":
+        case "binary":
+          return "latin1";
+        case "base64":
+        case "ascii":
+        case "hex":
+          return encoding;
+        default:
+          throw new Error("Unknown encoding: " + encoding);
+      }
+    }
+  }
+});
+
+// node_modules/streamx/lib/errors.js
+var require_errors = __commonJS({
+  "node_modules/streamx/lib/errors.js"(exports, module) {
+    module.exports = class StreamError extends Error {
+      constructor(msg, code, fn = StreamError) {
+        super(msg);
+        this.code = code;
+        if (Error.captureStackTrace) {
+          Error.captureStackTrace(this, fn);
+        }
+      }
+      static isStreamDestroyed(err) {
+        return err && err.code === "STREAM_DESTROYED";
+      }
+      static isPrematureClose(err) {
+        return err && err.code === "PREMATURE_CLOSE";
+      }
+      static isAborted(err) {
+        return err && err.code === "ABORTED";
+      }
+      static isBadArgument(err) {
+        return err && err.code === "BAD_ARGUMENT";
+      }
+      get name() {
+        return "StreamError";
+      }
+      static STREAM_DESTROYED() {
+        return new StreamError("Stream was destroyed", "STREAM_DESTROYED", StreamError.STREAM_DESTROYED);
+      }
+      static PREMATURE_CLOSE(msg = "Premature close") {
+        return new StreamError(msg, "PREMATURE_CLOSE", StreamError.PREMATURE_CLOSE);
+      }
+      static ABORTED() {
+        return new StreamError("Stream aborted", "ABORTED", StreamError.ABORTED);
+      }
+      static BAD_ARGUMENT(msg = "Bad argument") {
+        return new StreamError(msg, "BAD_ARGUMENT", StreamError.BAD_ARGUMENT);
+      }
+    };
+  }
+});
+
+// node_modules/streamx/index.js
+var require_streamx = __commonJS({
+  "node_modules/streamx/index.js"(exports, module) {
+    var { EventEmitter } = require_default();
+    var FIFO = require_fast_fifo();
+    var TextDecoder2 = require_text_decoder();
+    var StreamError = require_errors();
+    var qmt = typeof queueMicrotask === "undefined" ? (fn) => global.process.nextTick(fn) : queueMicrotask;
+    var MAX = (1 << 29) - 1;
+    var OPENING = 1;
+    var PREDESTROYING = 2;
+    var DESTROYING = 4;
+    var DESTROYED = 8;
+    var NOT_OPENING = MAX ^ OPENING;
+    var NOT_PREDESTROYING = MAX ^ PREDESTROYING;
+    var READ_ACTIVE = 1 << 4;
+    var READ_UPDATING = 2 << 4;
+    var READ_PRIMARY = 4 << 4;
+    var READ_QUEUED = 8 << 4;
+    var READ_RESUMED = 16 << 4;
+    var READ_PIPE_DRAINED = 32 << 4;
+    var READ_ENDING = 64 << 4;
+    var READ_EMIT_DATA = 128 << 4;
+    var READ_EMIT_READABLE = 256 << 4;
+    var READ_EMITTED_READABLE = 512 << 4;
+    var READ_DONE = 1024 << 4;
+    var READ_NEXT_TICK = 2048 << 4;
+    var READ_NEEDS_PUSH = 4096 << 4;
+    var READ_READ_AHEAD = 8192 << 4;
+    var READ_FLOWING = READ_RESUMED | READ_PIPE_DRAINED;
+    var READ_ACTIVE_AND_NEEDS_PUSH = READ_ACTIVE | READ_NEEDS_PUSH;
+    var READ_PRIMARY_AND_ACTIVE = READ_PRIMARY | READ_ACTIVE;
+    var READ_EMIT_READABLE_AND_QUEUED = READ_EMIT_READABLE | READ_QUEUED;
+    var READ_RESUMED_READ_AHEAD = READ_RESUMED | READ_READ_AHEAD;
+    var READ_NOT_ACTIVE = MAX ^ READ_ACTIVE;
+    var READ_NON_PRIMARY = MAX ^ READ_PRIMARY;
+    var READ_NON_PRIMARY_AND_PUSHED = MAX ^ (READ_PRIMARY | READ_NEEDS_PUSH);
+    var READ_PUSHED = MAX ^ READ_NEEDS_PUSH;
+    var READ_PAUSED = MAX ^ READ_RESUMED;
+    var READ_NOT_QUEUED = MAX ^ (READ_QUEUED | READ_EMITTED_READABLE);
+    var READ_NOT_ENDING = MAX ^ READ_ENDING;
+    var READ_PIPE_NOT_DRAINED = MAX ^ READ_FLOWING;
+    var READ_NOT_NEXT_TICK = MAX ^ READ_NEXT_TICK;
+    var READ_NOT_UPDATING = MAX ^ READ_UPDATING;
+    var READ_NO_READ_AHEAD = MAX ^ READ_READ_AHEAD;
+    var READ_PAUSED_NO_READ_AHEAD = MAX ^ READ_RESUMED_READ_AHEAD;
+    var WRITE_ACTIVE = 1 << 18;
+    var WRITE_UPDATING = 2 << 18;
+    var WRITE_PRIMARY = 4 << 18;
+    var WRITE_QUEUED = 8 << 18;
+    var WRITE_UNDRAINED = 16 << 18;
+    var WRITE_DONE = 32 << 18;
+    var WRITE_EMIT_DRAIN = 64 << 18;
+    var WRITE_NEXT_TICK = 128 << 18;
+    var WRITE_WRITING = 256 << 18;
+    var WRITE_FINISHING = 512 << 18;
+    var WRITE_CORKED = 1024 << 18;
+    var WRITE_NOT_ACTIVE = MAX ^ (WRITE_ACTIVE | WRITE_WRITING);
+    var WRITE_NON_PRIMARY = MAX ^ WRITE_PRIMARY;
+    var WRITE_NOT_FINISHING = MAX ^ (WRITE_ACTIVE | WRITE_FINISHING);
+    var WRITE_DRAINED = MAX ^ WRITE_UNDRAINED;
+    var WRITE_NOT_QUEUED = MAX ^ WRITE_QUEUED;
+    var WRITE_NOT_NEXT_TICK = MAX ^ WRITE_NEXT_TICK;
+    var WRITE_NOT_UPDATING = MAX ^ WRITE_UPDATING;
+    var WRITE_NOT_CORKED = MAX ^ WRITE_CORKED;
+    var ACTIVE = READ_ACTIVE | WRITE_ACTIVE;
+    var NOT_ACTIVE = MAX ^ ACTIVE;
+    var DONE = READ_DONE | WRITE_DONE;
+    var DESTROY_STATUS = DESTROYING | DESTROYED | PREDESTROYING;
+    var OPEN_STATUS = DESTROY_STATUS | OPENING;
+    var AUTO_DESTROY = DESTROY_STATUS | DONE;
+    var NON_PRIMARY = WRITE_NON_PRIMARY & READ_NON_PRIMARY;
+    var ACTIVE_OR_TICKING = WRITE_NEXT_TICK | READ_NEXT_TICK;
+    var TICKING = ACTIVE_OR_TICKING & NOT_ACTIVE;
+    var IS_OPENING = OPEN_STATUS | TICKING;
+    var READ_PRIMARY_STATUS = OPEN_STATUS | READ_ENDING | READ_DONE;
+    var READ_STATUS = OPEN_STATUS | READ_DONE | READ_QUEUED;
+    var READ_ENDING_STATUS = OPEN_STATUS | READ_ENDING | READ_QUEUED;
+    var READ_READABLE_STATUS = OPEN_STATUS | READ_EMIT_READABLE | READ_QUEUED | READ_EMITTED_READABLE;
+    var SHOULD_NOT_READ = OPEN_STATUS | READ_ACTIVE | READ_ENDING | READ_DONE | READ_NEEDS_PUSH | READ_READ_AHEAD;
+    var READ_BACKPRESSURE_STATUS = DESTROY_STATUS | READ_ENDING | READ_DONE;
+    var READ_UPDATE_SYNC_STATUS = READ_UPDATING | OPEN_STATUS | READ_NEXT_TICK | READ_PRIMARY;
+    var READ_NEXT_TICK_OR_OPENING = READ_NEXT_TICK | OPENING;
+    var WRITE_PRIMARY_STATUS = OPEN_STATUS | WRITE_FINISHING | WRITE_DONE;
+    var WRITE_QUEUED_AND_UNDRAINED = WRITE_QUEUED | WRITE_UNDRAINED;
+    var WRITE_QUEUED_AND_ACTIVE = WRITE_QUEUED | WRITE_ACTIVE;
+    var WRITE_DRAIN_STATUS = WRITE_QUEUED | WRITE_UNDRAINED | OPEN_STATUS | WRITE_ACTIVE;
+    var WRITE_STATUS = OPEN_STATUS | WRITE_ACTIVE | WRITE_QUEUED | WRITE_CORKED;
+    var WRITE_PRIMARY_AND_ACTIVE = WRITE_PRIMARY | WRITE_ACTIVE;
+    var WRITE_ACTIVE_AND_WRITING = WRITE_ACTIVE | WRITE_WRITING;
+    var WRITE_FINISHING_STATUS = OPEN_STATUS | WRITE_FINISHING | WRITE_QUEUED_AND_ACTIVE | WRITE_DONE;
+    var WRITE_BACKPRESSURE_STATUS = WRITE_UNDRAINED | DESTROY_STATUS | WRITE_FINISHING | WRITE_DONE;
+    var WRITE_UPDATE_SYNC_STATUS = WRITE_UPDATING | OPEN_STATUS | WRITE_NEXT_TICK | WRITE_PRIMARY;
+    var WRITE_DROP_DATA = WRITE_FINISHING | WRITE_DONE | DESTROY_STATUS;
+    var asyncIterator = Symbol.asyncIterator || Symbol("asyncIterator");
+    var WritableState = class {
+      constructor(stream, { highWaterMark = 16384, map = null, mapWritable, byteLength, byteLengthWritable } = {}) {
+        this.stream = stream;
+        this.queue = new FIFO();
+        this.highWaterMark = highWaterMark;
+        this.buffered = 0;
+        this.error = null;
+        this.pipeline = null;
+        this.drains = null;
+        this.byteLength = byteLengthWritable || byteLength || defaultByteLength;
+        this.map = mapWritable || map;
+        this.afterWrite = afterWrite.bind(this);
+        this.afterUpdateNextTick = updateWriteNT.bind(this);
+      }
+      get ending() {
+        return (this.stream._duplexState & WRITE_FINISHING) !== 0;
+      }
+      get ended() {
+        return (this.stream._duplexState & WRITE_DONE) !== 0;
+      }
+      push(data) {
+        if ((this.stream._duplexState & WRITE_DROP_DATA) !== 0) return false;
+        if (this.map !== null) data = this.map(data);
+        this.buffered += this.byteLength(data);
+        this.queue.push(data);
+        if (this.buffered < this.highWaterMark) {
+          this.stream._duplexState |= WRITE_QUEUED;
+          return true;
+        }
+        this.stream._duplexState |= WRITE_QUEUED_AND_UNDRAINED;
+        return false;
+      }
+      shift() {
+        const data = this.queue.shift();
+        this.buffered -= this.byteLength(data);
+        if (this.buffered === 0) this.stream._duplexState &= WRITE_NOT_QUEUED;
+        return data;
+      }
+      end(data) {
+        if (typeof data === "function") {
+          this.stream.once("finish", data);
+        } else if (data !== void 0 && data !== null) {
+          this.push(data);
+        }
+        this.stream._duplexState = (this.stream._duplexState | WRITE_FINISHING) & WRITE_NON_PRIMARY;
+      }
+      autoBatch(data, cb) {
+        const buffer = [];
+        const stream = this.stream;
+        buffer.push(data);
+        while ((stream._duplexState & WRITE_STATUS) === WRITE_QUEUED_AND_ACTIVE) {
+          buffer.push(stream._writableState.shift());
+        }
+        if ((stream._duplexState & OPEN_STATUS) !== 0) return cb(null);
+        stream._writev(buffer, cb);
+      }
+      update() {
+        const stream = this.stream;
+        stream._duplexState |= WRITE_UPDATING;
+        do {
+          while ((stream._duplexState & WRITE_STATUS) === WRITE_QUEUED) {
+            const data = this.shift();
+            stream._duplexState |= WRITE_ACTIVE_AND_WRITING;
+            stream._write(data, this.afterWrite);
+          }
+          if ((stream._duplexState & WRITE_PRIMARY_AND_ACTIVE) === 0) this.updateNonPrimary();
+        } while (this.continueUpdate() === true);
+        stream._duplexState &= WRITE_NOT_UPDATING;
+      }
+      updateNonPrimary() {
+        const stream = this.stream;
+        if ((stream._duplexState & WRITE_FINISHING_STATUS) === WRITE_FINISHING) {
+          stream._duplexState = stream._duplexState | WRITE_ACTIVE;
+          stream._final(afterFinal.bind(this));
+          return;
+        }
+        if ((stream._duplexState & DESTROY_STATUS) === DESTROYING) {
+          if ((stream._duplexState & ACTIVE_OR_TICKING) === 0) {
+            stream._duplexState |= ACTIVE;
+            stream._destroy(afterDestroy.bind(this));
+          }
+          return;
+        }
+        if ((stream._duplexState & IS_OPENING) === OPENING) {
+          stream._duplexState = (stream._duplexState | ACTIVE) & NOT_OPENING;
+          stream._open(afterOpen.bind(this));
+        }
+      }
+      continueUpdate() {
+        if ((this.stream._duplexState & WRITE_NEXT_TICK) === 0) return false;
+        this.stream._duplexState &= WRITE_NOT_NEXT_TICK;
+        return true;
+      }
+      updateCallback() {
+        if ((this.stream._duplexState & WRITE_UPDATE_SYNC_STATUS) === WRITE_PRIMARY) {
+          this.update();
+        } else {
+          this.updateNextTick();
+        }
+      }
+      updateNextTick() {
+        if ((this.stream._duplexState & WRITE_NEXT_TICK) !== 0) return;
+        this.stream._duplexState |= WRITE_NEXT_TICK;
+        if ((this.stream._duplexState & WRITE_UPDATING) === 0) qmt(this.afterUpdateNextTick);
+      }
+    };
+    var ReadableState = class {
+      constructor(stream, { highWaterMark = 16384, map = null, mapReadable, byteLength, byteLengthReadable } = {}) {
+        this.stream = stream;
+        this.queue = new FIFO();
+        this.highWaterMark = highWaterMark === 0 ? 1 : highWaterMark;
+        this.buffered = 0;
+        this.readAhead = highWaterMark > 0;
+        this.error = null;
+        this.pipeline = null;
+        this.byteLength = byteLengthReadable || byteLength || defaultByteLength;
+        this.map = mapReadable || map;
+        this.pipeTo = null;
+        this.afterRead = afterRead.bind(this);
+        this.afterUpdateNextTick = updateReadNT.bind(this);
+      }
+      get ending() {
+        return (this.stream._duplexState & READ_ENDING) !== 0;
+      }
+      get ended() {
+        return (this.stream._duplexState & READ_DONE) !== 0;
+      }
+      pipe(pipeTo, cb) {
+        if (this.pipeTo !== null) throw StreamError.BAD_ARGUMENT("Can only pipe to one destination");
+        if (typeof cb !== "function") cb = null;
+        this.stream._duplexState |= READ_PIPE_DRAINED;
+        this.pipeTo = pipeTo;
+        this.pipeline = new Pipeline(this.stream, pipeTo, cb);
+        if (cb) this.stream.on("error", noop);
+        if (isStreamx(pipeTo)) {
+          pipeTo._writableState.pipeline = this.pipeline;
+          if (cb) pipeTo.on("error", noop);
+          pipeTo.on("finish", this.pipeline.finished.bind(this.pipeline));
+        } else {
+          const onerror = this.pipeline.done.bind(this.pipeline, pipeTo);
+          const onclose = this.pipeline.done.bind(this.pipeline, pipeTo, null);
+          pipeTo.on("error", onerror);
+          pipeTo.on("close", onclose);
+          pipeTo.on("finish", this.pipeline.finished.bind(this.pipeline));
+        }
+        pipeTo.on("drain", afterDrain.bind(this));
+        this.stream.emit("piping", pipeTo);
+        pipeTo.emit("pipe", this.stream);
+      }
+      push(data) {
+        const stream = this.stream;
+        if (data === null) {
+          this.highWaterMark = 0;
+          stream._duplexState = (stream._duplexState | READ_ENDING) & READ_NON_PRIMARY_AND_PUSHED;
+          return false;
+        }
+        if (this.map !== null) {
+          data = this.map(data);
+          if (data === null) {
+            stream._duplexState &= READ_PUSHED;
+            return this.buffered < this.highWaterMark;
+          }
+        }
+        this.buffered += this.byteLength(data);
+        this.queue.push(data);
+        stream._duplexState = (stream._duplexState | READ_QUEUED) & READ_PUSHED;
+        return this.buffered < this.highWaterMark;
+      }
+      shift() {
+        const data = this.queue.shift();
+        this.buffered -= this.byteLength(data);
+        if (this.buffered === 0) {
+          this.stream._duplexState &= READ_NOT_QUEUED;
+        }
+        return data;
+      }
+      unshift(data) {
+        const pending = [this.map !== null ? this.map(data) : data];
+        while (this.buffered > 0) pending.push(this.shift());
+        for (let i = 0; i < pending.length - 1; i++) {
+          const data2 = pending[i];
+          this.buffered += this.byteLength(data2);
+          this.queue.push(data2);
+        }
+        this.push(pending[pending.length - 1]);
+      }
+      read() {
+        const stream = this.stream;
+        if ((stream._duplexState & READ_STATUS) === READ_QUEUED) {
+          const data = this.shift();
+          if (this.pipeTo !== null && this.pipeTo.write(data) === false) {
+            stream._duplexState &= READ_PIPE_NOT_DRAINED;
+          }
+          if ((stream._duplexState & READ_EMIT_DATA) !== 0) {
+            stream.emit("data", data);
+          }
+          return data;
+        }
+        if (this.readAhead === false) {
+          stream._duplexState |= READ_READ_AHEAD;
+          this.updateNextTick();
+        }
+        return null;
+      }
+      drain() {
+        const stream = this.stream;
+        while ((stream._duplexState & READ_STATUS) === READ_QUEUED && (stream._duplexState & READ_FLOWING) !== 0) {
+          const data = this.shift();
+          if (this.pipeTo !== null && this.pipeTo.write(data) === false) {
+            stream._duplexState &= READ_PIPE_NOT_DRAINED;
+          }
+          if ((stream._duplexState & READ_EMIT_DATA) !== 0) {
+            stream.emit("data", data);
+          }
+        }
+      }
+      update() {
+        const stream = this.stream;
+        stream._duplexState |= READ_UPDATING;
+        do {
+          this.drain();
+          while (this.buffered < this.highWaterMark && (stream._duplexState & SHOULD_NOT_READ) === READ_READ_AHEAD) {
+            stream._duplexState |= READ_ACTIVE_AND_NEEDS_PUSH;
+            stream._read(this.afterRead);
+            this.drain();
+          }
+          if ((stream._duplexState & READ_READABLE_STATUS) === READ_EMIT_READABLE_AND_QUEUED) {
+            stream._duplexState |= READ_EMITTED_READABLE;
+            stream.emit("readable");
+          }
+          if ((stream._duplexState & READ_PRIMARY_AND_ACTIVE) === 0) {
+            this.updateNonPrimary();
+          }
+        } while (this.continueUpdate() === true);
+        stream._duplexState &= READ_NOT_UPDATING;
+      }
+      updateNonPrimary() {
+        const stream = this.stream;
+        if ((stream._duplexState & READ_ENDING_STATUS) === READ_ENDING) {
+          stream._duplexState = (stream._duplexState | READ_DONE) & READ_NOT_ENDING;
+          stream.emit("end");
+          if ((stream._duplexState & AUTO_DESTROY) === DONE) {
+            stream._duplexState |= DESTROYING;
+          }
+          if (this.pipeTo !== null) {
+            this.pipeTo.end();
+          }
+        }
+        if ((stream._duplexState & DESTROY_STATUS) === DESTROYING) {
+          if ((stream._duplexState & ACTIVE_OR_TICKING) === 0) {
+            stream._duplexState |= ACTIVE;
+            stream._destroy(afterDestroy.bind(this));
+          }
+          return;
+        }
+        if ((stream._duplexState & IS_OPENING) === OPENING) {
+          stream._duplexState = (stream._duplexState | ACTIVE) & NOT_OPENING;
+          stream._open(afterOpen.bind(this));
+        }
+      }
+      continueUpdate() {
+        if ((this.stream._duplexState & READ_NEXT_TICK) === 0) return false;
+        this.stream._duplexState &= READ_NOT_NEXT_TICK;
+        return true;
+      }
+      updateCallback() {
+        if ((this.stream._duplexState & READ_UPDATE_SYNC_STATUS) === READ_PRIMARY) {
+          this.update();
+        } else {
+          this.updateNextTick();
+        }
+      }
+      updateNextTickIfOpen() {
+        if ((this.stream._duplexState & READ_NEXT_TICK_OR_OPENING) !== 0) return;
+        this.stream._duplexState |= READ_NEXT_TICK;
+        if ((this.stream._duplexState & READ_UPDATING) === 0) qmt(this.afterUpdateNextTick);
+      }
+      updateNextTick() {
+        if ((this.stream._duplexState & READ_NEXT_TICK) !== 0) return;
+        this.stream._duplexState |= READ_NEXT_TICK;
+        if ((this.stream._duplexState & READ_UPDATING) === 0) qmt(this.afterUpdateNextTick);
+      }
+    };
+    var TransformState = class {
+      constructor(stream) {
+        this.data = null;
+        this.afterTransform = afterTransform.bind(stream);
+        this.afterFinal = null;
+      }
+    };
+    var Pipeline = class {
+      constructor(src, dst, cb) {
+        this.from = src;
+        this.to = dst;
+        this.afterPipe = cb;
+        this.error = null;
+        this.pipeToFinished = false;
+      }
+      finished() {
+        this.pipeToFinished = true;
+      }
+      done(stream, err) {
+        if (err) this.error = err;
+        if (stream === this.to) {
+          this.to = null;
+          if (this.from !== null) {
+            if ((this.from._duplexState & READ_DONE) === 0 || !this.pipeToFinished) {
+              this.from.destroy(this.error || StreamError.PREMATURE_CLOSE("Writable stream closed"));
+            }
+            return;
+          }
+        }
+        if (stream === this.from) {
+          this.from = null;
+          if (this.to !== null) {
+            if ((stream._duplexState & READ_DONE) === 0) {
+              this.to.destroy(this.error || StreamError.PREMATURE_CLOSE("Readable stream closed"));
+            }
+            return;
+          }
+        }
+        if (this.afterPipe !== null) this.afterPipe(this.error);
+        this.to = this.from = this.afterPipe = null;
+      }
+    };
+    function afterDrain() {
+      this.stream._duplexState |= READ_PIPE_DRAINED;
+      this.updateCallback();
+    }
+    function afterFinal(err) {
+      const stream = this.stream;
+      if (err) stream.destroy(err);
+      if ((stream._duplexState & DESTROY_STATUS) === 0) {
+        stream._duplexState |= WRITE_DONE;
+        stream.emit("finish");
+      }
+      if ((stream._duplexState & AUTO_DESTROY) === DONE) {
+        stream._duplexState |= DESTROYING;
+      }
+      stream._duplexState &= WRITE_NOT_FINISHING;
+      if ((stream._duplexState & WRITE_UPDATING) === 0) {
+        this.update();
+      } else {
+        this.updateNextTick();
+      }
+    }
+    function afterDestroy(err) {
+      const stream = this.stream;
+      if (!err && !StreamError.isStreamDestroyed(this.error)) err = this.error;
+      if (err) stream.emit("error", err);
+      stream._duplexState |= DESTROYED;
+      stream.emit("close");
+      const rs = stream._readableState;
+      const ws = stream._writableState;
+      if (rs !== null && rs.pipeline !== null) {
+        rs.pipeline.done(stream, err);
+      }
+      if (ws !== null) {
+        while (ws.drains !== null && ws.drains.length > 0) {
+          ws.drains.shift().resolve(false);
+        }
+        if (ws.pipeline !== null) {
+          ws.pipeline.done(stream, err);
+        }
+      }
+    }
+    function afterWrite(err) {
+      const stream = this.stream;
+      if (err) stream.destroy(err);
+      stream._duplexState &= WRITE_NOT_ACTIVE;
+      if (this.drains !== null) tickDrains(this.drains);
+      if ((stream._duplexState & WRITE_DRAIN_STATUS) === WRITE_UNDRAINED) {
+        stream._duplexState &= WRITE_DRAINED;
+        if ((stream._duplexState & WRITE_EMIT_DRAIN) === WRITE_EMIT_DRAIN) {
+          stream.emit("drain");
+        }
+      }
+      this.updateCallback();
+    }
+    function afterRead(err) {
+      if (err) this.stream.destroy(err);
+      this.stream._duplexState &= READ_NOT_ACTIVE;
+      if (this.readAhead === false && (this.stream._duplexState & READ_RESUMED) === 0) {
+        this.stream._duplexState &= READ_NO_READ_AHEAD;
+      }
+      this.updateCallback();
+    }
+    function updateReadNT() {
+      if ((this.stream._duplexState & READ_UPDATING) === 0) {
+        this.stream._duplexState &= READ_NOT_NEXT_TICK;
+        this.update();
+      }
+    }
+    function updateWriteNT() {
+      if ((this.stream._duplexState & WRITE_UPDATING) === 0) {
+        this.stream._duplexState &= WRITE_NOT_NEXT_TICK;
+        this.update();
+      }
+    }
+    function tickDrains(drains) {
+      for (let i = 0; i < drains.length; i++) {
+        if (--drains[i].writes === 0) {
+          drains.shift().resolve(true);
+          i--;
+        }
+      }
+    }
+    function afterOpen(err) {
+      const stream = this.stream;
+      if (err) stream.destroy(err);
+      if ((stream._duplexState & DESTROYING) === 0) {
+        if ((stream._duplexState & READ_PRIMARY_STATUS) === 0) {
+          stream._duplexState |= READ_PRIMARY;
+        }
+        if ((stream._duplexState & WRITE_PRIMARY_STATUS) === 0) {
+          stream._duplexState |= WRITE_PRIMARY;
+        }
+        stream.emit("open");
+      }
+      stream._duplexState &= NOT_ACTIVE;
+      if (stream._writableState !== null) {
+        stream._writableState.updateCallback();
+      }
+      if (stream._readableState !== null) {
+        stream._readableState.updateCallback();
+      }
+    }
+    function afterTransform(err, data) {
+      if (data !== void 0 && data !== null) this.push(data);
+      this._writableState.afterWrite(err);
+    }
+    function newListener(name) {
+      if (this._readableState !== null) {
+        if (name === "data") {
+          this._duplexState |= READ_EMIT_DATA | READ_RESUMED_READ_AHEAD;
+          this._readableState.updateNextTick();
+        }
+        if (name === "readable") {
+          this._duplexState |= READ_EMIT_READABLE;
+          this._readableState.updateNextTick();
+        }
+      }
+      if (this._writableState !== null) {
+        if (name === "drain") {
+          this._duplexState |= WRITE_EMIT_DRAIN;
+          this._writableState.updateNextTick();
+        }
+      }
+    }
+    var Stream = class extends EventEmitter {
+      constructor(opts) {
+        super();
+        this._duplexState = 0;
+        this._readableState = null;
+        this._writableState = null;
+        if (opts) {
+          if (opts.open) this._open = opts.open;
+          if (opts.destroy) this._destroy = opts.destroy;
+          if (opts.predestroy) this._predestroy = opts.predestroy;
+          if (opts.signal) opts.signal.addEventListener("abort", abort.bind(this));
+        }
+        this.on("newListener", newListener);
+      }
+      _open(cb) {
+        cb(null);
+      }
+      _destroy(cb) {
+        cb(null);
+      }
+      _predestroy() {
+      }
+      get readable() {
+        return this._readableState !== null ? true : void 0;
+      }
+      get writable() {
+        return this._writableState !== null ? true : void 0;
+      }
+      get destroyed() {
+        return (this._duplexState & DESTROYED) !== 0;
+      }
+      get destroying() {
+        return (this._duplexState & DESTROY_STATUS) !== 0;
+      }
+      destroy(err) {
+        if ((this._duplexState & DESTROY_STATUS) === 0) {
+          if (!err) err = StreamError.STREAM_DESTROYED();
+          this._duplexState = (this._duplexState | DESTROYING) & NON_PRIMARY;
+          if (this._readableState !== null) {
+            this._readableState.highWaterMark = 0;
+            this._readableState.error = err;
+          }
+          if (this._writableState !== null) {
+            this._writableState.highWaterMark = 0;
+            this._writableState.error = err;
+          }
+          this._duplexState |= PREDESTROYING;
+          this._predestroy();
+          this._duplexState &= NOT_PREDESTROYING;
+          if (this._readableState !== null) {
+            this._readableState.updateNextTick();
+          }
+          if (this._writableState !== null) {
+            this._writableState.updateNextTick();
+          }
+        }
+      }
+    };
+    var Readable2 = class _Readable extends Stream {
+      constructor(opts) {
+        super(opts);
+        this._duplexState |= OPENING | WRITE_DONE | READ_READ_AHEAD;
+        this._readableState = new ReadableState(this, opts);
+        if (opts) {
+          if (this._readableState.readAhead === false) this._duplexState &= READ_NO_READ_AHEAD;
+          if (opts.read) this._read = opts.read;
+          if (opts.eagerOpen) this._readableState.updateNextTick();
+          if (opts.encoding) this.setEncoding(opts.encoding);
+        }
+      }
+      static deferred(fn, opts) {
+        const out = new PassThrough(opts);
+        fn().then((src) => {
+          if (src === null) return out.end();
+          if (out.destroying) return;
+          pipeline2(src, out, noop);
+        }).catch((err) => out.destroy(err));
+        return out;
+      }
+      setEncoding(encoding) {
+        const dec = new TextDecoder2(encoding);
+        const map = this._readableState.map || echo;
+        this._readableState.map = mapOrSkip;
+        return this;
+        function mapOrSkip(data) {
+          const next = dec.push(data);
+          return next === "" && (data.byteLength !== 0 || dec.remaining > 0) ? null : map(next);
+        }
+      }
+      _read(cb) {
+        cb(null);
+      }
+      pipe(dest, cb) {
+        this._readableState.updateNextTick();
+        this._readableState.pipe(dest, cb);
+        return dest;
+      }
+      read() {
+        this._readableState.updateNextTick();
+        return this._readableState.read();
+      }
+      push(data) {
+        this._readableState.updateNextTickIfOpen();
+        return this._readableState.push(data);
+      }
+      unshift(data) {
+        this._readableState.updateNextTickIfOpen();
+        return this._readableState.unshift(data);
+      }
+      resume() {
+        this._duplexState |= READ_RESUMED_READ_AHEAD;
+        this._readableState.updateNextTick();
+        return this;
+      }
+      pause() {
+        this._duplexState &= this._readableState.readAhead === false ? READ_PAUSED_NO_READ_AHEAD : READ_PAUSED;
+        return this;
+      }
+      static _fromAsyncIterator(ite, opts) {
+        let destroy;
+        const rs = new _Readable({
+          ...opts,
+          read(cb) {
+            ite.next().then(push).then(cb.bind(null, null)).catch(cb);
+          },
+          predestroy() {
+            destroy = ite.return();
+          },
+          destroy(cb) {
+            if (!destroy) return cb(null);
+            destroy.then(cb.bind(null, null)).catch(cb);
+          }
+        });
+        return rs;
+        function push(data) {
+          if (data.done) rs.push(null);
+          else rs.push(data.value);
+        }
+      }
+      static from(data, opts) {
+        if (isReadStreamx(data)) return data;
+        if (data[asyncIterator]) return this._fromAsyncIterator(data[asyncIterator](), opts);
+        if (!Array.isArray(data)) data = data === void 0 ? [] : [data];
+        let i = 0;
+        return new _Readable({
+          ...opts,
+          read(cb) {
+            this.push(i === data.length ? null : data[i++]);
+            cb(null);
+          }
+        });
+      }
+      static isBackpressured(rs) {
+        return (rs._duplexState & READ_BACKPRESSURE_STATUS) !== 0 || rs._readableState.buffered >= rs._readableState.highWaterMark;
+      }
+      static isPaused(rs) {
+        return (rs._duplexState & READ_RESUMED) === 0;
+      }
+      [asyncIterator]() {
+        const stream = this;
+        let error = null;
+        let promiseResolve = null;
+        let promiseReject = null;
+        this.on("error", (err) => {
+          error = err;
+        });
+        this.on("readable", onreadable);
+        this.on("close", onclose);
+        return {
+          [asyncIterator]() {
+            return this;
+          },
+          next() {
+            return new Promise(function(resolve, reject) {
+              promiseResolve = resolve;
+              promiseReject = reject;
+              const data = stream.read();
+              if (data !== null) ondata(data);
+              else if ((stream._duplexState & DESTROYED) !== 0) ondata(null);
+            });
+          },
+          return() {
+            return destroy(null);
+          },
+          throw(err) {
+            return destroy(err);
+          }
+        };
+        function onreadable() {
+          if (promiseResolve !== null) ondata(stream.read());
+        }
+        function onclose() {
+          if (promiseResolve !== null) ondata(null);
+        }
+        function ondata(data) {
+          if (promiseReject === null) return;
+          if (error) {
+            promiseReject(error);
+          } else if (data === null && (stream._duplexState & READ_DONE) === 0) {
+            promiseReject(StreamError.STREAM_DESTROYED());
+          } else {
+            promiseResolve({ value: data, done: data === null });
+          }
+          promiseReject = promiseResolve = null;
+        }
+        function destroy(err) {
+          stream.destroy(err);
+          return new Promise((resolve, reject) => {
+            if (stream._duplexState & DESTROYED) return resolve({ value: void 0, done: true });
+            stream.once("close", function() {
+              if (err) reject(err);
+              else resolve({ value: void 0, done: true });
+            });
+          });
+        }
+      }
+    };
+    var Writable2 = class extends Stream {
+      constructor(opts) {
+        super(opts);
+        this._duplexState |= OPENING | READ_DONE;
+        this._writableState = new WritableState(this, opts);
+        if (opts) {
+          if (opts.writev) this._writev = opts.writev;
+          if (opts.write) this._write = opts.write;
+          if (opts.final) this._final = opts.final;
+          if (opts.eagerOpen) this._writableState.updateNextTick();
+        }
+      }
+      cork() {
+        this._duplexState |= WRITE_CORKED;
+      }
+      uncork() {
+        this._duplexState &= WRITE_NOT_CORKED;
+        this._writableState.updateNextTick();
+      }
+      _writev(batch, cb) {
+        cb(null);
+      }
+      _write(data, cb) {
+        this._writableState.autoBatch(data, cb);
+      }
+      _final(cb) {
+        cb(null);
+      }
+      static isBackpressured(ws) {
+        return (ws._duplexState & WRITE_BACKPRESSURE_STATUS) !== 0;
+      }
+      static drained(ws) {
+        if (ws.destroyed) return Promise.resolve(false);
+        const state = ws._writableState;
+        const pending = isWritev(ws) ? Math.min(1, state.queue.length) : state.queue.length;
+        const writes = pending + (ws._duplexState & WRITE_WRITING ? 1 : 0);
+        if (writes === 0) return Promise.resolve(true);
+        if (state.drains === null) state.drains = [];
+        return new Promise((resolve) => {
+          state.drains.push({ writes, resolve });
+        });
+      }
+      write(data) {
+        this._writableState.updateNextTick();
+        return this._writableState.push(data);
+      }
+      end(data) {
+        this._writableState.updateNextTick();
+        this._writableState.end(data);
+        return this;
+      }
+    };
+    var Duplex = class extends Readable2 {
+      // and Writable
+      constructor(opts) {
+        super(opts);
+        this._duplexState = OPENING | this._duplexState & READ_READ_AHEAD;
+        this._writableState = new WritableState(this, opts);
+        if (opts) {
+          if (opts.writev) this._writev = opts.writev;
+          if (opts.write) this._write = opts.write;
+          if (opts.final) this._final = opts.final;
+        }
+      }
+      cork() {
+        this._duplexState |= WRITE_CORKED;
+      }
+      uncork() {
+        this._duplexState &= WRITE_NOT_CORKED;
+        this._writableState.updateNextTick();
+      }
+      _writev(batch, cb) {
+        cb(null);
+      }
+      _write(data, cb) {
+        this._writableState.autoBatch(data, cb);
+      }
+      _final(cb) {
+        cb(null);
+      }
+      write(data) {
+        this._writableState.updateNextTick();
+        return this._writableState.push(data);
+      }
+      end(data) {
+        this._writableState.updateNextTick();
+        this._writableState.end(data);
+        return this;
+      }
+    };
+    var Transform = class extends Duplex {
+      constructor(opts) {
+        super(opts);
+        this._transformState = new TransformState(this);
+        if (opts) {
+          if (opts.transform) this._transform = opts.transform;
+          if (opts.flush) this._flush = opts.flush;
+        }
+      }
+      _write(data, cb) {
+        if (this._readableState.buffered >= this._readableState.highWaterMark) {
+          this._transformState.data = data;
+        } else {
+          this._transform(data, this._transformState.afterTransform);
+        }
+      }
+      _read(cb) {
+        if (this._transformState.data !== null) {
+          const data = this._transformState.data;
+          this._transformState.data = null;
+          cb(null);
+          this._transform(data, this._transformState.afterTransform);
+        } else {
+          cb(null);
+        }
+      }
+      destroy(err) {
+        super.destroy(err);
+        if (this._transformState.data !== null) {
+          this._transformState.data = null;
+          this._transformState.afterTransform();
+        }
+      }
+      _transform(data, cb) {
+        cb(null, data);
+      }
+      _flush(cb) {
+        cb(null);
+      }
+      _final(cb) {
+        this._transformState.afterFinal = cb;
+        this._flush(transformAfterFlush.bind(this));
+      }
+    };
+    var PassThrough = class extends Transform {
+    };
+    function transformAfterFlush(err, data) {
+      const cb = this._transformState.afterFinal;
+      if (err) return cb(err);
+      if (data !== null && data !== void 0) this.push(data);
+      this.push(null);
+      cb(null);
+    }
+    function pipelinePromise(...streams) {
+      return new Promise((resolve, reject) => {
+        return pipeline2(...streams, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+    function pipeline2(stream, ...streams) {
+      const all = Array.isArray(stream) ? [...stream, ...streams] : [stream, ...streams];
+      const done = all.length && typeof all[all.length - 1] === "function" ? all.pop() : null;
+      if (all.length < 2) throw StreamError.BAD_ARGUMENT("Pipeline requires at least 2 streams");
+      let src = all[0];
+      let dest = null;
+      let error = null;
+      for (let i = 1; i < all.length; i++) {
+        dest = all[i];
+        if (isStreamx(src)) {
+          src.pipe(dest, onerror);
+        } else {
+          errorHandle(src, true, i > 1, onerror);
+          src.pipe(dest);
+        }
+        src = dest;
+      }
+      if (done) {
+        let fin = false;
+        const autoDestroy = isStreamx(dest) || !!(dest._writableState && dest._writableState.autoDestroy);
+        dest.on("error", (err) => {
+          if (error === null) error = err;
+        });
+        dest.on("finish", () => {
+          fin = true;
+          if (!autoDestroy) done(error);
+        });
+        if (autoDestroy) {
+          dest.on("close", () => done(error || (fin ? null : StreamError.PREMATURE_CLOSE())));
+        }
+      }
+      return dest;
+      function errorHandle(s, rd, wr, onerror2) {
+        s.on("error", onerror2);
+        s.on("close", onclose);
+        function onclose() {
+          if (rd && s._readableState && !s._readableState.ended) {
+            return onerror2(StreamError.PREMATURE_CLOSE());
+          }
+          if (wr && s._writableState && !s._writableState.ended) {
+            return onerror2(StreamError.PREMATURE_CLOSE());
+          }
+        }
+      }
+      function onerror(err) {
+        if (!err || error) return;
+        error = err;
+        for (const s of all) {
+          s.destroy(err);
+        }
+      }
+    }
+    function echo(s) {
+      return s;
+    }
+    function isStream(stream) {
+      return !!stream._readableState || !!stream._writableState;
+    }
+    function isStreamx(stream) {
+      return typeof stream._duplexState === "number" && isStream(stream);
+    }
+    function isEnding(stream) {
+      return !!stream._readableState && stream._readableState.ending;
+    }
+    function isEnded(stream) {
+      return !!stream._readableState && stream._readableState.ended;
+    }
+    function isFinishing(stream) {
+      return !!stream._writableState && stream._writableState.ending;
+    }
+    function isFinished(stream) {
+      return !!stream._writableState && stream._writableState.ended;
+    }
+    function getStreamError(stream, opts = {}) {
+      const err = stream._readableState && stream._readableState.error || stream._writableState && stream._writableState.error;
+      return !opts.all && StreamError.isStreamDestroyed(err) ? null : err;
+    }
+    function isReadStreamx(stream) {
+      return isStreamx(stream) && stream.readable;
+    }
+    function isDisturbed(stream) {
+      return (stream._duplexState & OPENING) !== OPENING || (stream._duplexState & DESTROYING) === DESTROYING || (stream._duplexState & ACTIVE_OR_TICKING) !== 0;
+    }
+    function isTypedArray(data) {
+      return typeof data === "object" && data !== null && typeof data.byteLength === "number";
+    }
+    function defaultByteLength(data) {
+      return isTypedArray(data) ? data.byteLength : 1024;
+    }
+    function noop() {
+    }
+    function abort() {
+      this.destroy(StreamError.ABORTED());
+    }
+    function isWritev(s) {
+      return s._writev !== Writable2.prototype._writev && s._writev !== Duplex.prototype._writev;
+    }
+    module.exports = {
+      pipeline: pipeline2,
+      pipelinePromise,
+      isStream,
+      isStreamx,
+      isEnding,
+      isEnded,
+      isFinishing,
+      isFinished,
+      isDisturbed,
+      getStreamError,
+      Stream,
+      Writable: Writable2,
+      Readable: Readable2,
+      Duplex,
+      Transform,
+      // Export PassThrough for compatibility with Node.js core's stream module
+      PassThrough
+    };
+  }
+});
+
+// node_modules/tar-stream/headers.js
+var require_headers = __commonJS({
+  "node_modules/tar-stream/headers.js"(exports) {
+    var b4a = require_b4a();
+    var ZEROS = "0000000000000000000";
+    var SEVENS = "7777777777777777777";
+    var ZERO_OFFSET = "0".charCodeAt(0);
+    var USTAR_MAGIC = b4a.from([117, 115, 116, 97, 114, 0]);
+    var USTAR_VER = b4a.from([ZERO_OFFSET, ZERO_OFFSET]);
+    var GNU_MAGIC = b4a.from([117, 115, 116, 97, 114, 32]);
+    var GNU_VER = b4a.from([32, 0]);
+    var MASK = 4095;
+    var MAGIC_OFFSET = 257;
+    var VERSION_OFFSET = 263;
+    exports.decodeLongPath = function decodeLongPath(buf, encoding) {
+      return decodeStr(buf, 0, buf.length, encoding);
+    };
+    exports.encodePax = function encodePax(opts) {
+      let result = "";
+      if (opts.name) result += addLength(" path=" + opts.name + "\n");
+      if (opts.linkname) result += addLength(" linkpath=" + opts.linkname + "\n");
+      const pax = opts.pax;
+      if (pax) {
+        for (const key in pax) {
+          result += addLength(" " + key + "=" + pax[key] + "\n");
+        }
+      }
+      return b4a.from(result);
+    };
+    exports.decodePax = function decodePax(buf) {
+      const result = {};
+      while (buf.length) {
+        let i = 0;
+        while (i < buf.length && buf[i] !== 32) i++;
+        const len = parseInt(b4a.toString(buf.subarray(0, i)), 10);
+        if (!len) return result;
+        const b2 = b4a.toString(buf.subarray(i + 1, len - 1));
+        const keyIndex = b2.indexOf("=");
+        if (keyIndex === -1) return result;
+        result[b2.slice(0, keyIndex)] = b2.slice(keyIndex + 1);
+        buf = buf.subarray(len);
+      }
+      return result;
+    };
+    exports.encode = function encode(opts) {
+      const buf = b4a.alloc(512);
+      let name = opts.name;
+      let prefix = "";
+      if (opts.typeflag === 5 && name[name.length - 1] !== "/") name += "/";
+      if (b4a.byteLength(name) !== name.length) return null;
+      while (b4a.byteLength(name) > 100) {
+        const i = name.indexOf("/");
+        if (i === -1) return null;
+        prefix += prefix ? "/" + name.slice(0, i) : name.slice(0, i);
+        name = name.slice(i + 1);
+      }
+      if (b4a.byteLength(name) > 100 || b4a.byteLength(prefix) > 155) return null;
+      if (opts.linkname && b4a.byteLength(opts.linkname) > 100) return null;
+      b4a.write(buf, name);
+      b4a.write(buf, encodeOct(opts.mode & MASK, 6), 100);
+      b4a.write(buf, encodeOct(opts.uid, 6), 108);
+      b4a.write(buf, encodeOct(opts.gid, 6), 116);
+      encodeSize(opts.size, buf, 124);
+      b4a.write(buf, encodeOct(opts.mtime.getTime() / 1e3 | 0, 11), 136);
+      buf[156] = ZERO_OFFSET + toTypeflag(opts.type);
+      if (opts.linkname) b4a.write(buf, opts.linkname, 157);
+      b4a.copy(USTAR_MAGIC, buf, MAGIC_OFFSET);
+      b4a.copy(USTAR_VER, buf, VERSION_OFFSET);
+      if (opts.uname) b4a.write(buf, opts.uname, 265);
+      if (opts.gname) b4a.write(buf, opts.gname, 297);
+      b4a.write(buf, encodeOct(opts.devmajor || 0, 6), 329);
+      b4a.write(buf, encodeOct(opts.devminor || 0, 6), 337);
+      if (prefix) b4a.write(buf, prefix, 345);
+      b4a.write(buf, encodeOct(cksum(buf), 6), 148);
+      return buf;
+    };
+    exports.decode = function decode(buf, filenameEncoding, allowUnknownFormat) {
+      let typeflag = buf[156] === 0 ? 0 : buf[156] - ZERO_OFFSET;
+      let name = decodeStr(buf, 0, 100, filenameEncoding);
+      const mode = decodeOct(buf, 100, 8);
+      const uid = decodeOct(buf, 108, 8);
+      const gid = decodeOct(buf, 116, 8);
+      const size = decodeOct(buf, 124, 12);
+      const mtime = decodeOct(buf, 136, 12);
+      const type = toType(typeflag);
+      const linkname = buf[157] === 0 ? null : decodeStr(buf, 157, 100, filenameEncoding);
+      const uname = decodeStr(buf, 265, 32);
+      const gname = decodeStr(buf, 297, 32);
+      const devmajor = decodeOct(buf, 329, 8);
+      const devminor = decodeOct(buf, 337, 8);
+      const c = cksum(buf);
+      if (c === 8 * 32) return null;
+      if (c !== decodeOct(buf, 148, 8)) throw new Error("Invalid tar header. Maybe the tar is corrupted or it needs to be gunzipped?");
+      if (isUSTAR(buf)) {
+        if (buf[345]) name = decodeStr(buf, 345, 155, filenameEncoding) + "/" + name;
+      } else if (isGNU(buf)) {
+      } else {
+        if (!allowUnknownFormat) {
+          throw new Error("Invalid tar header: unknown format.");
+        }
+      }
+      if (typeflag === 0 && name && name[name.length - 1] === "/") typeflag = 5;
+      return {
+        name,
+        mode,
+        uid,
+        gid,
+        size,
+        byteOffset: 0,
+        mtime: new Date(1e3 * mtime),
+        type,
+        linkname,
+        uname,
+        gname,
+        devmajor,
+        devminor,
+        pax: null
+      };
+    };
+    function isUSTAR(buf) {
+      return b4a.equals(USTAR_MAGIC, buf.subarray(MAGIC_OFFSET, MAGIC_OFFSET + 6));
+    }
+    function isGNU(buf) {
+      return b4a.equals(GNU_MAGIC, buf.subarray(MAGIC_OFFSET, MAGIC_OFFSET + 6)) && b4a.equals(GNU_VER, buf.subarray(VERSION_OFFSET, VERSION_OFFSET + 2));
+    }
+    function clamp(index, len, defaultValue) {
+      if (typeof index !== "number") return defaultValue;
+      index = ~~index;
+      if (index >= len) return len;
+      if (index >= 0) return index;
+      index += len;
+      if (index >= 0) return index;
+      return 0;
+    }
+    function toType(flag) {
+      switch (flag) {
+        case 0:
+          return "file";
+        case 1:
+          return "link";
+        case 2:
+          return "symlink";
+        case 3:
+          return "character-device";
+        case 4:
+          return "block-device";
+        case 5:
+          return "directory";
+        case 6:
+          return "fifo";
+        case 7:
+          return "contiguous-file";
+        case 72:
+          return "pax-header";
+        case 55:
+          return "pax-global-header";
+        case 27:
+          return "gnu-long-link-path";
+        case 28:
+        case 30:
+          return "gnu-long-path";
+      }
+      return null;
+    }
+    function toTypeflag(flag) {
+      switch (flag) {
+        case "file":
+          return 0;
+        case "link":
+          return 1;
+        case "symlink":
+          return 2;
+        case "character-device":
+          return 3;
+        case "block-device":
+          return 4;
+        case "directory":
+          return 5;
+        case "fifo":
+          return 6;
+        case "contiguous-file":
+          return 7;
+        case "pax-header":
+          return 72;
+      }
+      return 0;
+    }
+    function indexOf(block, num, offset, end) {
+      for (; offset < end; offset++) {
+        if (block[offset] === num) return offset;
+      }
+      return end;
+    }
+    function cksum(block) {
+      let sum2 = 8 * 32;
+      for (let i = 0; i < 148; i++) sum2 += block[i];
+      for (let j2 = 156; j2 < 512; j2++) sum2 += block[j2];
+      return sum2;
+    }
+    function encodeOct(val, n) {
+      val = val.toString(8);
+      if (val.length > n) return SEVENS.slice(0, n) + " ";
+      return ZEROS.slice(0, n - val.length) + val + " ";
+    }
+    function encodeSizeBin(num, buf, off) {
+      buf[off] = 128;
+      for (let i = 11; i > 0; i--) {
+        buf[off + i] = num & 255;
+        num = Math.floor(num / 256);
+      }
+    }
+    function encodeSize(num, buf, off) {
+      if (num.toString(8).length > 11) {
+        encodeSizeBin(num, buf, off);
+      } else {
+        b4a.write(buf, encodeOct(num, 11), off);
+      }
+    }
+    function parse256(buf) {
+      let positive;
+      if (buf[0] === 128) positive = true;
+      else if (buf[0] === 255) positive = false;
+      else return null;
+      const tuple = [];
+      let i;
+      for (i = buf.length - 1; i > 0; i--) {
+        const byte = buf[i];
+        if (positive) tuple.push(byte);
+        else tuple.push(255 - byte);
+      }
+      let sum2 = 0;
+      const l = tuple.length;
+      for (i = 0; i < l; i++) {
+        sum2 += tuple[i] * Math.pow(256, i);
+      }
+      return positive ? sum2 : -1 * sum2;
+    }
+    function decodeOct(val, offset, length) {
+      val = val.subarray(offset, offset + length);
+      offset = 0;
+      if (val[offset] & 128) {
+        return parse256(val);
+      } else {
+        while (offset < val.length && val[offset] === 32) offset++;
+        const end = clamp(indexOf(val, 32, offset, val.length), val.length, val.length);
+        while (offset < end && val[offset] === 0) offset++;
+        if (end === offset) return 0;
+        return parseInt(b4a.toString(val.subarray(offset, end)), 8);
+      }
+    }
+    function decodeStr(val, offset, length, encoding) {
+      return b4a.toString(val.subarray(offset, indexOf(val, 0, offset, offset + length)), encoding);
+    }
+    function addLength(str) {
+      const len = b4a.byteLength(str);
+      let digits = Math.floor(Math.log(len) / Math.log(10)) + 1;
+      if (len + digits >= Math.pow(10, digits)) digits++;
+      return len + digits + str;
+    }
+  }
+});
+
+// node_modules/tar-stream/extract.js
+var require_extract = __commonJS({
+  "node_modules/tar-stream/extract.js"(exports, module) {
+    var { Writable: Writable2, Readable: Readable2, getStreamError } = require_streamx();
+    var FIFO = require_fast_fifo();
+    var b4a = require_b4a();
+    var headers = require_headers();
+    var EMPTY = b4a.alloc(0);
+    var MAX_HEADER_SIZE = 4 * 1024 * 1024;
+    var BufferList = class {
+      constructor() {
+        this.buffered = 0;
+        this.shifted = 0;
+        this.queue = new FIFO();
+        this._offset = 0;
+      }
+      push(buffer) {
+        this.buffered += buffer.byteLength;
+        this.queue.push(buffer);
+      }
+      shiftFirst(size) {
+        return this.buffered === 0 ? null : this._next(size);
+      }
+      shift(size) {
+        if (size > this.buffered) return null;
+        if (size === 0) return EMPTY;
+        let chunk = this._next(size);
+        if (size === chunk.byteLength) return chunk;
+        const chunks = [chunk];
+        while ((size -= chunk.byteLength) > 0) {
+          chunk = this._next(size);
+          chunks.push(chunk);
+        }
+        return b4a.concat(chunks);
+      }
+      _next(size) {
+        const buf = this.queue.peek();
+        const rem = buf.byteLength - this._offset;
+        if (size >= rem) {
+          const sub = this._offset ? buf.subarray(this._offset, buf.byteLength) : buf;
+          this.queue.shift();
+          this._offset = 0;
+          this.buffered -= rem;
+          this.shifted += rem;
+          return sub;
+        }
+        this.buffered -= size;
+        this.shifted += size;
+        return buf.subarray(this._offset, this._offset += size);
+      }
+    };
+    var Source = class extends Readable2 {
+      constructor(self, header, offset) {
+        super();
+        this.header = header;
+        this.offset = offset;
+        this._parent = self;
+      }
+      _read(cb) {
+        if (this.header.size === 0) {
+          this.push(null);
+        }
+        if (this._parent._stream === this) {
+          this._parent._update();
+        }
+        cb(null);
+      }
+      _predestroy() {
+        this._parent.destroy(getStreamError(this));
+      }
+      _detach() {
+        if (this._parent._stream === this) {
+          this._parent._stream = null;
+          this._parent._missing = overflow(this.header.size);
+          this._parent._update();
+        }
+      }
+      _destroy(cb) {
+        this._detach();
+        cb(null);
+      }
+    };
+    var Extract = class extends Writable2 {
+      constructor(opts) {
+        super(opts);
+        if (!opts) opts = {};
+        this._buffer = new BufferList();
+        this._offset = 0;
+        this._header = null;
+        this._stream = null;
+        this._missing = 0;
+        this._longHeader = false;
+        this._callback = noop;
+        this._locked = false;
+        this._finished = false;
+        this._pax = null;
+        this._paxGlobal = null;
+        this._gnuLongPath = null;
+        this._gnuLongLinkPath = null;
+        this._filenameEncoding = opts.filenameEncoding || "utf-8";
+        this._allowUnknownFormat = !!opts.allowUnknownFormat;
+        this._unlockBound = this._unlock.bind(this);
+      }
+      _unlock(err) {
+        this._locked = false;
+        if (err) {
+          this.destroy(err);
+          this._continueWrite(err);
+          return;
+        }
+        this._update();
+      }
+      _consumeHeader() {
+        if (this._locked) return false;
+        this._offset = this._buffer.shifted;
+        try {
+          this._header = headers.decode(this._buffer.shift(512), this._filenameEncoding, this._allowUnknownFormat);
+        } catch (err) {
+          this._continueWrite(err);
+          return false;
+        }
+        if (!this._header) return true;
+        this._header.byteOffset = this._buffer.shifted;
+        switch (this._header.type) {
+          case "gnu-long-path":
+          case "gnu-long-link-path":
+          case "pax-global-header":
+          case "pax-header":
+            this._longHeader = true;
+            this._missing = this._header.size;
+            if (this._missing > MAX_HEADER_SIZE) {
+              this._continueWrite(new Error("Header exceeds max size"));
+              return false;
+            }
+            return true;
+        }
+        this._locked = true;
+        this._applyLongHeaders();
+        if (!(this._header.size >= 0)) {
+          this._continueWrite(new Error("Invalid header"));
+          return false;
+        }
+        if (this._header.size === 0 || this._header.type === "directory") {
+          this.emit("entry", this._header, this._createStream(), this._unlockBound);
+          return true;
+        }
+        this._stream = this._createStream();
+        this._missing = this._header.size;
+        this.emit("entry", this._header, this._stream, this._unlockBound);
+        return true;
+      }
+      _applyLongHeaders() {
+        if (this._gnuLongPath) {
+          this._header.name = this._gnuLongPath;
+          this._gnuLongPath = null;
+        }
+        if (this._gnuLongLinkPath) {
+          this._header.linkname = this._gnuLongLinkPath;
+          this._gnuLongLinkPath = null;
+        }
+        if (this._pax) {
+          if (this._pax.path) this._header.name = this._pax.path;
+          if (this._pax.linkpath) this._header.linkname = this._pax.linkpath;
+          if (this._pax.size) this._header.size = parseInt(this._pax.size, 10);
+          this._header.pax = this._pax;
+          this._pax = null;
+        }
+      }
+      _decodeLongHeader(buf) {
+        switch (this._header.type) {
+          case "gnu-long-path":
+            this._gnuLongPath = headers.decodeLongPath(buf, this._filenameEncoding);
+            break;
+          case "gnu-long-link-path":
+            this._gnuLongLinkPath = headers.decodeLongPath(buf, this._filenameEncoding);
+            break;
+          case "pax-global-header":
+            this._paxGlobal = headers.decodePax(buf);
+            break;
+          case "pax-header":
+            this._pax = this._paxGlobal === null ? headers.decodePax(buf) : Object.assign({}, this._paxGlobal, headers.decodePax(buf));
+            break;
+        }
+      }
+      _consumeLongHeader() {
+        this._longHeader = false;
+        this._missing = overflow(this._header.size);
+        const buf = this._buffer.shift(this._header.size);
+        try {
+          this._decodeLongHeader(buf);
+        } catch (err) {
+          this._continueWrite(err);
+          return false;
+        }
+        return true;
+      }
+      _consumeStream() {
+        const buf = this._buffer.shiftFirst(this._missing);
+        if (buf === null) return false;
+        this._missing -= buf.byteLength;
+        const drained = this._stream.push(buf);
+        if (this._missing === 0) {
+          this._stream.push(null);
+          if (drained) this._stream._detach();
+          return drained && this._locked === false;
+        }
+        return drained;
+      }
+      _createStream() {
+        return new Source(this, this._header, this._offset);
+      }
+      _update() {
+        while (this._buffer.buffered > 0 && !this.destroying) {
+          if (this._missing > 0) {
+            if (this._stream !== null) {
+              if (this._consumeStream() === false) return;
+              continue;
+            }
+            if (this._longHeader === true) {
+              if (this._missing > this._buffer.buffered) break;
+              if (this._consumeLongHeader() === false) return false;
+              continue;
+            }
+            const ignore = this._buffer.shiftFirst(this._missing);
+            if (ignore !== null) this._missing -= ignore.byteLength;
+            continue;
+          }
+          if (this._buffer.buffered < 512) break;
+          if (this._stream !== null || this._consumeHeader() === false) return;
+        }
+        this._continueWrite(null);
+      }
+      _continueWrite(err) {
+        const cb = this._callback;
+        this._callback = noop;
+        cb(err);
+      }
+      _write(data, cb) {
+        this._callback = cb;
+        this._buffer.push(data);
+        this._update();
+      }
+      _final(cb) {
+        this._finished = this._missing === 0 && this._buffer.buffered === 0;
+        cb(this._finished ? null : new Error("Unexpected end of data"));
+      }
+      _predestroy() {
+        this._continueWrite(null);
+      }
+      _destroy(cb) {
+        if (this._stream) this._stream.destroy(getStreamError(this));
+        cb(null);
+      }
+      [Symbol.asyncIterator]() {
+        let error = null;
+        let promiseResolve = null;
+        let promiseReject = null;
+        let entryStream = null;
+        let entryCallback = null;
+        const extract2 = this;
+        this.on("entry", onentry);
+        this.on("error", (err) => {
+          error = err;
+        });
+        this.on("close", onclose);
+        return {
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+          next() {
+            return new Promise(onnext);
+          },
+          return() {
+            return destroy(null);
+          },
+          throw(err) {
+            return destroy(err);
+          }
+        };
+        function consumeCallback(err) {
+          if (!entryCallback) return;
+          const cb = entryCallback;
+          entryCallback = null;
+          cb(err);
+        }
+        function onnext(resolve, reject) {
+          if (error) {
+            return reject(error);
+          }
+          if (entryStream) {
+            resolve({ value: entryStream, done: false });
+            entryStream = null;
+            return;
+          }
+          promiseResolve = resolve;
+          promiseReject = reject;
+          consumeCallback(null);
+          if (extract2._finished && promiseResolve) {
+            promiseResolve({ value: void 0, done: true });
+            promiseResolve = promiseReject = null;
+          }
+        }
+        function onentry(header, stream, callback) {
+          entryCallback = callback;
+          stream.on("error", noop);
+          if (promiseResolve) {
+            promiseResolve({ value: stream, done: false });
+            promiseResolve = promiseReject = null;
+          } else {
+            entryStream = stream;
+          }
+        }
+        function onclose() {
+          consumeCallback(error);
+          if (!promiseResolve) return;
+          if (error) promiseReject(error);
+          else promiseResolve({ value: void 0, done: true });
+          promiseResolve = promiseReject = null;
+        }
+        function destroy(err) {
+          extract2.destroy(err);
+          consumeCallback(err);
+          return new Promise((resolve, reject) => {
+            if (extract2.destroyed) return resolve({ value: void 0, done: true });
+            extract2.once("close", function() {
+              if (err) reject(err);
+              else resolve({ value: void 0, done: true });
+            });
+          });
+        }
+      }
+    };
+    module.exports = function extract2(opts) {
+      return new Extract(opts);
+    };
+    function noop() {
+    }
+    function overflow(size) {
+      size &= 511;
+      return size && 512 - size;
+    }
+  }
+});
+
+// node_modules/tar-stream/constants.js
+var require_constants = __commonJS({
+  "node_modules/tar-stream/constants.js"(exports, module) {
+    var constants = {
+      // just for envs without fs
+      S_IFMT: 61440,
+      S_IFDIR: 16384,
+      S_IFCHR: 8192,
+      S_IFBLK: 24576,
+      S_IFIFO: 4096,
+      S_IFLNK: 40960
+    };
+    try {
+      module.exports = __require("fs").constants || constants;
+    } catch {
+      module.exports = constants;
+    }
+  }
+});
+
+// node_modules/tar-stream/pack.js
+var require_pack = __commonJS({
+  "node_modules/tar-stream/pack.js"(exports, module) {
+    var { Readable: Readable2, Writable: Writable2, getStreamError } = require_streamx();
+    var b4a = require_b4a();
+    var constants = require_constants();
+    var headers = require_headers();
+    var DMODE = 493;
+    var FMODE = 420;
+    var END_OF_TAR = b4a.alloc(1024);
+    var Sink = class extends Writable2 {
+      constructor(pack2, header, callback) {
+        super({ mapWritable, eagerOpen: true });
+        this.written = 0;
+        this.header = header;
+        this._callback = callback;
+        this._linkname = null;
+        this._isLinkname = header.type === "symlink" && !header.linkname;
+        this._isVoid = header.type !== "file" && header.type !== "contiguous-file";
+        this._finished = false;
+        this._pack = pack2;
+        this._openCallback = null;
+        if (this._pack._stream === null) this._pack._stream = this;
+        else this._pack._pending.push(this);
+      }
+      _open(cb) {
+        this._openCallback = cb;
+        if (this._pack._stream === this) this._continueOpen();
+      }
+      _continuePack(err) {
+        if (this._callback === null) return;
+        const callback = this._callback;
+        this._callback = null;
+        callback(err);
+      }
+      _continueOpen() {
+        if (this._pack._stream === null) this._pack._stream = this;
+        const cb = this._openCallback;
+        this._openCallback = null;
+        if (cb === null) return;
+        if (this._pack.destroying) return cb(new Error("pack stream destroyed"));
+        if (this._pack._finalized) return cb(new Error("pack stream is already finalized"));
+        this._pack._stream = this;
+        if (!this._isLinkname) {
+          this._pack._encode(this.header);
+        }
+        if (this._isVoid) {
+          this._finish();
+          this._continuePack(null);
+        }
+        cb(null);
+      }
+      _write(data, cb) {
+        if (this._isLinkname) {
+          this._linkname = this._linkname ? b4a.concat([this._linkname, data]) : data;
+          return cb(null);
+        }
+        if (this._isVoid) {
+          if (data.byteLength > 0) {
+            return cb(new Error("No body allowed for this entry"));
+          }
+          return cb();
+        }
+        this.written += data.byteLength;
+        if (this._pack.push(data)) return cb();
+        this._pack._drain = cb;
+      }
+      _finish() {
+        if (this._finished) return;
+        this._finished = true;
+        if (this._isLinkname) {
+          this.header.linkname = this._linkname ? b4a.toString(this._linkname, "utf-8") : "";
+          this._pack._encode(this.header);
+        }
+        overflow(this._pack, this.header.size);
+        this._pack._done(this);
+      }
+      _final(cb) {
+        if (this.written !== this.header.size) {
+          return cb(new Error("Size mismatch"));
+        }
+        this._finish();
+        cb(null);
+      }
+      _getError() {
+        return getStreamError(this) || new Error("tar entry destroyed");
+      }
+      _predestroy() {
+        this._pack.destroy(this._getError());
+      }
+      _destroy(cb) {
+        this._pack._done(this);
+        this._continuePack(this._finished ? null : this._getError());
+        cb();
+      }
+    };
+    var Pack = class extends Readable2 {
+      constructor(opts) {
+        super(opts);
+        this._drain = noop;
+        this._finalized = false;
+        this._finalizing = false;
+        this._pending = [];
+        this._stream = null;
+      }
+      entry(header, buffer, callback) {
+        if (this._finalized || this.destroying) throw new Error("already finalized or destroyed");
+        if (typeof buffer === "function") {
+          callback = buffer;
+          buffer = null;
+        }
+        if (!callback) callback = noop;
+        if (!header.size || header.type === "symlink") header.size = 0;
+        if (!header.type) header.type = modeToType(header.mode);
+        if (!header.mode) header.mode = header.type === "directory" ? DMODE : FMODE;
+        if (!header.uid) header.uid = 0;
+        if (!header.gid) header.gid = 0;
+        if (!header.mtime) header.mtime = /* @__PURE__ */ new Date();
+        if (typeof buffer === "string") buffer = b4a.from(buffer);
+        const sink = new Sink(this, header, callback);
+        if (b4a.isBuffer(buffer)) {
+          header.size = buffer.byteLength;
+          sink.write(buffer);
+          sink.end();
+          return sink;
+        }
+        if (sink._isVoid) {
+          return sink;
+        }
+        return sink;
+      }
+      finalize() {
+        if (this._stream || this._pending.length > 0) {
+          this._finalizing = true;
+          return;
+        }
+        if (this._finalized) return;
+        this._finalized = true;
+        this.push(END_OF_TAR);
+        this.push(null);
+      }
+      _done(stream) {
+        if (stream !== this._stream) return;
+        this._stream = null;
+        if (this._finalizing) this.finalize();
+        if (this._pending.length) this._pending.shift()._continueOpen();
+      }
+      _encode(header) {
+        if (!header.pax) {
+          const buf = headers.encode(header);
+          if (buf) {
+            this.push(buf);
+            return;
+          }
+        }
+        this._encodePax(header);
+      }
+      _encodePax(header) {
+        const paxHeader = headers.encodePax({
+          name: header.name,
+          linkname: header.linkname,
+          pax: header.pax
+        });
+        const newHeader = {
+          name: "PaxHeader",
+          mode: header.mode,
+          uid: header.uid,
+          gid: header.gid,
+          size: paxHeader.byteLength,
+          mtime: header.mtime,
+          type: "pax-header",
+          linkname: header.linkname && "PaxHeader",
+          uname: header.uname,
+          gname: header.gname,
+          devmajor: header.devmajor,
+          devminor: header.devminor
+        };
+        this.push(headers.encode(newHeader));
+        this.push(paxHeader);
+        overflow(this, paxHeader.byteLength);
+        newHeader.size = header.size;
+        newHeader.type = header.type;
+        this.push(headers.encode(newHeader));
+      }
+      _doDrain() {
+        const drain = this._drain;
+        this._drain = noop;
+        drain();
+      }
+      _predestroy() {
+        const err = getStreamError(this);
+        if (this._stream) this._stream.destroy(err);
+        while (this._pending.length) {
+          const stream = this._pending.shift();
+          stream.destroy(err);
+          stream._continueOpen();
+        }
+        this._doDrain();
+      }
+      _read(cb) {
+        this._doDrain();
+        cb();
+      }
+    };
+    module.exports = function pack2(opts) {
+      return new Pack(opts);
+    };
+    function modeToType(mode) {
+      switch (mode & constants.S_IFMT) {
+        case constants.S_IFBLK:
+          return "block-device";
+        case constants.S_IFCHR:
+          return "character-device";
+        case constants.S_IFDIR:
+          return "directory";
+        case constants.S_IFIFO:
+          return "fifo";
+        case constants.S_IFLNK:
+          return "symlink";
+      }
+      return "file";
+    }
+    function noop() {
+    }
+    function overflow(self, size) {
+      size &= 511;
+      if (size) self.push(END_OF_TAR.subarray(0, 512 - size));
+    }
+    function mapWritable(buf) {
+      return b4a.isBuffer(buf) ? buf : b4a.from(buf);
+    }
+  }
+});
+
+// node_modules/tar-stream/index.js
+var require_tar_stream = __commonJS({
+  "node_modules/tar-stream/index.js"(exports) {
+    exports.extract = require_extract();
+    exports.pack = require_pack();
+  }
+});
+
+// node_modules/skillflag/dist/shared/frontmatter.js
+function stripYamlQuotes(value) {
+  if (value.startsWith('"') && value.endsWith('"') || value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).trim();
+  }
+  return value;
+}
+function parseFrontmatter(content) {
+  const frontmatterMatch = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!frontmatterMatch) {
+    return {};
+  }
+  const block = frontmatterMatch[1];
+  const lines = block.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const fields = {};
+  for (const line of lines) {
+    const idx = line.indexOf(":");
+    if (idx === -1)
+      continue;
+    const key = line.slice(0, idx).trim();
+    const value = stripYamlQuotes(line.slice(idx + 1).trim());
+    if (key && value) {
+      fields[key] = value;
+    }
+  }
+  return fields;
+}
+var init_frontmatter = __esm({
+  "node_modules/skillflag/dist/shared/frontmatter.js"() {
+  }
+});
+
+// node_modules/skillflag/dist/utils/collections.js
+function uniqueValues(values) {
+  const out = [];
+  for (const value of values) {
+    if (!out.includes(value)) {
+      out.push(value);
+    }
+  }
+  return out;
+}
+var init_collections = __esm({
+  "node_modules/skillflag/dist/utils/collections.js"() {
+  }
+});
+
+// node_modules/skillflag/dist/install/errors.js
+function toErrorMessage2(err) {
+  if (err instanceof Error)
+    return err.message;
+  return String(err);
+}
+var InstallError;
+var init_errors = __esm({
+  "node_modules/skillflag/dist/install/errors.js"() {
+    InstallError = class extends Error {
+      exitCode;
+      constructor(message, exitCode = 1) {
+        super(message);
+        this.exitCode = exitCode;
+      }
+    };
+  }
+});
+
+// node_modules/skillflag/dist/install/validate.js
 import fs5 from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import path5 from "node:path";
+async function assertSkillDir(rootDir) {
+  const skillMd = path5.join(rootDir, "SKILL.md");
+  try {
+    await fs5.access(skillMd);
+  } catch {
+    throw new InstallError("SKILL.md not found in skill root.");
+  }
+}
+async function readSkillMetadata(rootDir) {
+  const skillMdPath = path5.join(rootDir, "SKILL.md");
+  const content = await fs5.readFile(skillMdPath, "utf8");
+  const fields = parseFrontmatter(content);
+  const name = fields.name;
+  const description = fields.description;
+  if (!name) {
+    throw new InstallError("SKILL.md metadata is missing name.");
+  }
+  if (!description) {
+    throw new InstallError("SKILL.md metadata is missing description.");
+  }
+  return { name, description };
+}
+var init_validate = __esm({
+  "node_modules/skillflag/dist/install/validate.js"() {
+    init_errors();
+    init_frontmatter();
+  }
+});
+
+// node_modules/skillflag/dist/install/extract.js
+import fs6 from "node:fs/promises";
+import path6 from "node:path";
+function isInvalidRelPath2(relPosix) {
+  if (path6.posix.isAbsolute(relPosix))
+    return true;
+  const parts = relPosix.split("/");
+  return parts.includes("..") || parts.some((part) => part.length === 0);
+}
+async function extractSkillTarToTemp(stream, tempDir) {
+  const extract2 = tar2.extract();
+  let rootName = null;
+  const done = new Promise((resolve, reject) => {
+    extract2.on("entry", async (header, entryStream, next) => {
+      try {
+        const rawName = header.name;
+        if (!rawName || rawName.includes("\\")) {
+          throw new InstallError(`Invalid path in tar: ${rawName}`);
+        }
+        const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
+        if (!name || isInvalidRelPath2(name)) {
+          throw new InstallError(`Invalid path in tar: ${rawName}`);
+        }
+        const [top, ...rest] = name.split("/");
+        if (!top) {
+          throw new InstallError(`Invalid tar entry name: ${rawName}`);
+        }
+        if (!rootName)
+          rootName = top;
+        if (rootName !== top) {
+          throw new InstallError("Tar must contain a single top-level directory.");
+        }
+        const relPath = rest.join("/");
+        const absPath = relPath ? path6.join(tempDir, top, relPath) : path6.join(tempDir, top);
+        if (header.type === "directory") {
+          await fs6.mkdir(absPath, { recursive: true });
+          entryStream.resume();
+          entryStream.on("end", next);
+          return;
+        }
+        if (header.type === "file") {
+          if (!relPath) {
+            throw new InstallError("Tar must contain a single top-level directory.");
+          }
+          await fs6.mkdir(path6.dirname(absPath), { recursive: true });
+          const chunks = [];
+          entryStream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+          entryStream.on("end", async () => {
+            await fs6.writeFile(absPath, Buffer.concat(chunks));
+            next();
+          });
+          return;
+        }
+        throw new InstallError(`Unsupported tar entry type: ${header.type}`);
+      } catch (err) {
+        entryStream.resume();
+        reject(err);
+      }
+    });
+    extract2.on("finish", () => {
+      if (!rootName) {
+        reject(new InstallError("Tar stream was empty."));
+        return;
+      }
+      resolve(path6.join(tempDir, rootName));
+    });
+    extract2.on("error", (err) => reject(err));
+  });
+  stream.pipe(extract2);
+  return done;
+}
+var tar2;
+var init_extract = __esm({
+  "node_modules/skillflag/dist/install/extract.js"() {
+    tar2 = __toESM(require_tar_stream(), 1);
+    init_errors();
+  }
+});
+
+// node_modules/skillflag/dist/install/resolve.js
+import os from "node:os";
+import path7 from "node:path";
+import { execFileSync } from "node:child_process";
+function resolveRepoRoot(cwd) {
+  try {
+    const out = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8"
+    }).trim();
+    if (out)
+      return out;
+  } catch {
+  }
+  return cwd;
+}
+function configRoot() {
+  return process.env.XDG_CONFIG_HOME ?? path7.join(os.homedir(), ".config");
+}
+function assertAgent(value) {
+  if (AGENTS.includes(value)) {
+    return value;
+  }
+  throw new InstallError(`Unsupported agent: ${value}`);
+}
+function assertScope(value) {
+  if (SCOPES.includes(value)) {
+    return value;
+  }
+  throw new InstallError(`Unsupported scope: ${value}`);
+}
+function supportedScopesForAgent(agent) {
+  return Object.keys(scopeResolversByAgent[agent]);
+}
+function sharedScopesForAgents(agents) {
+  const uniqueAgents = uniqueValues(agents);
+  if (uniqueAgents.length === 0) {
+    return [];
+  }
+  const first = uniqueAgents[0];
+  return supportedScopesForAgent(first).filter((scope) => uniqueAgents.every((agent) => supportedScopesForAgent(agent).includes(scope)));
+}
+function assertSupportedAgentScopes(agents, scopes) {
+  for (const agent of uniqueValues(agents)) {
+    const supported = supportedScopesForAgent(agent);
+    for (const scope of uniqueValues(scopes)) {
+      if (!supported.includes(scope)) {
+        throw new InstallError(`Unsupported agent/scope: ${agent} ${scope}`);
+      }
+    }
+  }
+}
+function resolveSkillsRoot2(agent, scope, cwd) {
+  const resolver = scopeResolversByAgent[agent][scope];
+  if (!resolver) {
+    throw new InstallError(`Unsupported agent/scope: ${agent} ${scope}`);
+  }
+  return resolver(cwd);
+}
+var AGENTS, SCOPES, scopeResolversByAgent;
+var init_resolve = __esm({
+  "node_modules/skillflag/dist/install/resolve.js"() {
+    init_errors();
+    init_collections();
+    AGENTS = [
+      "codex",
+      "claude",
+      "portable",
+      "vscode",
+      "copilot",
+      "amp",
+      "goose",
+      "opencode",
+      "factory",
+      "cursor"
+    ];
+    SCOPES = ["repo", "user", "cwd"];
+    scopeResolversByAgent = {
+      codex: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".codex/skills"),
+        cwd: (cwd) => path7.join(cwd, ".codex/skills"),
+        user: () => {
+          const root = process.env.CODEX_HOME ?? path7.join(os.homedir(), ".codex");
+          return path7.join(root, "skills");
+        }
+      },
+      claude: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".claude/skills"),
+        user: () => path7.join(os.homedir(), ".claude/skills")
+      },
+      portable: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".agents/skills"),
+        user: () => path7.join(configRoot(), "agents/skills")
+      },
+      vscode: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".github/skills")
+      },
+      copilot: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".github/skills")
+      },
+      amp: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".agents/skills"),
+        user: () => path7.join(configRoot(), "agents/skills")
+      },
+      goose: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".agents/skills"),
+        user: () => path7.join(configRoot(), "agents/skills")
+      },
+      opencode: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".opencode/skill"),
+        user: () => path7.join(configRoot(), "opencode/skill")
+      },
+      factory: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".factory/skills"),
+        user: () => path7.join(os.homedir(), ".factory/skills")
+      },
+      cursor: {
+        repo: (cwd) => path7.join(resolveRepoRoot(cwd), ".cursor/skills")
+      }
+    };
+  }
+});
+
+// node_modules/skillflag/dist/install/copy.js
+import fs7 from "node:fs/promises";
+import path8 from "node:path";
+async function copySkillDir(sourceDir, destDir, force) {
+  try {
+    await fs7.access(destDir);
+    if (!force) {
+      throw new InstallError(`Destination already exists: ${destDir}`);
+    }
+    await fs7.rm(destDir, { recursive: true, force: true });
+  } catch (err) {
+    if (err instanceof InstallError)
+      throw err;
+  }
+  await fs7.mkdir(path8.dirname(destDir), { recursive: true });
+  await fs7.cp(sourceDir, destDir, { recursive: true });
+}
+var init_copy = __esm({
+  "node_modules/skillflag/dist/install/copy.js"() {
+    init_errors();
+  }
+});
+
+// node_modules/skillflag/dist/install/install.js
+import fs8 from "node:fs/promises";
+import os2 from "node:os";
+import path9 from "node:path";
+async function installSkill(input, options) {
+  const { agent, scope, cwd, force } = options;
+  let rootDir = "";
+  let cleanup = async () => {
+  };
+  if (input.kind === "dir") {
+    rootDir = path9.resolve(input.dir);
+  } else {
+    const tempDir = await fs8.mkdtemp(path9.join(os2.tmpdir(), "skill-install-"));
+    cleanup = async () => {
+      await fs8.rm(tempDir, { recursive: true, force: true });
+    };
+    rootDir = await extractSkillTarToTemp(input.stream, tempDir);
+  }
+  try {
+    await assertSkillDir(rootDir);
+    const meta = await readSkillMetadata(rootDir);
+    const skillId = meta.name;
+    const skillsRoot = resolveSkillsRoot2(agent, scope, cwd);
+    const destDir = path9.join(skillsRoot, skillId);
+    await copySkillDir(rootDir, destDir, force);
+    return { skillId, installedTo: destDir };
+  } finally {
+    await cleanup();
+  }
+}
+var init_install = __esm({
+  "node_modules/skillflag/dist/install/install.js"() {
+    init_validate();
+    init_extract();
+    init_resolve();
+    init_copy();
+  }
+});
+
+// node_modules/skillflag/dist/install/cli.js
+var cli_exports = {};
+__export(cli_exports, {
+  runInstallCli: () => runInstallCli
+});
 import process2 from "node:process";
+import fs9 from "node:fs";
+import path10 from "node:path";
+import { ReadStream as TtyReadStream, WriteStream as TtyWriteStream } from "node:tty";
+import { Readable } from "node:stream";
+function parseScopeValue(value) {
+  if (!value || value.startsWith("-")) {
+    throw new InstallError("Missing value for --scope.");
+  }
+  const scope = value.trim();
+  if (scope.length === 0) {
+    throw new InstallError("Missing value for --scope.");
+  }
+  if (scope.includes(",")) {
+    throw new InstallError("Only one value is allowed for --scope. Comma-separated values are not supported.");
+  }
+  return scope;
+}
+function parseAgentValue(value) {
+  if (!value || value.startsWith("-")) {
+    throw new InstallError("Missing value for --agent.");
+  }
+  const agent = value.trim();
+  if (agent.length === 0) {
+    throw new InstallError("Missing value for --agent.");
+  }
+  if (agent.includes(",")) {
+    throw new InstallError("Only one value is allowed for --agent. Comma-separated values are not supported.");
+  }
+  return agent;
+}
+function parseArgs(args) {
+  const rest = [...args];
+  const inputPaths = [];
+  let agentValue;
+  let scopeValue;
+  let force = false;
+  let help = false;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--agent") {
+      if (agentValue !== void 0) {
+        throw new InstallError("Only one --agent flag is allowed.");
+      }
+      agentValue = parseAgentValue(rest[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (arg === "--scope") {
+      if (scopeValue !== void 0) {
+        throw new InstallError("Only one --scope flag is allowed.");
+      }
+      scopeValue = parseScopeValue(rest[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (arg === "--force") {
+      force = true;
+      continue;
+    }
+    if (arg === "--help" || arg === "-h") {
+      help = true;
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      throw new InstallError(`Unknown option: ${arg}`);
+    }
+    inputPaths.push(arg);
+  }
+  return {
+    inputPaths,
+    agents: agentValue ? [agentValue] : [],
+    scopes: scopeValue ? [scopeValue] : [],
+    force,
+    help
+  };
+}
+function stdinHasData(stream) {
+  if (typeof stream.isTTY === "boolean") {
+    return !stream.isTTY;
+  }
+  return !stream.readableEnded;
+}
+function stdinIsTty(stream) {
+  return stream.isTTY === true;
+}
+function stdinIsPipe(stream) {
+  const tty = stream.isTTY;
+  if (tty === false) {
+    return true;
+  }
+  if (tty === true) {
+    return false;
+  }
+  return stream.fd === 0;
+}
+function openPromptTty() {
+  let inputFd;
+  let outputFd;
+  try {
+    inputFd = fs9.openSync("/dev/tty", "r");
+    outputFd = fs9.openSync("/dev/tty", "w");
+    const promptInputFd = inputFd;
+    const promptOutputFd = outputFd;
+    const input = new TtyReadStream(promptInputFd);
+    const output = new TtyWriteStream(promptOutputFd);
+    let closed = false;
+    return {
+      input,
+      output,
+      close: () => {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        input.destroy();
+        output.destroy();
+        try {
+          fs9.closeSync(promptInputFd);
+        } catch {
+        }
+        try {
+          fs9.closeSync(promptOutputFd);
+        } catch {
+        }
+      }
+    };
+  } catch {
+    if (inputFd !== void 0) {
+      try {
+        fs9.closeSync(inputFd);
+      } catch {
+      }
+    }
+    if (outputFd !== void 0) {
+      try {
+        fs9.closeSync(outputFd);
+      } catch {
+      }
+    }
+    return null;
+  }
+}
+function asAgent(value) {
+  if (!value)
+    return void 0;
+  try {
+    return assertAgent(value);
+  } catch {
+    return void 0;
+  }
+}
+function asAgents(values) {
+  return uniqueValues(values.map((value) => asAgent(value)).filter((value) => value !== void 0));
+}
+function asScope(value) {
+  if (!value)
+    return void 0;
+  try {
+    return assertScope(value);
+  } catch {
+    return void 0;
+  }
+}
+function asScopes(values) {
+  return uniqueValues(values.map((value) => asScope(value)).filter((value) => value !== void 0));
+}
+function validateRequiredFlags(parsed) {
+  if (parsed.agents.length === 0 || parsed.scopes.length === 0) {
+    throw new InstallError(`Missing required flags.
+${usageText}`);
+  }
+  const agents = uniqueValues(parsed.agents.map((agent) => assertAgent(agent)));
+  const scopes = uniqueValues(parsed.scopes.map((scope) => assertScope(scope)));
+  assertSupportedAgentScopes(agents, scopes);
+  return {
+    inputPaths: parsed.inputPaths,
+    agents,
+    scopes,
+    force: parsed.force
+  };
+}
+function normalizeProvidedInputs(opts) {
+  if (opts.providedInput && opts.providedInputs?.length) {
+    throw new InstallError("providedInput and providedInputs cannot be used together.");
+  }
+  if (opts.providedSkillId && opts.providedSkillIds?.length) {
+    throw new InstallError("providedSkillId and providedSkillIds cannot be used together.");
+  }
+  const inputs = opts.providedInputs ?? (opts.providedInput ? [opts.providedInput] : []);
+  const skillIds = opts.providedSkillIds ?? (opts.providedSkillId ? [opts.providedSkillId] : []);
+  if (skillIds.length > 0 && inputs.length === 0) {
+    throw new InstallError("Preset skill ids require preset install inputs.");
+  }
+  if (skillIds.length > 0 && skillIds.length !== inputs.length) {
+    throw new InstallError("Preset skill id count must match preset install input count.");
+  }
+  return { inputs, skillIds };
+}
+function parsePathList(value) {
+  const raw = value?.trim() ?? "";
+  if (!raw) {
+    return [];
+  }
+  return uniqueValues(raw.split(",").map((item) => item.trim()).filter((item) => item.length > 0));
+}
+function validatePathPrompt(value) {
+  const candidates = parsePathList(value);
+  if (candidates.length === 0)
+    return "PATH is required.";
+  for (const candidate of candidates) {
+    try {
+      const stat = fs9.statSync(candidate);
+      if (!stat.isDirectory()) {
+        return `PATH must be a directory: ${candidate}`;
+      }
+    } catch {
+      return `PATH does not exist: ${candidate}`;
+    }
+  }
+  return void 0;
+}
+function cancelWizard(promptInput, promptOutput, promptApi, message = "Install cancelled.") {
+  promptApi.outro(message, { input: promptInput, output: promptOutput });
+  return null;
+}
+async function streamToBuffer(stream) {
+  const chunks = [];
+  return new Promise((resolve, reject) => {
+    stream.on("data", (chunk) => {
+      chunks.push(Buffer.from(chunk));
+    });
+    stream.on("end", () => {
+      resolve(Buffer.concat(chunks));
+    });
+    stream.on("error", reject);
+  });
+}
+async function prepareInstallSource(input, skillId) {
+  if (input.kind === "dir") {
+    const sourceDir = path10.resolve(input.dir);
+    let stat;
+    try {
+      stat = fs9.statSync(sourceDir);
+    } catch {
+      throw new InstallError(`PATH does not exist: ${sourceDir}`);
+    }
+    if (!stat.isDirectory()) {
+      throw new InstallError("PATH must be a directory containing SKILL.md.");
+    }
+    await assertSkillDir(sourceDir);
+    const meta = await readSkillMetadata(sourceDir);
+    return {
+      source: sourceDir,
+      skillIdHint: meta.name,
+      makeInput: () => ({ kind: "dir", dir: sourceDir })
+    };
+  }
+  const tarBuffer = await streamToBuffer(input.stream);
+  return {
+    source: "tar stream",
+    skillIdHint: skillId ?? "<from skill bundle>",
+    makeInput: () => ({ kind: "tar", stream: Readable.from(tarBuffer) })
+  };
+}
+async function resolveInstallSources(inputPaths, stdin, provided) {
+  if (inputPaths.length > 0 && provided.inputs.length > 0) {
+    throw new InstallError("PATH cannot be used when install input is preset.");
+  }
+  if (inputPaths.length > 0) {
+    return Promise.all(inputPaths.map((inputPath) => prepareInstallSource({ kind: "dir", dir: inputPath })));
+  }
+  if (provided.inputs.length > 0) {
+    return Promise.all(provided.inputs.map((input, index) => prepareInstallSource(input, provided.skillIds[index])));
+  }
+  if (stdinHasData(stdin)) {
+    return [await prepareInstallSource({ kind: "tar", stream: stdin })];
+  }
+  throw new InstallError(`Missing PATH or tar stream on stdin.
+${usageText}`);
+}
+function buildInstallPlan(sources, agents, scopes, cwd) {
+  const plan = [];
+  for (const source of sources) {
+    for (const agent of agents) {
+      for (const scope of scopes) {
+        const skillsRoot = resolveSkillsRoot2(agent, scope, cwd);
+        plan.push({
+          source,
+          agent,
+          scope,
+          destination: path10.join(skillsRoot, source.skillIdHint)
+        });
+      }
+    }
+  }
+  return plan;
+}
+function assertNoInstallCollisions(plan) {
+  const plansByDestination = /* @__PURE__ */ new Map();
+  for (const item of plan) {
+    const entries = plansByDestination.get(item.destination) ?? [];
+    entries.push(item);
+    plansByDestination.set(item.destination, entries);
+  }
+  const collisions = [...plansByDestination.entries()].filter(([, items]) => items.length > 1).sort(([a], [b2]) => a.localeCompare(b2));
+  if (collisions.length === 0) {
+    return;
+  }
+  const lines = ["Install destination collisions detected:"];
+  for (const [destination, items] of collisions) {
+    lines.push(`- ${destination}`);
+    for (const item of items) {
+      lines.push(`  - ${item.source.skillIdHint} @ ${item.agent}/${item.scope} (source: ${item.source.source})`);
+    }
+  }
+  lines.push("Resolve collisions by changing skill IDs, sources, --agent, or --scope so each combination has a unique destination.");
+  throw new InstallError(lines.join("\n"));
+}
+async function runInstallWizard(parsed, stdin, promptInput, promptOutput, cwd, provided, promptApi) {
+  promptApi.intro("skill-install wizard", {
+    input: promptInput,
+    output: promptOutput
+  });
+  let inputPaths = parsed.inputPaths;
+  if (provided.inputs.length === 0 && inputPaths.length === 0 && !stdinHasData(stdin)) {
+    const defaultPath = cwd;
+    const pathValue = await promptApi.text({
+      message: "PATH to skill directory (comma-separated for multiple, defaults to current directory)",
+      placeholder: defaultPath,
+      defaultValue: defaultPath,
+      validate: validatePathPrompt,
+      input: promptInput,
+      output: promptOutput
+    });
+    if (promptApi.isCancel(pathValue)) {
+      return cancelWizard(promptInput, promptOutput, promptApi);
+    }
+    inputPaths = parsePathList(pathValue.trim() || defaultPath);
+  }
+  const parsedAgents = asAgents(parsed.agents);
+  let agents;
+  if (parsedAgents.length > 0 && parsedAgents.length === uniqueValues(parsed.agents).length) {
+    agents = parsedAgents;
+  } else if (agentOptions.length === 1) {
+    agents = [assertAgent(agentOptions[0].value)];
+  } else {
+    const agentValues = await promptApi.multiselect({
+      message: "Agent targets",
+      options: agentOptions,
+      initialValues: parsedAgents.length > 0 ? parsedAgents : [],
+      required: true,
+      input: promptInput,
+      output: promptOutput
+    });
+    if (promptApi.isCancel(agentValues)) {
+      return cancelWizard(promptInput, promptOutput, promptApi);
+    }
+    agents = uniqueValues(agentValues.map((value) => assertAgent(value)));
+  }
+  const supportedScopes = sharedScopesForAgents(agents);
+  if (supportedScopes.length === 0) {
+    throw new InstallError(`No shared scopes for selected agents: ${agents.join(", ")}`);
+  }
+  const parsedScopes = asScopes(parsed.scopes).filter((scope) => supportedScopes.includes(scope));
+  let scopes;
+  if (supportedScopes.length === 1) {
+    scopes = [supportedScopes[0]];
+  } else {
+    const scopeOptions = supportedScopes.map((scope) => ({
+      value: scope,
+      label: scope,
+      hint: scopeDescriptions[scope]
+    }));
+    const scopeValues = await promptApi.multiselect({
+      message: "Scope targets",
+      options: scopeOptions,
+      initialValues: parsedScopes.length > 0 ? parsedScopes : [],
+      required: true,
+      input: promptInput,
+      output: promptOutput
+    });
+    if (promptApi.isCancel(scopeValues)) {
+      return cancelWizard(promptInput, promptOutput, promptApi);
+    }
+    scopes = uniqueValues(scopeValues.map((scope) => assertScope(scope)));
+  }
+  const forceValue = await promptApi.confirm({
+    message: "Force overwrite if the destination already exists? (--force)",
+    initialValue: parsed.force,
+    input: promptInput,
+    output: promptOutput
+  });
+  if (promptApi.isCancel(forceValue)) {
+    return cancelWizard(promptInput, promptOutput, promptApi);
+  }
+  const force = forceValue;
+  assertSupportedAgentScopes(agents, scopes);
+  const sources = await resolveInstallSources(inputPaths, stdin, provided);
+  const plan = buildInstallPlan(sources, agents, scopes, cwd);
+  assertNoInstallCollisions(plan);
+  const sourceLines = sources.map((source) => `${source.skillIdHint} <= ${source.source}`);
+  const installLines = plan.map((item) => `${item.source.skillIdHint} @ ${item.agent}/${item.scope} -> ${item.destination}`);
+  promptApi.note([
+    `Sources (${sources.length}):`,
+    ...sourceLines,
+    `Agents (${agents.length}): ${agents.join(", ")}`,
+    `Scopes (${scopes.length}): ${scopes.join(", ")}`,
+    `Matrix: ${sources.length} skill(s) \xD7 ${agents.length} agent(s) \xD7 ${scopes.length} scope(s) = ${plan.length} combination(s)`,
+    `Execution targets: ${plan.length}`,
+    `Planned combinations (${plan.length}):`,
+    ...installLines,
+    `Force: ${force ? "yes" : "no"}`
+  ].join("\n"), "Install summary", { input: promptInput, output: promptOutput });
+  const confirmed = await promptApi.confirm({
+    message: "Proceed with install?",
+    initialValue: true,
+    input: promptInput,
+    output: promptOutput
+  });
+  if (promptApi.isCancel(confirmed) || !confirmed) {
+    return cancelWizard(promptInput, promptOutput, promptApi);
+  }
+  return {
+    args: { inputPaths, agents, scopes, force },
+    sources
+  };
+}
+async function runInstall(args, sources, promptInput, promptOutput, cwd, useSpinner, promptApi) {
+  const plan = buildInstallPlan(sources, args.agents, args.scopes, cwd);
+  assertNoInstallCollisions(plan);
+  const execute = async () => {
+    const results = [];
+    for (const item of plan) {
+      const result = await installSkill(item.source.makeInput(), {
+        agent: item.agent,
+        scope: item.scope,
+        cwd,
+        force: args.force
+      });
+      results.push({ ...result, agent: item.agent, scope: item.scope });
+    }
+    return results;
+  };
+  if (!useSpinner) {
+    return execute();
+  }
+  const s = promptApi.spinner({ input: promptInput, output: promptOutput });
+  s.start(`Installing ${plan.length} target${plan.length === 1 ? "" : "s"}...`);
+  try {
+    const result = await execute();
+    s.stop("Install complete.");
+    return result;
+  } catch (err) {
+    s.error("Install failed.");
+    throw err;
+  }
+}
+async function drainStream(stream) {
+  try {
+    for await (const chunk of stream) {
+      void chunk;
+    }
+  } catch {
+  }
+}
+async function runInstallCli(argv, opts = {}) {
+  const stdout = opts.stdout ?? process2.stdout;
+  const stderr = opts.stderr ?? process2.stderr;
+  const stdin = opts.stdin ?? process2.stdin;
+  const cwd = opts.cwd ?? process2.cwd();
+  const promptApi = opts.promptApi ?? defaultPromptApi;
+  const openPromptTtyFn = opts.openPromptTty ?? openPromptTty;
+  let promptInput = stdin;
+  let promptOutput = stdout;
+  let closePromptTty = null;
+  try {
+    const parsed = parseArgs(argv.slice(2));
+    if (parsed.help) {
+      stdout.write(`${usageText}
+`);
+      if (stdinIsPipe(stdin)) {
+        await drainStream(stdin);
+      }
+      return 0;
+    }
+    let provided = normalizeProvidedInputs(opts);
+    if (provided.inputs.length > 0 && parsed.inputPaths.length > 0) {
+      throw new InstallError("PATH cannot be used when install input is preset.");
+    }
+    let wizardUsed = false;
+    let resolvedArgs;
+    let sources;
+    if (parsed.agents.length === 0 || parsed.scopes.length === 0) {
+      if (stdinIsTty(stdin)) {
+        wizardUsed = true;
+      } else if (stdinIsPipe(stdin) && stdinHasData(stdin)) {
+        const promptTty = openPromptTtyFn();
+        if (promptTty) {
+          wizardUsed = true;
+          promptInput = promptTty.input;
+          promptOutput = promptTty.output;
+          closePromptTty = promptTty.close;
+        }
+      }
+      if (!wizardUsed) {
+        resolvedArgs = validateRequiredFlags(parsed);
+        sources = await resolveInstallSources(resolvedArgs.inputPaths, stdin, provided);
+      } else {
+        if (stdinIsPipe(stdin) && stdinHasData(stdin) && parsed.inputPaths.length === 0 && provided.inputs.length === 0) {
+          const stdinTarBuffer = await streamToBuffer(stdin);
+          provided = {
+            inputs: [{ kind: "tar", stream: Readable.from(stdinTarBuffer) }],
+            skillIds: []
+          };
+        }
+        const wizardResult = await runInstallWizard(parsed, stdin, promptInput, promptOutput, cwd, provided, promptApi);
+        if (!wizardResult) {
+          if (stdinIsPipe(stdin)) {
+            await drainStream(stdin);
+          }
+          return 1;
+        }
+        resolvedArgs = wizardResult.args;
+        sources = wizardResult.sources;
+      }
+    } else {
+      resolvedArgs = validateRequiredFlags(parsed);
+      sources = await resolveInstallSources(resolvedArgs.inputPaths, stdin, provided);
+    }
+    const results = await runInstall(resolvedArgs, sources, promptInput, promptOutput, cwd, wizardUsed, promptApi);
+    for (const result of results) {
+      stderr.write(`Installed ${result.skillId} to ${result.installedTo} (${result.agent}/${result.scope})
+`);
+    }
+    if (wizardUsed) {
+      promptApi.outro("Done.", { input: promptInput, output: promptOutput });
+    }
+    return 0;
+  } catch (err) {
+    if (stdinIsPipe(stdin)) {
+      await drainStream(stdin);
+    }
+    stderr.write(`${toErrorMessage2(err)}
+`);
+    return err instanceof InstallError ? err.exitCode : 1;
+  } finally {
+    closePromptTty?.();
+  }
+}
+var agentList, scopeList, usageLines, usageText, defaultPromptApi, agentHints, agentOptions, scopeDescriptions;
+var init_cli = __esm({
+  "node_modules/skillflag/dist/install/cli.js"() {
+    init_dist4();
+    init_errors();
+    init_install();
+    init_resolve();
+    init_validate();
+    init_collections();
+    agentList = AGENTS.join(", ");
+    scopeList = SCOPES.join(", ");
+    usageLines = [
+      "Usage:",
+      "  skill-install [PATH ...] [--agent <agent>] [--scope <scope>] [--force]",
+      "",
+      "Input:",
+      "  PATH ...            Skill directory path(s) containing SKILL.md.",
+      "  stdin tar stream    If PATH is omitted, reads a tar bundle from stdin.",
+      "",
+      "Options:",
+      "  --agent <value>     Target agent (single value).",
+      `                      Supported agents: ${agentList}`,
+      "  --scope <value>     Target scope (single value).",
+      `                      Supported scopes: ${scopeList}`,
+      "  --force             Overwrite destination if it already exists.",
+      "  -h, --help          Show this help.",
+      "",
+      "Behavior:",
+      "  If --agent or --scope is missing and an interactive TTY is available,",
+      "  the installer launches a wizard to collect missing values.",
+      "  CLI flags accept only one --agent and one --scope.",
+      "  Use the wizard to select multiple agents/scopes."
+    ];
+    usageText = usageLines.join("\n");
+    defaultPromptApi = {
+      confirm: ue,
+      intro: ge,
+      isCancel: q,
+      multiselect: ve,
+      note: Se,
+      outro: ye,
+      spinner: ft,
+      text: Pe
+    };
+    agentHints = {
+      codex: "OpenAI Codex CLI skills (.codex/skills or CODEX_HOME/skills)",
+      claude: "Claude Code skills (.claude/skills)",
+      portable: "Portable agents skills (.agents/skills)",
+      vscode: "VS Code skills in .github/skills",
+      copilot: "GitHub Copilot skills in .github/skills",
+      amp: "Amp agent skills (.agents/skills)",
+      goose: "Goose agent skills (.agents/skills)",
+      opencode: "OpenCode skills (.opencode/skill)",
+      factory: "Factory skills (.factory/skills)",
+      cursor: "Cursor skills (.cursor/skills)"
+    };
+    agentOptions = AGENTS.map((agent) => ({
+      value: agent,
+      label: agent,
+      hint: agentHints[agent]
+    }));
+    scopeDescriptions = {
+      repo: "Install to the current git repo root.",
+      user: "Install to your user-level skills directory.",
+      cwd: "Install relative to the current working directory."
+    };
+  }
+});
+
+// src/hclaw/cli.ts
+import fs14 from "node:fs/promises";
+import { realpathSync, statSync } from "node:fs";
+import path15 from "node:path";
+import process4 from "node:process";
 import { randomBytes } from "node:crypto";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath as fileURLToPath4, pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
 // node_modules/commander/esm.mjs
@@ -3539,747 +8977,563 @@ var {
   Help
 } = import_index.default;
 
-// node_modules/@clack/core/dist/index.mjs
-import { styleText as v } from "node:util";
-import { stdout as x, stdin as D } from "node:process";
-import E from "node:readline";
+// src/hclaw/cli.ts
+init_dist4();
 
-// node_modules/fast-string-truncated-width/dist/utils.js
-var getCodePointsLength = /* @__PURE__ */ (() => {
-  const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
-  return (input) => {
-    let surrogatePairsNr = 0;
-    SURROGATE_PAIR_RE.lastIndex = 0;
-    while (SURROGATE_PAIR_RE.test(input)) {
-      surrogatePairsNr += 1;
+// node_modules/skillflag/dist/skillflag.js
+import process3 from "node:process";
+
+// node_modules/skillflag/dist/core/errors.js
+var SkillflagError = class extends Error {
+  exitCode;
+  constructor(message, exitCode = 1) {
+    super(message);
+    this.exitCode = exitCode;
+  }
+};
+function toErrorMessage(err) {
+  if (err instanceof Error)
+    return err.message;
+  return String(err);
+}
+
+// node_modules/skillflag/dist/core/tar.js
+var tar = __toESM(require_tar_stream(), 1);
+import fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import path from "node:path";
+var FIXED_MTIME = /* @__PURE__ */ new Date(0);
+function isInvalidRelPath(relPosix) {
+  if (path.posix.isAbsolute(relPosix))
+    return true;
+  const parts = relPosix.split("/");
+  return parts.includes("..");
+}
+async function collectEntriesForDir(rootDir, relPosix, id, dirs, files) {
+  dirs.add(relPosix);
+  const absDir = relPosix ? path.join(rootDir, ...relPosix.split("/")) : rootDir;
+  const dirents = await fsPromises.readdir(absDir, { withFileTypes: true });
+  for (const dirent of dirents) {
+    const name = dirent.name;
+    const relChild = relPosix ? `${relPosix}/${name}` : name;
+    if (isInvalidRelPath(relChild)) {
+      throw new SkillflagError(`Invalid path in skill: ${id}/${relChild}`);
     }
-    return input.length - surrogatePairsNr;
-  };
-})();
-var isFullWidth = (x3) => {
-  return x3 === 12288 || x3 >= 65281 && x3 <= 65376 || x3 >= 65504 && x3 <= 65510;
-};
-var isWideNotCJKTNotEmoji = (x3) => {
-  return x3 === 8987 || x3 === 9001 || x3 >= 12272 && x3 <= 12287 || x3 >= 12289 && x3 <= 12350 || x3 >= 12441 && x3 <= 12543 || x3 >= 12549 && x3 <= 12591 || x3 >= 12593 && x3 <= 12686 || x3 >= 12688 && x3 <= 12771 || x3 >= 12783 && x3 <= 12830 || x3 >= 12832 && x3 <= 12871 || x3 >= 12880 && x3 <= 19903 || x3 >= 65040 && x3 <= 65049 || x3 >= 65072 && x3 <= 65106 || x3 >= 65108 && x3 <= 65126 || x3 >= 65128 && x3 <= 65131 || x3 >= 127488 && x3 <= 127490 || x3 >= 127504 && x3 <= 127547 || x3 >= 127552 && x3 <= 127560 || x3 >= 131072 && x3 <= 196605 || x3 >= 196608 && x3 <= 262141;
-};
-
-// node_modules/fast-string-truncated-width/dist/index.js
-var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
-var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
-var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
-var TAB_RE = /\t{1,1000}/y;
-var EMOJI_RE = new RegExp("[\\u{1F1E6}-\\u{1F1FF}]{2}|\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}|(?:\\p{Emoji}\\uFE0F\\u20E3?|\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation})(?:\\u200D(?:\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F\\u20E3?))*", "yu");
-var LATIN_RE = /(?:[\x20-\x7E\xA0-\xFF](?!\uFE0F)){1,1000}/y;
-var MODIFIER_RE = new RegExp("\\p{M}+", "gu");
-var NO_TRUNCATION = { limit: Infinity, ellipsis: "" };
-var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {}) => {
-  const LIMIT = truncationOptions.limit ?? Infinity;
-  const ELLIPSIS = truncationOptions.ellipsis ?? "";
-  const ELLIPSIS_WIDTH = truncationOptions?.ellipsisWidth ?? (ELLIPSIS ? getStringTruncatedWidth(ELLIPSIS, NO_TRUNCATION, widthOptions).width : 0);
-  const ANSI_WIDTH = 0;
-  const CONTROL_WIDTH = widthOptions.controlWidth ?? 0;
-  const TAB_WIDTH = widthOptions.tabWidth ?? 8;
-  const EMOJI_WIDTH = widthOptions.emojiWidth ?? 2;
-  const FULL_WIDTH_WIDTH = 2;
-  const REGULAR_WIDTH = widthOptions.regularWidth ?? 1;
-  const WIDE_WIDTH = widthOptions.wideWidth ?? FULL_WIDTH_WIDTH;
-  const PARSE_BLOCKS = [
-    [LATIN_RE, REGULAR_WIDTH],
-    [ANSI_RE, ANSI_WIDTH],
-    [CONTROL_RE, CONTROL_WIDTH],
-    [TAB_RE, TAB_WIDTH],
-    [EMOJI_RE, EMOJI_WIDTH],
-    [CJKT_WIDE_RE, WIDE_WIDTH]
-  ];
-  let indexPrev = 0;
-  let index = 0;
-  let length = input.length;
-  let lengthExtra = 0;
-  let truncationEnabled = false;
-  let truncationIndex = length;
-  let truncationLimit = Math.max(0, LIMIT - ELLIPSIS_WIDTH);
-  let unmatchedStart = 0;
-  let unmatchedEnd = 0;
-  let width = 0;
-  let widthExtra = 0;
-  outer: while (true) {
-    if (unmatchedEnd > unmatchedStart || index >= length && index > indexPrev) {
-      const unmatched = input.slice(unmatchedStart, unmatchedEnd) || input.slice(indexPrev, index);
-      lengthExtra = 0;
-      for (const char of unmatched.replaceAll(MODIFIER_RE, "")) {
-        const codePoint = char.codePointAt(0) || 0;
-        if (isFullWidth(codePoint)) {
-          widthExtra = FULL_WIDTH_WIDTH;
-        } else if (isWideNotCJKTNotEmoji(codePoint)) {
-          widthExtra = WIDE_WIDTH;
+    const absChild = path.join(absDir, name);
+    if (dirent.isDirectory()) {
+      await collectEntriesForDir(rootDir, relChild, id, dirs, files);
+      continue;
+    }
+    if (dirent.isFile()) {
+      const stat = await fsPromises.stat(absChild);
+      files.push({
+        name: `${id}/${relChild}`,
+        type: "file",
+        absPath: absChild,
+        size: stat.size,
+        mode: stat.mode & 511
+      });
+      continue;
+    }
+    if (dirent.isSymbolicLink()) {
+      throw new SkillflagError(`Symlinks are not supported in skill bundles: ${id}/${relChild}`);
+    }
+    throw new SkillflagError(`Unsupported file type in skill bundle: ${id}/${relChild}`);
+  }
+}
+async function collectSkillEntries(skillDir, id) {
+  const dirs = /* @__PURE__ */ new Set();
+  const files = [];
+  await collectEntriesForDir(skillDir, "", id, dirs, files);
+  const dirEntries = [];
+  for (const relDir of dirs) {
+    const absDir = relDir ? path.join(skillDir, ...relDir.split("/")) : skillDir;
+    const stat = await fsPromises.stat(absDir);
+    const dirName = relDir ? `${id}/${relDir}/` : `${id}/`;
+    dirEntries.push({
+      name: dirName,
+      type: "directory",
+      mode: stat.mode & 511
+    });
+  }
+  const entries = [...dirEntries, ...files].sort((a, b2) => a.name.localeCompare(b2.name));
+  return { entries, fileCount: files.length };
+}
+function writeDirEntry(pack2, entry) {
+  return new Promise((resolve, reject) => {
+    pack2.entry({
+      name: entry.name,
+      type: "directory",
+      mode: entry.mode,
+      mtime: FIXED_MTIME,
+      uid: 0,
+      gid: 0,
+      uname: "",
+      gname: ""
+    }, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+function writeFileEntry(pack2, entry) {
+  if (!entry.absPath) {
+    return Promise.reject(new Error(`Missing file path for ${entry.name}`));
+  }
+  if (entry.size === void 0) {
+    return Promise.reject(new Error(`Missing file size for ${entry.name}`));
+  }
+  const absPath = entry.absPath;
+  return new Promise((resolve, reject) => {
+    const fileStream = fs.createReadStream(absPath);
+    const tarEntry = pack2.entry({
+      name: entry.name,
+      type: "file",
+      mode: entry.mode,
+      size: entry.size,
+      mtime: FIXED_MTIME,
+      uid: 0,
+      gid: 0,
+      uname: "",
+      gname: ""
+    }, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+    fileStream.on("error", reject);
+    tarEntry.on("error", reject);
+    fileStream.pipe(tarEntry);
+  });
+}
+function createTarStream(entries) {
+  const pack2 = tar.pack();
+  void (async () => {
+    try {
+      for (const entry of entries) {
+        if (entry.type === "directory") {
+          await writeDirEntry(pack2, entry);
         } else {
-          widthExtra = REGULAR_WIDTH;
+          await writeFileEntry(pack2, entry);
         }
-        if (width + widthExtra > truncationLimit) {
-          truncationIndex = Math.min(truncationIndex, Math.max(unmatchedStart, indexPrev) + lengthExtra);
-        }
-        if (width + widthExtra > LIMIT) {
-          truncationEnabled = true;
-          break outer;
-        }
-        lengthExtra += char.length;
-        width += widthExtra;
       }
-      unmatchedStart = unmatchedEnd = 0;
+      pack2.finalize();
+    } catch (err) {
+      pack2.destroy(err);
     }
-    if (index >= length) {
-      break outer;
+  })();
+  return pack2;
+}
+
+// node_modules/skillflag/dist/core/export.js
+async function pipeToWritable(stream, dest) {
+  return new Promise((resolve, reject) => {
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      stream.removeListener("error", onError);
+      stream.removeListener("end", onEnd);
+      dest.removeListener("error", onError);
+    };
+    stream.on("error", onError);
+    stream.on("end", onEnd);
+    dest.on("error", onError);
+    stream.pipe(dest, { end: false });
+  });
+}
+async function exportSkill(skillDir, id, stdout) {
+  const { entries } = await collectSkillEntries(skillDir, id);
+  const tarStream = createTarStream(entries);
+  await pipeToWritable(tarStream, stdout);
+}
+
+// node_modules/skillflag/dist/core/list.js
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
+
+// node_modules/skillflag/dist/core/digest.js
+import { createHash } from "node:crypto";
+import { Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+async function digestStreamSha256(stream) {
+  const hash3 = createHash("sha256");
+  const sink = new Writable({
+    write(chunk, _encoding, callback) {
+      hash3.update(chunk);
+      callback();
     }
-    for (let i = 0, l = PARSE_BLOCKS.length; i < l; i++) {
-      const [BLOCK_RE, BLOCK_WIDTH] = PARSE_BLOCKS[i];
-      BLOCK_RE.lastIndex = index;
-      if (BLOCK_RE.test(input)) {
-        lengthExtra = BLOCK_RE === CJKT_WIDE_RE ? getCodePointsLength(input.slice(index, BLOCK_RE.lastIndex)) : BLOCK_RE === EMOJI_RE ? 1 : BLOCK_RE.lastIndex - index;
-        widthExtra = lengthExtra * BLOCK_WIDTH;
-        if (width + widthExtra > truncationLimit) {
-          truncationIndex = Math.min(truncationIndex, index + Math.floor((truncationLimit - width) / BLOCK_WIDTH));
-        }
-        if (width + widthExtra > LIMIT) {
-          truncationEnabled = true;
-          break outer;
-        }
-        width += widthExtra;
-        unmatchedStart = indexPrev;
-        unmatchedEnd = index;
-        index = indexPrev = BLOCK_RE.lastIndex;
-        continue outer;
+  });
+  await pipeline(stream, sink);
+  return `sha256:${hash3.digest("hex")}`;
+}
+
+// node_modules/skillflag/dist/core/paths.js
+import fs2 from "node:fs";
+import fsPromises2 from "node:fs/promises";
+import path2 from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+function defaultSkillsRoot() {
+  const startDir = path2.dirname(fileURLToPath(import.meta.url));
+  let current = startDir;
+  while (true) {
+    const candidate = path2.join(current, "package.json");
+    if (fs2.existsSync(candidate)) {
+      return pathToFileURL(path2.join(current, "skills/"));
+    }
+    const parent = path2.dirname(current);
+    if (parent === current) {
+      return pathToFileURL(path2.join(startDir, "../../skills/"));
+    }
+    current = parent;
+  }
+}
+function resolveSkillsRoot(root) {
+  if (root instanceof URL) {
+    return fileURLToPath(root);
+  }
+  if (root.startsWith("file:")) {
+    return fileURLToPath(new URL(root));
+  }
+  return path2.resolve(root);
+}
+function assertValidSkillId(id) {
+  if (!id || id === "." || id === "..") {
+    throw new SkillflagError("Skill id is required.");
+  }
+  if (id.includes("/") || id.includes("\\")) {
+    throw new SkillflagError(`Invalid skill id: ${id}`);
+  }
+}
+async function pathExists(filePath) {
+  try {
+    await fsPromises2.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function listSkillDirs(rootDir) {
+  let dirents = [];
+  try {
+    dirents = await fsPromises2.readdir(rootDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skills = [];
+  for (const dirent of dirents) {
+    if (!dirent.isDirectory())
+      continue;
+    const id = dirent.name;
+    const skillDir = path2.join(rootDir, id);
+    const skillMd = path2.join(skillDir, "SKILL.md");
+    if (await pathExists(skillMd)) {
+      skills.push({ id, dir: skillDir });
+    }
+  }
+  skills.sort((a, b2) => a.id.localeCompare(b2.id));
+  return skills;
+}
+async function resolveSkillDirFromRoots(rootDirs, id) {
+  assertValidSkillId(id);
+  for (const rootDir of rootDirs) {
+    const skillDir = path2.join(rootDir, id);
+    const skillMd = path2.join(skillDir, "SKILL.md");
+    if (await pathExists(skillMd)) {
+      return skillDir;
+    }
+  }
+  throw new SkillflagError(`Skill not found: ${id}`);
+}
+
+// node_modules/skillflag/dist/core/list.js
+init_frontmatter();
+async function readSkillInfo(dir, id) {
+  const skillMdPath = path3.join(dir, "SKILL.md");
+  try {
+    const content = await fs3.readFile(skillMdPath, "utf8");
+    const fields = parseFrontmatter(content);
+    const summary = fields.description ? fields.description.replace(/[\t\n]/g, " ").trim() : void 0;
+    return {
+      id,
+      dir,
+      summary,
+      version: fields.version
+    };
+  } catch {
+    return { id, dir };
+  }
+}
+async function listSkills(rootDirs) {
+  const seen = /* @__PURE__ */ new Map();
+  for (const rootDir of rootDirs) {
+    const dirs = await listSkillDirs(rootDir);
+    for (const skill of dirs) {
+      if (!seen.has(skill.id)) {
+        seen.set(skill.id, skill.dir);
       }
     }
+  }
+  const infos = [];
+  for (const [id, dir] of seen.entries()) {
+    infos.push(await readSkillInfo(dir, id));
+  }
+  infos.sort((a, b2) => a.id.localeCompare(b2.id));
+  return infos;
+}
+async function listSkillsJson(rootDirs) {
+  const skills = await listSkills(rootDirs);
+  const results = [];
+  for (const skill of skills) {
+    const { entries, fileCount } = await collectSkillEntries(skill.dir, skill.id);
+    const stream = createTarStream(entries);
+    const digest = await digestStreamSha256(stream);
+    const item = {
+      id: skill.id,
+      digest
+    };
+    if (fileCount > 0) {
+      item.files = fileCount;
+    }
+    if (skill.summary) {
+      item.summary = skill.summary;
+    }
+    if (skill.version) {
+      item.version = skill.version;
+    }
+    results.push(item);
+  }
+  return {
+    skillflag_version: "0.1",
+    skills: results
+  };
+}
+
+// node_modules/skillflag/dist/core/show.js
+import fs4 from "node:fs/promises";
+import path4 from "node:path";
+async function showSkill(skillDir, _id, stdout) {
+  const skillMdPath = path4.join(skillDir, "SKILL.md");
+  const content = await fs4.readFile(skillMdPath, "utf8");
+  stdout.write(content);
+}
+
+// node_modules/skillflag/dist/skillflag.js
+init_collections();
+var usageLines2 = [
+  "Usage:",
+  "  --skill install [<id> ...] [--agent <agent>] [--scope <scope>] [--force]",
+  "  --skill list [--json]",
+  "  --skill export <id>",
+  "  --skill show <id>",
+  "  --skill help"
+];
+var SKILLFLAG_HELP_TEXT = [
+  "Skillflag help",
+  "",
+  "Install skillflag globally to get both binaries on your PATH:",
+  "  npm install -g skillflag",
+  "",
+  "Prefer not to install globally? Use npx for one-off runs:",
+  "  npx skillflag list",
+  "  npx skillflag install --agent codex --scope repo < ./skill.tar",
+  "",
+  "List available skills:",
+  "  tool --skill list",
+  "  tool --skill list --json",
+  "",
+  "Show a skill's documentation:",
+  "  tool --skill show <id>",
+  "",
+  "Export a skill bundle:",
+  "  tool --skill export <id>",
+  "",
+  "Install a skill bundle:",
+  "  tool --skill install [<id> ...] [--agent <agent>] [--scope <scope>]",
+  "  tool --skill export <id> | skill-install --agent <agent> --scope <scope>",
+  "",
+  "For full details, read docs/SKILLFLAG_SPEC.md."
+].join("\n");
+async function defaultPromptApi2() {
+  const prompts = await Promise.resolve().then(() => (init_dist4(), dist_exports));
+  return {
+    multiselect: prompts.multiselect,
+    isCancel: prompts.isCancel
+  };
+}
+function resolveSkillActionArgs(argv) {
+  const cliArgs = argv.length > 2 ? argv.slice(2) : [...argv];
+  const skillIndex = cliArgs.indexOf("--skill");
+  if (skillIndex >= 0) {
+    return cliArgs.slice(skillIndex + 1);
+  }
+  return cliArgs;
+}
+function parseInstallIds(values) {
+  const ids = [];
+  let index = 0;
+  while (index < values.length) {
+    const value = values[index];
+    if (value.startsWith("-")) {
+      break;
+    }
+    const parsed = value.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+    ids.push(...parsed);
     index += 1;
   }
   return {
-    width: truncationEnabled ? truncationLimit : width,
-    index: truncationEnabled ? truncationIndex : length,
-    truncated: truncationEnabled,
-    ellipsed: truncationEnabled && LIMIT >= ELLIPSIS_WIDTH
+    ids: ids.length > 0 ? uniqueValues(ids) : void 0,
+    installArgs: values.slice(index)
   };
-};
-var dist_default = getStringTruncatedWidth;
-
-// node_modules/fast-string-width/dist/index.js
-var NO_TRUNCATION2 = {
-  limit: Infinity,
-  ellipsis: "",
-  ellipsisWidth: 0
-};
-var fastStringWidth = (input, options = {}) => {
-  return dist_default(input, NO_TRUNCATION2, options).width;
-};
-var dist_default2 = fastStringWidth;
-
-// node_modules/fast-wrap-ansi/lib/main.js
-var ESC = "\x1B";
-var CSI = "\x9B";
-var END_CODE = 39;
-var ANSI_ESCAPE_BELL = "\x07";
-var ANSI_CSI = "[";
-var ANSI_OSC = "]";
-var ANSI_SGR_TERMINATOR = "m";
-var ANSI_ESCAPE_LINK = `${ANSI_OSC}8;;`;
-var GROUP_REGEX = new RegExp(`(?:\\${ANSI_CSI}(?<code>\\d+)m|\\${ANSI_ESCAPE_LINK}(?<uri>.*)${ANSI_ESCAPE_BELL})`, "y");
-var getClosingCode = (openingCode) => {
-  if (openingCode >= 30 && openingCode <= 37)
-    return 39;
-  if (openingCode >= 90 && openingCode <= 97)
-    return 39;
-  if (openingCode >= 40 && openingCode <= 47)
-    return 49;
-  if (openingCode >= 100 && openingCode <= 107)
-    return 49;
-  if (openingCode === 1 || openingCode === 2)
-    return 22;
-  if (openingCode === 3)
-    return 23;
-  if (openingCode === 4)
-    return 24;
-  if (openingCode === 7)
-    return 27;
-  if (openingCode === 8)
-    return 28;
-  if (openingCode === 9)
-    return 29;
-  if (openingCode === 0)
+}
+function parseSkillArgs(argv) {
+  const args = resolveSkillActionArgs(argv);
+  const action = args[0];
+  if (!action || action.startsWith("-")) {
+    throw new SkillflagError(`Missing --skill action.
+${usageLines2.join("\n")}`);
+  }
+  if (action === "install") {
+    const rest = args.slice(1);
+    const parsed = parseInstallIds(rest);
+    return {
+      kind: "install",
+      ids: parsed.ids,
+      installArgs: parsed.installArgs
+    };
+  }
+  if (action === "list") {
+    const json = args.slice(1).includes("--json");
+    return { kind: "list", json };
+  }
+  if (action === "help") {
+    return { kind: "help" };
+  }
+  if (action === "export" || action === "show") {
+    const id = args[1];
+    if (!id || id.startsWith("-")) {
+      throw new SkillflagError(`Missing skill id.
+${usageLines2.join("\n")}`);
+    }
+    return { kind: action, id };
+  }
+  throw new SkillflagError(`Unknown --skill action: ${action}.
+${usageLines2.join("\n")}`);
+}
+function stdinIsTty2(stream) {
+  return stream.isTTY === true;
+}
+async function resolveInstallSkillIds(action, rootDirs, stdin, stdout, promptApi) {
+  if (action.ids && action.ids.length > 0) {
+    return action.ids;
+  }
+  const skills = await listSkills(rootDirs);
+  if (skills.length === 0) {
+    throw new SkillflagError("No skills are available to install.");
+  }
+  if (skills.length === 1) {
+    return [skills[0].id];
+  }
+  if (!stdinIsTty2(stdin)) {
+    throw new SkillflagError("Multiple skills are available; pass one or more ids with --skill install <id> [...].");
+  }
+  const options = skills.map((skill) => ({
+    value: skill.id,
+    label: skill.id,
+    hint: skill.summary
+  }));
+  const selected = await promptApi.multiselect({
+    message: "Select skills to install",
+    options,
+    required: true,
+    input: stdin,
+    output: stdout
+  });
+  if (promptApi.isCancel(selected)) {
+    throw new SkillflagError("Install cancelled.");
+  }
+  return uniqueValues(selected);
+}
+async function runInstallAction(action, rootDirs, opts, stdin, stdout, stderr) {
+  const promptApi = opts.promptApi ?? await defaultPromptApi2();
+  const skillIds = await resolveInstallSkillIds(action, rootDirs, stdin, stdout, promptApi);
+  const inputs = await Promise.all(skillIds.map(async (skillId) => {
+    const skillDir = await resolveSkillDirFromRoots(rootDirs, skillId);
+    const { entries } = await collectSkillEntries(skillDir, skillId);
+    return { kind: "tar", stream: createTarStream(entries) };
+  }));
+  const { runInstallCli: runInstallCli2 } = await Promise.resolve().then(() => (init_cli(), cli_exports));
+  return runInstallCli2(["node", "skill-install", ...action.installArgs], {
+    stdin,
+    stdout,
+    stderr,
+    cwd: opts.cwd,
+    providedInputs: inputs,
+    providedSkillIds: skillIds
+  });
+}
+async function handleSkillflag(argv, opts) {
+  const stdin = opts.stdin ?? process3.stdin;
+  const stdout = opts.stdout ?? process3.stdout;
+  const stderr = opts.stderr ?? process3.stderr;
+  try {
+    const action = parseSkillArgs(argv);
+    const skillsRoot = resolveSkillsRoot(opts.skillsRoot);
+    const bundledRoot = resolveSkillsRoot(defaultSkillsRoot());
+    const includeBundled = opts.includeBundledSkill !== false;
+    const rootDirs = includeBundled && bundledRoot !== skillsRoot ? [skillsRoot, bundledRoot] : [skillsRoot];
+    if (action.kind === "install") {
+      return await runInstallAction(action, rootDirs, opts, stdin, stdout, stderr);
+    }
+    if (action.kind === "list") {
+      if (action.json) {
+        const payload = await listSkillsJson(rootDirs);
+        stdout.write(JSON.stringify(payload));
+      } else {
+        const skills = await listSkills(rootDirs);
+        if (skills.length > 0) {
+          const lines = skills.map((skill) => skill.summary ? `${skill.id}	${skill.summary}` : skill.id);
+          stdout.write(`${lines.join("\n")}
+`);
+        }
+      }
+      return 0;
+    }
+    if (action.kind === "export") {
+      const skillDir2 = await resolveSkillDirFromRoots(rootDirs, action.id);
+      await exportSkill(skillDir2, action.id, stdout);
+      return 0;
+    }
+    if (action.kind === "help") {
+      stdout.write(`${SKILLFLAG_HELP_TEXT}
+`);
+      return 0;
+    }
+    const skillDir = await resolveSkillDirFromRoots(rootDirs, action.id);
+    await showSkill(skillDir, action.id, stdout);
     return 0;
-  return void 0;
-};
-var wrapAnsiCode = (code) => `${ESC}${ANSI_CSI}${code}${ANSI_SGR_TERMINATOR}`;
-var wrapAnsiHyperlink = (url) => `${ESC}${ANSI_ESCAPE_LINK}${url}${ANSI_ESCAPE_BELL}`;
-var wrapWord = (rows, word, columns) => {
-  const characters = word[Symbol.iterator]();
-  let isInsideEscape = false;
-  let isInsideLinkEscape = false;
-  let lastRow = rows.at(-1);
-  let visible = lastRow === void 0 ? 0 : dist_default2(lastRow);
-  let currentCharacter = characters.next();
-  let nextCharacter = characters.next();
-  let rawCharacterIndex = 0;
-  while (!currentCharacter.done) {
-    const character = currentCharacter.value;
-    const characterLength = dist_default2(character);
-    if (visible + characterLength <= columns) {
-      rows[rows.length - 1] += character;
-    } else {
-      rows.push(character);
-      visible = 0;
-    }
-    if (character === ESC || character === CSI) {
-      isInsideEscape = true;
-      isInsideLinkEscape = word.startsWith(ANSI_ESCAPE_LINK, rawCharacterIndex + 1);
-    }
-    if (isInsideEscape) {
-      if (isInsideLinkEscape) {
-        if (character === ANSI_ESCAPE_BELL) {
-          isInsideEscape = false;
-          isInsideLinkEscape = false;
-        }
-      } else if (character === ANSI_SGR_TERMINATOR) {
-        isInsideEscape = false;
-      }
-    } else {
-      visible += characterLength;
-      if (visible === columns && !nextCharacter.done) {
-        rows.push("");
-        visible = 0;
-      }
-    }
-    currentCharacter = nextCharacter;
-    nextCharacter = characters.next();
-    rawCharacterIndex += character.length;
-  }
-  lastRow = rows.at(-1);
-  if (!visible && lastRow !== void 0 && lastRow.length && rows.length > 1) {
-    rows[rows.length - 2] += rows.pop();
-  }
-};
-var stringVisibleTrimSpacesRight = (string) => {
-  const words = string.split(" ");
-  let last = words.length;
-  while (last) {
-    if (dist_default2(words[last - 1])) {
-      break;
-    }
-    last--;
-  }
-  if (last === words.length) {
-    return string;
-  }
-  return words.slice(0, last).join(" ") + words.slice(last).join("");
-};
-var exec = (string, columns, options = {}) => {
-  if (options.trim !== false && string.trim() === "") {
-    return "";
-  }
-  let returnValue = "";
-  let escapeCode;
-  let escapeUrl;
-  const words = string.split(" ");
-  let rows = [""];
-  let rowLength = 0;
-  for (let index = 0; index < words.length; index++) {
-    const word = words[index];
-    if (options.trim !== false) {
-      const row = rows.at(-1) ?? "";
-      const trimmed = row.trimStart();
-      if (row.length !== trimmed.length) {
-        rows[rows.length - 1] = trimmed;
-        rowLength = dist_default2(trimmed);
-      }
-    }
-    if (index !== 0) {
-      if (rowLength >= columns && (options.wordWrap === false || options.trim === false)) {
-        rows.push("");
-        rowLength = 0;
-      }
-      if (rowLength || options.trim === false) {
-        rows[rows.length - 1] += " ";
-        rowLength++;
-      }
-    }
-    const wordLength = dist_default2(word);
-    if (options.hard && wordLength > columns) {
-      const remainingColumns = columns - rowLength;
-      const breaksStartingThisLine = 1 + Math.floor((wordLength - remainingColumns - 1) / columns);
-      const breaksStartingNextLine = Math.floor((wordLength - 1) / columns);
-      if (breaksStartingNextLine < breaksStartingThisLine) {
-        rows.push("");
-      }
-      wrapWord(rows, word, columns);
-      rowLength = dist_default2(rows.at(-1) ?? "");
-      continue;
-    }
-    if (rowLength + wordLength > columns && rowLength && wordLength) {
-      if (options.wordWrap === false && rowLength < columns) {
-        wrapWord(rows, word, columns);
-        rowLength = dist_default2(rows.at(-1) ?? "");
-        continue;
-      }
-      rows.push("");
-      rowLength = 0;
-    }
-    if (rowLength + wordLength > columns && options.wordWrap === false) {
-      wrapWord(rows, word, columns);
-      rowLength = dist_default2(rows.at(-1) ?? "");
-      continue;
-    }
-    rows[rows.length - 1] += word;
-    rowLength += wordLength;
-  }
-  if (options.trim !== false) {
-    rows = rows.map((row) => stringVisibleTrimSpacesRight(row));
-  }
-  const preString = rows.join("\n");
-  let inSurrogate = false;
-  for (let i = 0; i < preString.length; i++) {
-    const character = preString[i];
-    returnValue += character;
-    if (!inSurrogate) {
-      inSurrogate = character >= "\uD800" && character <= "\uDBFF";
-      if (inSurrogate) {
-        continue;
-      }
-    } else {
-      inSurrogate = false;
-    }
-    if (character === ESC || character === CSI) {
-      GROUP_REGEX.lastIndex = i + 1;
-      const groupsResult = GROUP_REGEX.exec(preString);
-      const groups = groupsResult?.groups;
-      if (groups?.code !== void 0) {
-        const code = Number.parseFloat(groups.code);
-        escapeCode = code === END_CODE ? void 0 : code;
-      } else if (groups?.uri !== void 0) {
-        escapeUrl = groups.uri.length === 0 ? void 0 : groups.uri;
-      }
-    }
-    if (preString[i + 1] === "\n") {
-      if (escapeUrl) {
-        returnValue += wrapAnsiHyperlink("");
-      }
-      const closingCode = escapeCode ? getClosingCode(escapeCode) : void 0;
-      if (escapeCode && closingCode) {
-        returnValue += wrapAnsiCode(closingCode);
-      }
-    } else if (character === "\n") {
-      if (escapeCode && getClosingCode(escapeCode)) {
-        returnValue += wrapAnsiCode(escapeCode);
-      }
-      if (escapeUrl) {
-        returnValue += wrapAnsiHyperlink(escapeUrl);
-      }
-    }
-  }
-  return returnValue;
-};
-var CRLF_OR_LF = /\r?\n/;
-function wrapAnsi(string, columns, options) {
-  return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
-}
-
-// node_modules/@clack/core/dist/index.mjs
-var import_sisteransi = __toESM(require_src(), 1);
-var G = ["up", "down", "left", "right", "space", "enter", "cancel"];
-var K = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-var h = { actions: new Set(G), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]), messages: { cancel: "Canceled", error: "Something went wrong" }, withGuide: true, date: { monthNames: [...K], messages: { required: "Please enter a valid date", invalidMonth: "There are only 12 months in a year", invalidDay: (r, t) => `There are only ${r} days in ${t}`, afterMin: (r) => `Date must be on or after ${r.toISOString().slice(0, 10)}`, beforeMax: (r) => `Date must be on or before ${r.toISOString().slice(0, 10)}` } } };
-function C(r, t) {
-  if (typeof r == "string") return h.aliases.get(r) === t;
-  for (const s of r) if (s !== void 0 && C(s, t)) return true;
-  return false;
-}
-function z(r, t) {
-  if (r === t) return;
-  const s = r.split(`
-`), e2 = t.split(`
-`), i = Math.max(s.length, e2.length), n = [];
-  for (let o = 0; o < i; o++) s[o] !== e2[o] && n.push(o);
-  return { lines: n, numLinesBefore: s.length, numLinesAfter: e2.length, numLines: i };
-}
-var Y = globalThis.process.platform.startsWith("win");
-var k = Symbol("clack:cancel");
-function q(r) {
-  return r === k;
-}
-function w(r, t) {
-  const s = r;
-  s.isTTY && s.setRawMode(t);
-}
-var A = (r) => "columns" in r && typeof r.columns == "number" ? r.columns : 80;
-var L = (r) => "rows" in r && typeof r.rows == "number" ? r.rows : 20;
-function W(r, t, s, e2 = s, i = s, n) {
-  const o = A(r ?? x);
-  return wrapAnsi(t, o - s.length, { hard: true, trim: false }).split(`
-`).map((u, a, l) => {
-    const c = n ? n(u, a) : u;
-    return a === 0 ? `${e2}${c}` : a === l.length - 1 ? `${i}${c}` : `${s}${c}`;
-  }).join(`
+  } catch (err) {
+    const message = toErrorMessage(err);
+    stderr.write(`${message}
 `);
+    return err instanceof SkillflagError ? err.exitCode : 1;
+  }
 }
-var m = class {
-  input;
-  output;
-  _abortSignal;
-  rl;
-  opts;
-  _render;
-  _track = false;
-  _prevFrame = "";
-  _subscribers = /* @__PURE__ */ new Map();
-  _cursor = 0;
-  state = "initial";
-  error = "";
-  value;
-  userInput = "";
-  constructor(t, s = true) {
-    const { input: e2 = D, output: i = x, render: n, signal: o, ...u } = t;
-    this.opts = u, this.onKeypress = this.onKeypress.bind(this), this.close = this.close.bind(this), this.render = this.render.bind(this), this._render = n.bind(this), this._track = s, this._abortSignal = o, this.input = e2, this.output = i;
-  }
-  unsubscribe() {
-    this._subscribers.clear();
-  }
-  setSubscriber(t, s) {
-    const e2 = this._subscribers.get(t) ?? [];
-    e2.push(s), this._subscribers.set(t, e2);
-  }
-  on(t, s) {
-    this.setSubscriber(t, { cb: s });
-  }
-  once(t, s) {
-    this.setSubscriber(t, { cb: s, once: true });
-  }
-  emit(t, ...s) {
-    const e2 = this._subscribers.get(t) ?? [], i = [];
-    for (const n of e2) n.cb(...s), n.once && i.push(() => e2.splice(e2.indexOf(n), 1));
-    for (const n of i) n();
-  }
-  prompt() {
-    return new Promise((t) => {
-      if (this._abortSignal) {
-        if (this._abortSignal.aborted) return this.state = "cancel", this.close(), t(k);
-        this._abortSignal.addEventListener("abort", () => {
-          this.state = "cancel", this.close();
-        }, { once: true });
-      }
-      this.rl = E.createInterface({ input: this.input, tabSize: 2, prompt: "", escapeCodeTimeout: 50, terminal: true }), this.rl.prompt(), this.opts.initialUserInput !== void 0 && this._setUserInput(this.opts.initialUserInput, true), this.input.on("keypress", this.onKeypress), w(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
-        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), w(this.input, false), t(this.value);
-      }), this.once("cancel", () => {
-        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), w(this.input, false), t(k);
-      });
-    });
-  }
-  _isActionKey(t, s) {
-    return t === "	";
-  }
-  _shouldSubmit(t, s) {
-    return true;
-  }
-  _setValue(t) {
-    this.value = t, this.emit("value", this.value);
-  }
-  _setUserInput(t, s) {
-    this.userInput = t ?? "", this.emit("userInput", this.userInput), s && this._track && this.rl && (this.rl.write(this.userInput), this._cursor = this.rl.cursor);
-  }
-  _clearUserInput() {
-    this.rl?.write(null, { ctrl: true, name: "u" }), this._setUserInput("");
-  }
-  onKeypress(t, s) {
-    if (this._track && s.name !== "return" && (s.name && this._isActionKey(t, s) && this.rl?.write(null, { ctrl: true, name: "h" }), this._cursor = this.rl?.cursor ?? 0, this._setUserInput(this.rl?.line)), this.state === "error" && (this.state = "active"), s?.name && (!this._track && h.aliases.has(s.name) && this.emit("cursor", h.aliases.get(s.name)), h.actions.has(s.name) && this.emit("cursor", s.name)), t && (t.toLowerCase() === "y" || t.toLowerCase() === "n") && this.emit("confirm", t.toLowerCase() === "y"), this.emit("key", t?.toLowerCase(), s), s?.name === "return" && this._shouldSubmit(t, s)) {
-      if (this.opts.validate) {
-        const e2 = this.opts.validate(this.value);
-        e2 && (this.error = e2 instanceof Error ? e2.message : e2, this.state = "error", this.rl?.write(this.userInput));
-      }
-      this.state !== "error" && (this.state = "submit");
-    }
-    C([t, s?.name, s?.sequence], "cancel") && (this.state = "cancel"), (this.state === "submit" || this.state === "cancel") && this.emit("finalize"), this.render(), (this.state === "submit" || this.state === "cancel") && this.close();
-  }
-  close() {
-    this.input.unpipe(), this.input.removeListener("keypress", this.onKeypress), this.output.write(`
-`), w(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
-  }
-  restoreCursor() {
-    const t = wrapAnsi(this._prevFrame, process.stdout.columns, { hard: true, trim: false }).split(`
-`).length - 1;
-    this.output.write(import_sisteransi.cursor.move(-999, t * -1));
-  }
-  render() {
-    const t = wrapAnsi(this._render(this) ?? "", process.stdout.columns, { hard: true, trim: false });
-    if (t !== this._prevFrame) {
-      if (this.state === "initial") this.output.write(import_sisteransi.cursor.hide);
-      else {
-        const s = z(this._prevFrame, t), e2 = L(this.output);
-        if (this.restoreCursor(), s) {
-          const i = Math.max(0, s.numLinesAfter - e2), n = Math.max(0, s.numLinesBefore - e2);
-          let o = s.lines.find((u) => u >= i);
-          if (o === void 0) {
-            this._prevFrame = t;
-            return;
-          }
-          if (s.lines.length === 1) {
-            this.output.write(import_sisteransi.cursor.move(0, o - n)), this.output.write(import_sisteransi.erase.lines(1));
-            const u = t.split(`
-`);
-            this.output.write(u[o]), this._prevFrame = t, this.output.write(import_sisteransi.cursor.move(0, u.length - o - 1));
-            return;
-          } else if (s.lines.length > 1) {
-            if (i < n) o = i;
-            else {
-              const a = o - n;
-              a > 0 && this.output.write(import_sisteransi.cursor.move(0, a));
-            }
-            this.output.write(import_sisteransi.erase.down());
-            const u = t.split(`
-`).slice(o);
-            this.output.write(u.join(`
-`)), this._prevFrame = t;
-            return;
-          }
-        }
-        this.output.write(import_sisteransi.erase.down());
-      }
-      this.output.write(t), this.state === "initial" && (this.state = "active"), this._prevFrame = t;
-    }
-  }
-};
-var X = class extends m {
-  get cursor() {
-    return this.value ? 0 : 1;
-  }
-  get _value() {
-    return this.cursor === 0;
-  }
-  constructor(t) {
-    super(t, false), this.value = !!t.initialValue, this.on("userInput", () => {
-      this.value = this._value;
-    }), this.on("confirm", (s) => {
-      this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = s, this.state = "submit", this.close();
-    }), this.on("cursor", () => {
-      this.value = !this.value;
-    });
-  }
-};
-var ot = class extends m {
-  _mask = "\u2022";
-  get cursor() {
-    return this._cursor;
-  }
-  get masked() {
-    return this.userInput.replaceAll(/./g, this._mask);
-  }
-  get userInputWithCursor() {
-    if (this.state === "submit" || this.state === "cancel") return this.masked;
-    const t = this.userInput;
-    if (this.cursor >= t.length) return `${this.masked}${v(["inverse", "hidden"], "_")}`;
-    const s = this.masked, e2 = s.slice(0, this.cursor), i = s.slice(this.cursor);
-    return `${e2}${v("inverse", i[0])}${i.slice(1)}`;
-  }
-  clear() {
-    this._clearUserInput();
-  }
-  constructor({ mask: t, ...s }) {
-    super(s), this._mask = t ?? "\u2022", this.on("userInput", (e2) => {
-      this._setValue(e2);
-    });
-  }
-};
-var ht = class extends m {
-  get userInputWithCursor() {
-    if (this.state === "submit") return this.userInput;
-    const t = this.userInput;
-    if (this.cursor >= t.length) return `${this.userInput}\u2588`;
-    const s = t.slice(0, this.cursor), [e2, ...i] = t.slice(this.cursor);
-    return `${s}${v("inverse", e2)}${i.join("")}`;
-  }
-  get cursor() {
-    return this._cursor;
-  }
-  constructor(t) {
-    super({ ...t, initialUserInput: t.initialUserInput ?? t.initialValue }), this.on("userInput", (s) => {
-      this._setValue(s);
-    }), this.on("finalize", () => {
-      this.value || (this.value = t.defaultValue), this.value === void 0 && (this.value = "");
-    });
-  }
-};
-
-// node_modules/@clack/prompts/dist/index.mjs
-import { styleText as e, stripVTControlCharacters as nt2 } from "node:util";
-import V2 from "node:process";
-var import_sisteransi2 = __toESM(require_src(), 1);
-function ee() {
-  return V2.platform !== "win32" ? V2.env.TERM !== "linux" : !!V2.env.CI || !!V2.env.WT_SESSION || !!V2.env.TERMINUS_SUBLIME || V2.env.ConEmuTask === "{cmd::Cmder}" || V2.env.TERM_PROGRAM === "Terminus-Sublime" || V2.env.TERM_PROGRAM === "vscode" || V2.env.TERM === "xterm-256color" || V2.env.TERM === "alacritty" || V2.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
-}
-var tt = ee();
-var w2 = (t, i) => tt ? t : i;
-var Tt = w2("\u25C6", "*");
-var at2 = w2("\u25A0", "x");
-var ut2 = w2("\u25B2", "x");
-var H = w2("\u25C7", "o");
-var lt = w2("\u250C", "T");
-var $ = w2("\u2502", "|");
-var x2 = w2("\u2514", "\u2014");
-var _t = w2("\u2510", "T");
-var xt = w2("\u2518", "\u2014");
-var z2 = w2("\u25CF", ">");
-var U = w2("\u25CB", " ");
-var et2 = w2("\u25FB", "[\u2022]");
-var K2 = w2("\u25FC", "[+]");
-var Y2 = w2("\u25FB", "[ ]");
-var Et = w2("\u25AA", "\u2022");
-var st = w2("\u2500", "-");
-var ct = w2("\u256E", "+");
-var Gt = w2("\u251C", "+");
-var $t = w2("\u256F", "+");
-var dt = w2("\u2570", "+");
-var Mt = w2("\u256D", "+");
-var ht2 = w2("\u25CF", "\u2022");
-var pt = w2("\u25C6", "*");
-var mt = w2("\u25B2", "!");
-var gt = w2("\u25A0", "x");
-var P = (t) => {
-  switch (t) {
-    case "initial":
-    case "active":
-      return e("cyan", Tt);
-    case "cancel":
-      return e("red", at2);
-    case "error":
-      return e("yellow", ut2);
-    case "submit":
-      return e("green", H);
-  }
-};
-var ue = (t) => {
-  const i = t.active ?? "Yes", s = t.inactive ?? "No";
-  return new X({ active: i, inactive: s, signal: t.signal, input: t.input, output: t.output, initialValue: t.initialValue ?? true, render() {
-    const r = t.withGuide ?? h.withGuide, u = `${P(this.state)}  `, n = r ? `${e("gray", $)}  ` : "", a = W(t.output, t.message, n, u), c = `${r ? `${e("gray", $)}
-` : ""}${a}
-`, o = this.value ? i : s;
-    switch (this.state) {
-      case "submit": {
-        const l = r ? `${e("gray", $)}  ` : "";
-        return `${c}${l}${e("dim", o)}`;
-      }
-      case "cancel": {
-        const l = r ? `${e("gray", $)}  ` : "";
-        return `${c}${l}${e(["strikethrough", "dim"], o)}${r ? `
-${e("gray", $)}` : ""}`;
-      }
-      default: {
-        const l = r ? `${e("cyan", $)}  ` : "", d = r ? e("cyan", x2) : "";
-        return `${c}${l}${this.value ? `${e("green", z2)} ${i}` : `${e("dim", U)} ${e("dim", i)}`}${t.vertical ? r ? `
-${e("cyan", $)}  ` : `
-` : ` ${e("dim", "/")} `}${this.value ? `${e("dim", U)} ${e("dim", s)}` : `${e("green", z2)} ${s}`}
-${d}
-`;
-      }
-    }
-  } }).prompt();
-};
-var me = (t = "", i) => {
-  const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", x2)}  ` : "";
-  s.write(`${r}${e("red", t)}
-
-`);
-};
-var ge = (t = "", i) => {
-  const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", lt)}  ` : "";
-  s.write(`${r}${t}
-`);
-};
-var ye = (t = "", i) => {
-  const s = i?.output ?? process.stdout, r = i?.withGuide ?? h.withGuide ? `${e("gray", $)}
-${e("gray", x2)}  ` : "";
-  s.write(`${r}${t}
-
-`);
-};
-var we = (t) => e("dim", t);
-var be = (t, i, s) => {
-  const r = { hard: true, trim: false }, u = wrapAnsi(t, i, r).split(`
-`), n = u.reduce((o, l) => Math.max(dist_default2(l), o), 0), a = u.map(s).reduce((o, l) => Math.max(dist_default2(l), o), 0), c = i - (a - n);
-  return wrapAnsi(t, c, r);
-};
-var Se = (t = "", i = "", s) => {
-  const r = s?.output ?? V2.stdout, u = s?.withGuide ?? h.withGuide, n = s?.format ?? we, a = ["", ...be(t, A(r) - 6, n).split(`
-`).map(n), ""], c = dist_default2(i), o = Math.max(a.reduce((p2, f) => {
-    const h2 = dist_default2(f);
-    return h2 > p2 ? h2 : p2;
-  }, 0), c) + 2, l = a.map((p2) => `${e("gray", $)}  ${p2}${" ".repeat(o - dist_default2(p2))}${e("gray", $)}`).join(`
-`), d = u ? `${e("gray", $)}
-` : "", g = u ? Gt : dt;
-  r.write(`${d}${e("green", H)}  ${e("reset", i)} ${e("gray", st.repeat(Math.max(o - c - 1, 1)) + ct)}
-${l}
-${e("gray", g + st.repeat(o + 2) + $t)}
-`);
-};
-var Ce = (t) => new ot({ validate: t.validate, mask: t.mask ?? Et, signal: t.signal, input: t.input, output: t.output, render() {
-  const i = t.withGuide ?? h.withGuide, s = `${i ? `${e("gray", $)}
-` : ""}${P(this.state)}  ${t.message}
-`, r = this.userInputWithCursor, u = this.masked;
-  switch (this.state) {
-    case "error": {
-      const n = i ? `${e("yellow", $)}  ` : "", a = i ? `${e("yellow", x2)}  ` : "", c = u ?? "";
-      return t.clearOnError && this.clear(), `${s.trim()}
-${n}${c}
-${a}${e("yellow", this.error)}
-`;
-    }
-    case "submit": {
-      const n = i ? `${e("gray", $)}  ` : "", a = u ? e("dim", u) : "";
-      return `${s}${n}${a}`;
-    }
-    case "cancel": {
-      const n = i ? `${e("gray", $)}  ` : "", a = u ? e(["strikethrough", "dim"], u) : "";
-      return `${s}${n}${a}${u && i ? `
-${e("gray", $)}` : ""}`;
-    }
-    default: {
-      const n = i ? `${e("cyan", $)}  ` : "", a = i ? e("cyan", x2) : "";
-      return `${s}${n}${r}
-${a}
-`;
-    }
-  }
-} }).prompt();
-var jt = { light: w2("\u2500", "-"), heavy: w2("\u2501", "="), block: w2("\u2588", "#") };
-var Nt = `${e("gray", $)}  `;
-var Pe = (t) => new ht({ validate: t.validate, placeholder: t.placeholder, defaultValue: t.defaultValue, initialValue: t.initialValue, output: t.output, signal: t.signal, input: t.input, render() {
-  const i = t?.withGuide ?? h.withGuide, s = `${`${i ? `${e("gray", $)}
-` : ""}${P(this.state)}  `}${t.message}
-`, r = t.placeholder ? e("inverse", t.placeholder[0]) + e("dim", t.placeholder.slice(1)) : e(["inverse", "hidden"], "_"), u = this.userInput ? this.userInputWithCursor : r, n = this.value ?? "";
-  switch (this.state) {
-    case "error": {
-      const a = this.error ? `  ${e("yellow", this.error)}` : "", c = i ? `${e("yellow", $)}  ` : "", o = i ? e("yellow", x2) : "";
-      return `${s.trim()}
-${c}${u}
-${o}${a}
-`;
-    }
-    case "submit": {
-      const a = n ? `  ${e("dim", n)}` : "", c = i ? e("gray", $) : "";
-      return `${s}${c}${a}`;
-    }
-    case "cancel": {
-      const a = n ? `  ${e(["strikethrough", "dim"], n)}` : "", c = i ? e("gray", $) : "";
-      return `${s}${c}${a}${n.trim() ? `
-${c}` : ""}`;
-    }
-    default: {
-      const a = i ? `${e("cyan", $)}  ` : "", c = i ? e("cyan", x2) : "";
-      return `${s}${a}${u}
-${c}
-`;
-    }
-  }
-} }).prompt();
 
 // src/hclaw/auth.ts
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import fs10 from "node:fs/promises";
+import os3 from "node:os";
+import path11 from "node:path";
 async function readToken(env = process.env) {
   const fromEnv = env.HF_TOKEN?.trim();
   if (fromEnv) {
@@ -4287,13 +9541,13 @@ async function readToken(env = process.env) {
   }
   const candidates = [
     env.HF_TOKEN_PATH,
-    env.HF_HOME && path.join(env.HF_HOME, "token"),
-    path.join(os.homedir(), ".cache", "huggingface", "token"),
-    path.join(os.homedir(), ".huggingface", "token")
+    env.HF_HOME && path11.join(env.HF_HOME, "token"),
+    path11.join(os3.homedir(), ".cache", "huggingface", "token"),
+    path11.join(os3.homedir(), ".huggingface", "token")
   ].filter((value) => Boolean(value));
   for (const candidate of candidates) {
     try {
-      const token = (await fs.readFile(candidate, "utf8")).trim();
+      const token = (await fs10.readFile(candidate, "utf8")).trim();
       if (token) {
         return token;
       }
@@ -4446,10 +9700,10 @@ function parseGatewayLocation(value) {
 
 // src/hclaw/git.ts
 import { execFile as execFile2 } from "node:child_process";
-import fs3 from "node:fs/promises";
-import os2 from "node:os";
-import path3 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import fs12 from "node:fs/promises";
+import os4 from "node:os";
+import path13 from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { promisify as promisify2 } from "node:util";
 
 // src/vendor/hfjs-xet/error.ts
@@ -4493,25 +9747,25 @@ function hashU32(a) {
   a = a + -42973499 + (a << 3) | 0;
   return a ^ -1252372727 ^ a >>> 16 | 0;
 }
-function readU32(b, n) {
+function readU32(b2, n) {
   let x3 = 0;
-  x3 |= b[n++] << 0;
-  x3 |= b[n++] << 8;
-  x3 |= b[n++] << 16;
-  x3 |= b[n++] << 24;
+  x3 |= b2[n++] << 0;
+  x3 |= b2[n++] << 8;
+  x3 |= b2[n++] << 16;
+  x3 |= b2[n++] << 24;
   return x3;
 }
-function writeU32(b, n, x3) {
-  b[n++] = x3 >> 0 & 255;
-  b[n++] = x3 >> 8 & 255;
-  b[n++] = x3 >> 16 & 255;
-  b[n++] = x3 >> 24 & 255;
+function writeU32(b2, n, x3) {
+  b2[n++] = x3 >> 0 & 255;
+  b2[n++] = x3 >> 8 & 255;
+  b2[n++] = x3 >> 16 & 255;
+  b2[n++] = x3 >> 24 & 255;
 }
-function imul(a, b) {
+function imul(a, b2) {
   const ah = a >>> 16;
   const al = a & 65535;
-  const bh = b >>> 16;
-  const bl = b & 65535;
+  const bh = b2 >>> 16;
+  const bl = b2 & 65535;
   return al * bl + (ah * bl + al * bh << 16) | 0;
 }
 
@@ -4982,7 +10236,7 @@ async function parseShardData(shardBlob) {
 
 // src/vendor/hfjs-xet/utils/sum.ts
 function sum(arr) {
-  return arr.reduce((a, b) => a + b, 0);
+  return arr.reduce((a, b2) => a + b2, 0);
 }
 
 // src/vendor/hfjs-xet/utils/SplicedBlob.ts
@@ -5006,7 +10260,7 @@ var SplicedBlob = class _SplicedBlob extends Blob {
         throw new Error("Invalid start/end positions for SplicedBlob");
       }
     }
-    const sortedOps = [...operations].sort((a, b) => a.start - b.start);
+    const sortedOps = [...operations].sort((a, b2) => a.start - b2.start);
     for (let i = 0; i < sortedOps.length - 1; i++) {
       if (sortedOps[i].end > sortedOps[i + 1].start) {
         throw new Error("Overlapping splice operations are not supported");
@@ -5138,7 +10392,7 @@ var SplicedBlob = class _SplicedBlob extends Blob {
   get segments() {
     const segments = [];
     let currentPosition = 0;
-    const sortedOps = [...this.spliceOperations].sort((a, b) => a.start - b.start);
+    const sortedOps = [...this.spliceOperations].sort((a, b2) => a.start - b2.start);
     for (const op of sortedOps) {
       if (currentPosition < op.start) {
         segments.push(this.originalBlob.slice(currentPosition, op.start));
@@ -7254,11 +12508,11 @@ function generateWasmBytes2() {
   put([253, 0, 2, 0]);
   put([33, 31]);
   let msgIdx = 0;
-  function g(a, b, c, d) {
+  function g(a, b2, c, d) {
     const mx = MSG_ACCESS_ORDER[msgIdx++];
     const my = MSG_ACCESS_ORDER[msgIdx++];
     put([32, 16 + a]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([253, 174, 1]);
     put([32, mx]);
     put([253, 174, 1]);
@@ -7274,19 +12528,19 @@ function generateWasmBytes2() {
     put([32, 16 + d]);
     put([253, 174, 1]);
     put([33, 16 + c]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([32, 16 + c]);
     put([253, 81]);
-    put([34, 16 + b]);
+    put([34, 16 + b2]);
     put([65, 12]);
     put([253, 173, 1]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([65, 20]);
     put([253, 171, 1]);
     put([253, 80]);
-    put([33, 16 + b]);
+    put([33, 16 + b2]);
     put([32, 16 + a]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([253, 174, 1]);
     put([32, my]);
     put([253, 174, 1]);
@@ -7302,17 +12556,17 @@ function generateWasmBytes2() {
     put([32, 16 + d]);
     put([253, 174, 1]);
     put([33, 16 + c]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([32, 16 + c]);
     put([253, 81]);
-    put([34, 16 + b]);
+    put([34, 16 + b2]);
     put([65, 7]);
     put([253, 173, 1]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([65, 25]);
     put([253, 171, 1]);
     put([253, 80]);
-    put([33, 16 + b]);
+    put([33, 16 + b2]);
   }
   for (let round = 0; round < 7; round++) {
     g(0, 4, 8, 12);
@@ -7432,11 +12686,11 @@ function generateCompressChunks4xBody() {
   put([253, 80]);
   put([33, 31]);
   let msgIdx = 0;
-  function g(a, b, c, d) {
+  function g(a, b2, c, d) {
     const mx = MSG_ACCESS_ORDER[msgIdx++];
     const my = MSG_ACCESS_ORDER[msgIdx++];
     put([32, 16 + a]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([253, 174, 1]);
     put([32, mx]);
     put([253, 174, 1]);
@@ -7452,19 +12706,19 @@ function generateCompressChunks4xBody() {
     put([32, 16 + d]);
     put([253, 174, 1]);
     put([33, 16 + c]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([32, 16 + c]);
     put([253, 81]);
-    put([34, 16 + b]);
+    put([34, 16 + b2]);
     put([65, 12]);
     put([253, 173, 1]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([65, 20]);
     put([253, 171, 1]);
     put([253, 80]);
-    put([33, 16 + b]);
+    put([33, 16 + b2]);
     put([32, 16 + a]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([253, 174, 1]);
     put([32, my]);
     put([253, 174, 1]);
@@ -7480,17 +12734,17 @@ function generateCompressChunks4xBody() {
     put([32, 16 + d]);
     put([253, 174, 1]);
     put([33, 16 + c]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([32, 16 + c]);
     put([253, 81]);
-    put([34, 16 + b]);
+    put([34, 16 + b2]);
     put([65, 7]);
     put([253, 173, 1]);
-    put([32, 16 + b]);
+    put([32, 16 + b2]);
     put([65, 25]);
     put([253, 171, 1]);
     put([253, 80]);
-    put([33, 16 + b]);
+    put([33, 16 + b2]);
   }
   for (let round = 0; round < 7; round++) {
     g(0, 4, 8, 12);
@@ -7565,8 +12819,8 @@ function generateCompressParentBody() {
   put([33, 30]);
   put([65, 4]);
   put([33, 31]);
-  function g(a, b, c, d, mx, my) {
-    const sa = 16 + a, sb = 16 + b, sc = 16 + c, sd = 16 + d;
+  function g(a, b2, c, d, mx, my) {
+    const sa = 16 + a, sb = 16 + b2, sc = 16 + c, sd = 16 + d;
     put([32, sa]);
     put([32, sb]);
     put([106]);
@@ -8272,10 +13526,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path5, processedBytes]) => ({
-        path: path5,
-        progress: processedBytes / this.fileSize[path5],
-        lastSentProgress: ((this.fileUploadedBytes[path5] ?? 0) + (processedBytes - (this.fileUploadedBytes[path5] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path5]
+      files: Object.entries(this.fileProcessedBytes).map(([path16, processedBytes]) => ({
+        path: path16,
+        progress: processedBytes / this.fileSize[path16],
+        lastSentProgress: ((this.fileUploadedBytes[path16] ?? 0) + (processedBytes - (this.fileUploadedBytes[path16] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path16]
       }))
     };
   }
@@ -9132,7 +14386,7 @@ var BucketClient = class {
     }
     const missing = files.filter((file) => !hashes.has(file.path));
     if (missing.length > 0) {
-      throw new Error(`xet upload returned no hash for: ${missing.map((f) => f.path).join(", ")}`);
+      throw new Error(`xet upload returned no hash for: ${missing.map((f2) => f2.path).join(", ")}`);
     }
     await this.batch(
       files.map((file) => ({
@@ -9148,7 +14402,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path5) => ({ type: "deleteFile", path: path5 })));
+    await this.batch(paths.map((path16) => ({ type: "deleteFile", path: path16 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -9164,8 +14418,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path5) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path5)}`;
+  async downloadFile(path16) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path16)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -9395,9 +14649,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path5) => ({
+      ...(params.deletePaths ?? []).map((path16) => ({
         key: "deletedFile",
-        value: { path: path5 }
+        value: { path: path16 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -9469,20 +14723,20 @@ function sseDataToText(raw) {
 }
 
 // src/hclaw/runtime-image.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
-import { fileURLToPath } from "node:url";
+import fs11 from "node:fs";
+import path12 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 var RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/huggingclaw-runtime";
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${readPackageVersion()}`;
 function resolveRuntimeImage(value, env = process.env) {
   return value?.trim() || env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || DEFAULT_RUNTIME_IMAGE;
 }
 function readPackageVersion() {
-  let dir = path2.dirname(fileURLToPath(import.meta.url));
+  let dir = path12.dirname(fileURLToPath2(import.meta.url));
   while (true) {
-    const candidate = path2.join(dir, "package.json");
+    const candidate = path12.join(dir, "package.json");
     try {
-      const parsed = JSON.parse(fs2.readFileSync(candidate, "utf8"));
+      const parsed = JSON.parse(fs11.readFileSync(candidate, "utf8"));
       if (typeof parsed.version === "string" && parsed.version.trim()) {
         return parsed.version.trim();
       }
@@ -9491,7 +14745,7 @@ function readPackageVersion() {
         throw err;
       }
     }
-    const parent = path2.dirname(dir);
+    const parent = path12.dirname(dir);
     if (parent === dir) {
       throw new Error("could not find package.json while resolving default runtime image");
     }
@@ -9505,12 +14759,12 @@ function isMissingFileError(err) {
 // src/hclaw/git.ts
 var execFileAsync2 = promisify2(execFile2);
 async function pushTemplateToSpace(params) {
-  const tempRoot = await fs3.mkdtemp(path3.join(os2.tmpdir(), "hclaw-space-"));
+  const tempRoot = await fs12.mkdtemp(path13.join(os4.tmpdir(), "hclaw-space-"));
   try {
     const sourceDir = params.sourceDir ?? process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
     const templateRev = await currentTemplateRev(sourceDir);
-    const outDir = path3.join(tempRoot, "space");
-    await fs3.mkdir(outDir, { recursive: true });
+    const outDir = path13.join(tempRoot, "space");
+    await fs12.mkdir(outDir, { recursive: true });
     await generateSpaceRepo(sourceDir, outDir, {
       ...params.runtimeImage ? { runtimeImage: params.runtimeImage } : {}
     });
@@ -9528,7 +14782,7 @@ async function pushTemplateToSpace(params) {
     });
     return { templateRev };
   } finally {
-    await fs3.rm(tempRoot, { recursive: true, force: true });
+    await fs12.rm(tempRoot, { recursive: true, force: true });
   }
 }
 async function currentTemplateRev(sourceDir) {
@@ -9541,7 +14795,7 @@ async function currentTemplateRev(sourceDir) {
     }
   } catch {
   }
-  const pkg = JSON.parse(await fs3.readFile(path3.join(sourceDir, "package.json"), "utf8"));
+  const pkg = JSON.parse(await fs12.readFile(path13.join(sourceDir, "package.json"), "utf8"));
   return `npm:${pkg.name ?? "huggingclaw"}@${pkg.version ?? "unknown"}`;
 }
 async function generateSpaceRepo(sourceDir, outDir, options = {}) {
@@ -9551,23 +14805,23 @@ async function generateSpaceRepo(sourceDir, outDir, options = {}) {
     ["space/README.md", "README.md"]
   ];
   for (const [from, to] of copies) {
-    await copyExisting(path3.join(sourceDir, from), path3.join(outDir, to));
+    await copyExisting(path13.join(sourceDir, from), path13.join(outDir, to));
   }
-  await fs3.writeFile(
-    path3.join(outDir, "Dockerfile"),
+  await fs12.writeFile(
+    path13.join(outDir, "Dockerfile"),
     `FROM ${options.runtimeImage ?? DEFAULT_RUNTIME_IMAGE}
 `,
     "utf8"
   );
 }
 async function findPackagedSourceRoot() {
-  const start = path3.dirname(fileURLToPath2(import.meta.url));
+  const start = path13.dirname(fileURLToPath3(import.meta.url));
   let dir = start;
   while (true) {
     if (await hasPackagedSourceFiles(dir)) {
       return dir;
     }
-    const parent = path3.dirname(dir);
+    const parent = path13.dirname(dir);
     if (parent === dir) {
       throw new Error("Could not find packaged Hugging Claw source files. Reinstall the huggingclaw npm package.");
     }
@@ -9584,20 +14838,20 @@ async function hasPackagedSourceFiles(dir) {
     "src/hf-bucket-client/client.ts"
   ];
   try {
-    await Promise.all(required.map((file) => fs3.access(path3.join(dir, file))));
+    await Promise.all(required.map((file) => fs12.access(path13.join(dir, file))));
     return true;
   } catch {
     return false;
   }
 }
 async function copyExisting(from, to) {
-  const stat = await fs3.stat(from);
-  await fs3.mkdir(path3.dirname(to), { recursive: true });
+  const stat = await fs12.stat(from);
+  await fs12.mkdir(path13.dirname(to), { recursive: true });
   if (stat.isDirectory()) {
-    await fs3.cp(from, to, { recursive: true });
+    await fs12.cp(from, to, { recursive: true });
   } else {
-    await fs3.copyFile(from, to);
-    await fs3.chmod(to, stat.mode);
+    await fs12.copyFile(from, to);
+    await fs12.chmod(to, stat.mode);
   }
 }
 async function readFilesForCommit(root) {
@@ -9605,24 +14859,24 @@ async function readFilesForCommit(root) {
   for (const relativePath of await listFiles(root)) {
     files.push({
       path: relativePath,
-      content: await fs3.readFile(path3.join(root, relativePath))
+      content: await fs12.readFile(path13.join(root, relativePath))
     });
   }
   return files;
 }
 async function listFiles(root, dir = "") {
-  const absoluteDir = path3.join(root, dir);
-  const entries = await fs3.readdir(absoluteDir, { withFileTypes: true });
+  const absoluteDir = path13.join(root, dir);
+  const entries = await fs12.readdir(absoluteDir, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    const relativePath = path3.posix.join(dir.split(path3.sep).join(path3.posix.sep), entry.name);
-    const absolutePath = path3.join(root, relativePath);
+    const relativePath = path13.posix.join(dir.split(path13.sep).join(path13.posix.sep), entry.name);
+    const absolutePath = path13.join(root, relativePath);
     if (entry.isDirectory()) {
       files.push(...await listFiles(root, relativePath));
     } else if (entry.isFile()) {
       files.push(relativePath);
     } else {
-      const stat = await fs3.stat(absolutePath);
+      const stat = await fs12.stat(absolutePath);
       if (stat.isFile()) {
         files.push(relativePath);
       }
@@ -9689,9 +14943,9 @@ async function assertNoLiveForeignLease(params) {
 }
 
 // src/hclaw/local-config.ts
-import fs4 from "node:fs/promises";
-import os3 from "node:os";
-import path4 from "node:path";
+import fs13 from "node:fs/promises";
+import os5 from "node:os";
+import path14 from "node:path";
 function defaultConfigRoot(env = process.env) {
   const explicit = env.HUGGINGCLAW_CONFIG_HOME?.trim();
   if (explicit) {
@@ -9699,32 +14953,32 @@ function defaultConfigRoot(env = process.env) {
   }
   const xdg = env.XDG_CONFIG_HOME?.trim();
   if (xdg) {
-    return path4.join(xdg, "huggingclaw");
+    return path14.join(xdg, "huggingclaw");
   }
-  return path4.join(os3.homedir(), ".config", "huggingclaw");
+  return path14.join(os5.homedir(), ".config", "huggingclaw");
 }
 function localConfigPaths(root) {
   return {
     root,
-    deploymentsDir: path4.join(root, "deployments"),
-    secretsDir: path4.join(root, "secrets")
+    deploymentsDir: path14.join(root, "deployments"),
+    secretsDir: path14.join(root, "secrets")
   };
 }
 function manifestPath(root, agent) {
-  return path4.join(localConfigPaths(root).deploymentsDir, `${agent}.json`);
+  return path14.join(localConfigPaths(root).deploymentsDir, `${agent}.json`);
 }
 function secretEnvPath(root, agent) {
-  return path4.join(localConfigPaths(root).secretsDir, `${agent}.env`);
+  return path14.join(localConfigPaths(root).secretsDir, `${agent}.env`);
 }
 async function writeManifest(root, manifest) {
   const file = manifestPath(root, manifest.agent);
-  await fs4.mkdir(path4.dirname(file), { recursive: true });
-  await fs4.writeFile(file, `${JSON.stringify(manifest, null, 2)}
+  await fs13.mkdir(path14.dirname(file), { recursive: true });
+  await fs13.writeFile(file, `${JSON.stringify(manifest, null, 2)}
 `, "utf8");
 }
 async function readManifest(root, agent) {
   const file = manifestPath(root, agent);
-  const parsed = JSON.parse(await fs4.readFile(file, "utf8"));
+  const parsed = JSON.parse(await fs13.readFile(file, "utf8"));
   if (parsed.version !== 1) {
     throw new Error(`unsupported deployment manifest version in ${file}`);
   }
@@ -9732,7 +14986,7 @@ async function readManifest(root, agent) {
 }
 async function manifestExists(root, agent) {
   try {
-    await fs4.access(manifestPath(root, agent));
+    await fs13.access(manifestPath(root, agent));
     return true;
   } catch {
     return false;
@@ -9744,12 +14998,12 @@ function renderSecretEnv(values) {
 }
 async function writeSecretEnv(root, agent, values) {
   const file = secretEnvPath(root, agent);
-  await fs4.mkdir(path4.dirname(file), { recursive: true, mode: 448 });
-  await fs4.writeFile(file, renderSecretEnv(values), { encoding: "utf8", mode: 384 });
-  await fs4.chmod(file, 384);
+  await fs13.mkdir(path14.dirname(file), { recursive: true, mode: 448 });
+  await fs13.writeFile(file, renderSecretEnv(values), { encoding: "utf8", mode: 384 });
+  await fs13.chmod(file, 384);
 }
 async function readSecretEnv(root, agent) {
-  return parseSecretEnv(await fs4.readFile(secretEnvPath(root, agent), "utf8"));
+  return parseSecretEnv(await fs13.readFile(secretEnvPath(root, agent), "utf8"));
 }
 function parseSecretEnv(raw) {
   const out = {};
@@ -9841,7 +15095,7 @@ var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW
 var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 var PAID_HARDWARE_COST_NOTE = "Telegram requires upgraded Hugging Face Space hardware today. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
-  isInteractive: () => Boolean(process2.stdin.isTTY && process2.stdout.isTTY),
+  isInteractive: () => Boolean(process4.stdin.isTTY && process4.stdout.isTTY),
   intro: ge,
   outro: ye,
   note: Se,
@@ -9852,7 +15106,7 @@ var defaultPrompt = {
 };
 function createRuntime(overrides = {}) {
   return {
-    env: overrides.env ?? process2.env,
+    env: overrides.env ?? process4.env,
     stdout: overrides.stdout ?? console,
     stderr: overrides.stderr ?? console,
     readToken: overrides.readToken ?? readToken,
@@ -9860,7 +15114,7 @@ function createRuntime(overrides = {}) {
     pushTemplateToSpace: overrides.pushTemplateToSpace ?? pushTemplateToSpace,
     getTelegramBot: overrides.getTelegramBot ?? getTelegramBot,
     dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
-    configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process2.env),
+    configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process4.env),
     now: overrides.now ?? (() => /* @__PURE__ */ new Date()),
     prompt: overrides.prompt ?? defaultPrompt
   };
@@ -9918,11 +15172,11 @@ function createProgram(runtimeOverrides = {}) {
   });
   return program2;
 }
-async function main(argv = process2.argv.slice(2), runtimeOverrides = {}) {
+async function main(argv = process4.argv.slice(2), runtimeOverrides = {}) {
   const program2 = createProgram(runtimeOverrides);
   try {
     await program2.parseAsync(argv, { from: "user" });
-    return typeof process2.exitCode === "number" && process2.exitCode !== 0 ? process2.exitCode : 0;
+    return typeof process4.exitCode === "number" && process4.exitCode !== 0 ? process4.exitCode : 0;
   } catch (err) {
     if (err instanceof CommanderError) {
       return err.exitCode;
@@ -10249,9 +15503,9 @@ function deploymentSecrets(params) {
     ...params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}
   };
 }
-async function writeLocalDeployment(configRoot, manifest, secrets) {
-  await writeManifest(configRoot, manifest);
-  await writeSecretEnv(configRoot, manifest.agent, secrets);
+async function writeLocalDeployment(configRoot2, manifest, secrets) {
+  await writeManifest(configRoot2, manifest);
+  await writeSecretEnv(configRoot2, manifest.agent, secrets);
 }
 async function deploySpaceGateway(params) {
   const { hub, runtime, hfToken, manifest, secrets } = params;
@@ -10634,8 +15888,8 @@ async function warnOnDockerContextMismatch(pinnedContext, runtime) {
     runtime.stdout.log(`Using Docker context ${pinnedContext} from the deployment manifest. Current shell context is ${currentContext}.`);
   }
 }
-function sameLocalGatewayBinding(a, b) {
-  return a?.engine === b?.engine && a?.dockerContext === b?.dockerContext && a?.dockerEndpoint === b?.dockerEndpoint;
+function sameLocalGatewayBinding(a, b2) {
+  return a?.engine === b2?.engine && a?.dockerContext === b2?.dockerContext && a?.dockerEndpoint === b2?.dockerEndpoint;
 }
 function dockerContextFor(manifest) {
   return manifest.localGateway?.dockerContext;
@@ -10952,7 +16206,7 @@ async function readTelegramToken(opts, runtime) {
     return direct;
   }
   if (opts.telegramTokenFile) {
-    const raw = await fs5.readFile(opts.telegramTokenFile, "utf8");
+    const raw = await fs14.readFile(opts.telegramTokenFile, "utf8");
     const match = raw.match(/(?:^|\n)\s*TELEGRAM_BOT_TOKEN\s*=\s*['"]?([^'"\n]+)['"]?/);
     return (match?.[1] ?? raw.trim()).trim();
   }
@@ -11033,14 +16287,44 @@ function parseInteger(value) {
 function isPaidHardware(hardware) {
   return hardware !== DEFAULT_HARDWARE;
 }
+function hclawSkillsRoot() {
+  let current = path15.dirname(fileURLToPath4(import.meta.url));
+  while (true) {
+    const candidate = path15.join(current, ".agents", "skills");
+    if (isDirectory(candidate)) {
+      return pathToFileURL2(`${candidate}${path15.sep}`);
+    }
+    const parent = path15.dirname(current);
+    if (parent === current) {
+      return new URL("../.agents/skills/", import.meta.url);
+    }
+    current = parent;
+  }
+}
+function isDirectory(filePath) {
+  try {
+    return statSync(filePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+async function runCli() {
+  if (process4.argv.includes("--skill")) {
+    return handleSkillflag(process4.argv, {
+      skillsRoot: hclawSkillsRoot(),
+      includeBundledSkill: false
+    });
+  }
+  return main();
+}
 var invokedPath = "";
 try {
-  invokedPath = process2.argv[1] ? pathToFileURL(realpathSync(process2.argv[1])).href : "";
+  invokedPath = process4.argv[1] ? pathToFileURL2(realpathSync(process4.argv[1])).href : "";
 } catch {
   invokedPath = "";
 }
 if (import.meta.url === invokedPath) {
-  main().then((code) => process2.exit(code));
+  runCli().then((code) => process4.exit(code));
 }
 export {
   DEFAULT_GATEWAY_LOCATION,
