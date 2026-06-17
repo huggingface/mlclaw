@@ -9779,7 +9779,7 @@ async function getTelegramBot(token, apiRoot = "https://api.telegram.org") {
 }
 
 // src/hclaw/cli.ts
-var DEFAULT_MODEL = "huggingface/Qwen/Qwen3-8B";
+var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it";
 var DEFAULT_HARDWARE = "cpu-basic";
 var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;

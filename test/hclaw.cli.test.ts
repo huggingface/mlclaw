@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/hclaw/cli.js";
+import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/hclaw/cli.js";
 import { DEFAULT_RUNTIME_IMAGE } from "../src/hclaw/runtime-image.js";
 import { readManifest, readSecretEnv, writeManifest, writeSecretEnv, type DeploymentManifest } from "../src/hclaw/local-config.js";
 import type { HubApi, SpaceRuntime } from "../src/hclaw/hub-api.js";
@@ -253,6 +253,7 @@ describe("hclaw CLI", () => {
     expect(manifest.localRuntimeId).toMatch(/^local-research-[a-f0-9]{16}$/);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       HUGGINGCLAW_RUNTIME_ID: manifest.localRuntimeId,
+      OPENCLAW_MODEL: DEFAULT_MODEL,
     });
   });
 

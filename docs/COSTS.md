@@ -122,10 +122,14 @@ Cost formula:
 
 Practical guidance:
 
+Prices below are per 1M tokens from the Hugging Face Router catalog checked on
+2026-06-17. They are provider-specific and can change.
+
 | Choice | Fixed cost | Variable cost | Notes |
 | --- | ---: | ---: | --- |
-| `huggingface/Qwen/Qwen3-8B` | None beyond Space | Low relative to larger models | Good default for cheap personal use |
-| `huggingface/google/gemma-4-26B-A4B-it` | None beyond Space | Higher than small models | Better quality target, still no fixed model server |
+| `huggingface/google/gemma-4-26B-A4B-it` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Default quality target; supports tools |
+| `huggingface/Qwen/Qwen3.6-35B-A3B` | None beyond Space | DeepInfra: $0.15 input / $0.95 output | Stronger Qwen option; supports tools and structured output |
+| `huggingface/Qwen/Qwen3-8B` | None beyond Space | nscale: $0.07 input / $0.18 output | Cheaper small-model option when quality tradeoffs are acceptable |
 | `:cheapest` provider suffix | None beyond Space | Lowest available provider price for that model | Use when cost matters more than latency |
 | `:fastest` provider suffix | None beyond Space | May cost more | Use when latency matters more than cost |
 | Explicit provider suffix, e.g. `:deepinfra` | None beyond Space | Provider-specific | Use for predictable provider behavior |
@@ -241,8 +245,16 @@ Default:
 
 ```text
 gatewayLocation: local
-model: a router-compatible Hugging Face model
+model: huggingface/google/gemma-4-26B-A4B-it
 provider policy: default/fastest unless the user explicitly chooses cheapest
+```
+
+Configurable model examples:
+
+```text
+OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-35B-A3B
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3-8B
 ```
 
 Space gateway override:

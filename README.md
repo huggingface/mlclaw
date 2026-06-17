@@ -54,6 +54,19 @@ npx huggingclaw bootstrap \
   --yes
 ```
 
+Choose a different Hugging Face Router model with `--model`:
+
+```bash
+npx huggingclaw bootstrap \
+  --model huggingface/Qwen/Qwen3.6-35B-A3B
+```
+
+Recommended router-compatible options:
+
+- `huggingface/google/gemma-4-26B-A4B-it`: default quality target.
+- `huggingface/Qwen/Qwen3.6-35B-A3B`: stronger Qwen option with tool support.
+- `huggingface/Qwen/Qwen3-8B`: cheaper small-model option.
+
 For a fully hosted Space gateway:
 
 ```bash
@@ -138,8 +151,9 @@ Honest numbers, since "deploy your own agent" tends to hide them:
   Telegram/Discord. The cheapest paid CPU tier is enough for the gateway.
 - **Inference:** requests use your Hugging Face Inference Providers credits
   ($0.10/month on free accounts, $2.00 with PRO), then pay-as-you-go at
-  provider rates. Small models like Qwen3-8B keep this at a few dollars a
-  month for personal use.
+  provider rates. The default model is
+  `huggingface/google/gemma-4-26B-A4B-it`; choose a cheaper router-compatible
+  model if message volume matters more than quality.
 
 ## Telegram notes
 
