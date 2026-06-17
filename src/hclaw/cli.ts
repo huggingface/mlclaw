@@ -35,7 +35,7 @@ import { namesFor, slugifyAgentName } from "./naming.js";
 import { resolveRuntimeImage } from "./runtime-image.js";
 import { getTelegramBot, type TelegramBot } from "./telegram.js";
 
-export const DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it";
+export const DEFAULT_MODEL = "huggingface/Qwen/Qwen3-8B";
 export const DEFAULT_HARDWARE = "cpu-basic";
 export const TELEGRAM_HARDWARE = "cpu-upgrade";
 export const TELEGRAM_SLEEP_TIME = -1;

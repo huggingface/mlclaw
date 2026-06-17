@@ -23,7 +23,7 @@ describe("local Hugging Claw config", () => {
       space: "alice/research",
       localRuntimeId: "local-research-test",
       gatewayLocation: "local",
-      model: "huggingface/google/gemma-4-26B-A4B-it",
+      model: "huggingface/Qwen/Qwen3-8B",
       runtimeImage: "example/runtime:test",
       createdAt: "2026-06-16T00:00:00.000Z",
       updatedAt: "2026-06-16T00:00:00.000Z",
