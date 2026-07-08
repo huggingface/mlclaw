@@ -12,6 +12,7 @@ browser gateway should visibly expose an ML Claw entry point for:
 
 - sign out;
 - model/provider configuration;
+- preinstalled Hugging Face skills status;
 - OpenAI credential setup;
 - runtime status;
 - restart/update state;
@@ -64,6 +65,7 @@ Initial React routes:
 /mlclaw/settings
 /mlclaw/status
 /mlclaw/credentials
+/mlclaw/skills
 ```
 
 The existing `/mlclaw/openai` route should become either a redirect to
@@ -87,6 +89,7 @@ GET  /mlclaw/assets/*
 GET  /mlclaw/api/session
 GET  /mlclaw/api/status
 GET  /mlclaw/api/settings
+GET  /mlclaw/api/skills
 POST /mlclaw/api/settings/model
 POST /mlclaw/api/credentials/openai
 POST /mlclaw/api/runtime/restart
@@ -142,6 +145,7 @@ src/mlclaw-control-ui/
       Settings.tsx
       Status.tsx
       Credentials.tsx
+      Skills.tsx
     components/
       Shell.tsx
       Field.tsx
@@ -216,6 +220,87 @@ The UI should explain by behavior, not marketing copy:
 Later, add a Hugging Face Router catalog lookup endpoint so the UI can show
 currently available hosted models. That endpoint should cache results and fail
 softly to the curated list.
+
+## Preinstalled Hugging Face Skills
+
+Hugging Face skills are part of the default ML Claw deployment. They should not
+be a separate post-install task that the user has to discover later.
+
+When `mlclaw bootstrap` creates a new deployment, it must seed the OpenClaw
+workspace before the first gateway start with official skills from
+`huggingface/skills`.
+
+Initial required skills:
+
+```text
+hf-cli
+huggingface-spaces
+huggingface-datasets
+huggingface-local-models
+```
+
+Optional bundled skills can be added later, but the baseline should be enough
+for a fresh ML Claw agent to understand Hugging Face Hub operations, Spaces,
+datasets, buckets, local model discovery, and common Hub CLI workflows without
+manual setup.
+
+Seed location inside the OpenClaw workspace:
+
+```text
+workspace/.agents/skills/<skill-name>/SKILL.md
+workspace/.agents/skills/<skill-name>/...
+```
+
+The source revision must be pinned and recorded:
+
+```text
+workspace/.agents/skills/.mlclaw-hf-skills.json
+```
+
+Example manifest:
+
+```json
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/huggingface/skills",
+  "revision": "<git-sha>",
+  "installedAt": "2026-07-09T00:00:00.000Z",
+  "skills": [
+    "hf-cli",
+    "huggingface-spaces",
+    "huggingface-datasets",
+    "huggingface-local-models"
+  ]
+}
+```
+
+Bootstrap behavior:
+
+- new bucket/new deployment: seed the baseline skills before first OpenClaw
+  start;
+- local gateway: seed into the local live workspace before starting Docker;
+- Space gateway: seed into the Space live workspace before launching OpenClaw;
+- first snapshot: include the seeded `.agents/skills` directory so the skills
+  become durable bucket state;
+- existing bucket/deployment: do not overwrite user-modified skill files during
+  normal bootstrap.
+
+Update behavior:
+
+- `mlclaw update <owner/space>` updates runtime files only and must not mutate
+  bucket workspace skills;
+- `mlclaw doctor --fix` may add missing baseline skills only when the workspace
+  is clearly an ML Claw workspace and the target skill folder is absent;
+- future settings UI may offer “Update Hugging Face skills” as an explicit
+  admin action with source revision preview and confirmation.
+
+The settings UI should include a read-only Skills page at first:
+
+- show installed baseline skills;
+- show pinned source revision;
+- show whether expected baseline skills are missing;
+- link to `huggingface/skills` documentation;
+- avoid arbitrary skill installation until the trust/update model is explicit.
 
 ## Mutating Space Configuration
 
@@ -397,12 +482,14 @@ Frontend tests:
 
 - settings page renders current model;
 - model selector posts expected payload;
+- skills page renders installed baseline skills and source revision;
 - restart-pending banner appears after save;
 - logout action calls the API and redirects.
 
 Build/package tests:
 
 - Vite control UI build is included in generated Space files;
+- bootstrap seed files include the baseline Hugging Face skills;
 - package check includes the built assets needed by `mlclaw update`;
 - generated Space still starts from the bundled runtime.
 
@@ -411,17 +498,22 @@ Live test:
 1. create `mlclaw-test`;
 2. sign in through Hugging Face OAuth;
 3. open OpenClaw gateway;
-4. verify ML Claw shell link is visible;
-5. open `/mlclaw/settings`;
-6. change model;
-7. confirm Space restart;
-8. verify `OPENCLAW_MODEL` changed in Space variables;
-9. verify OpenClaw comes back after restart;
-10. sign out and confirm `/` returns to login.
+4. verify `.agents/skills/hf-cli` exists in the OpenClaw workspace;
+5. verify ML Claw shell link is visible;
+6. open `/mlclaw/settings`;
+7. open `/mlclaw/skills` and confirm baseline skills are listed;
+8. change model;
+9. confirm Space restart;
+10. verify `OPENCLAW_MODEL` changed in Space variables;
+11. verify OpenClaw comes back after restart;
+12. sign out and confirm `/` returns to login.
 
 ## Acceptance Criteria
 
 - Signed-in users can visibly navigate from OpenClaw to ML Claw settings.
+- Fresh ML Claw deployments start with baseline Hugging Face skills already
+  installed in the OpenClaw workspace.
+- The first durable bucket snapshot preserves the preinstalled skills.
 - Admin users can update `OPENCLAW_MODEL` from the browser.
 - Admin users can submit an OpenAI API key without the key being logged or
   returned.
@@ -437,6 +529,8 @@ Live test:
 - Do not build a generic LLM routing layer in this change.
 - Do not patch OpenClaw UI source.
 - Do not expose arbitrary Hugging Face repo mutation from the browser.
+- Do not make Hugging Face skills a separate required setup step after
+  bootstrap.
 - Do not add Telegram/Discord setup UI until paid hardware consent and egress
   messaging are represented clearly.
 - Do not replace the CLI; browser settings are complementary.
