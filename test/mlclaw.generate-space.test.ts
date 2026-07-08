@@ -83,6 +83,6 @@ describe("generated Space repository", () => {
     const dockerfile = await fs.readFile(path.join(outDir, "Dockerfile"), "utf8");
     expect(dockerfile).toContain("FROM ghcr.io/openclaw/openclaw:latest");
     expect(dockerfile).toContain("COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js");
-    expect(dockerfile).toContain("ENTRYPOINT [\"/app/entrypoint.sh\"]");
+    expect(dockerfile).toContain("CMD [\"/app/entrypoint.sh\"]");
   });
 });
