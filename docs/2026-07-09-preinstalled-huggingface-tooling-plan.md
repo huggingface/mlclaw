@@ -16,6 +16,8 @@ The baseline includes:
 
 - Hugging Face CLI (`hf`) installed on `PATH`;
 - `hf-discover` installed on `PATH`;
+- `uv` installed on `PATH` for isolated Python tool execution and `uvx`
+  helpers;
 - lightweight Hugging Face Python libraries available for agent-written
   scripts;
 - an HF MCP configuration stub for future MCP-capable runtimes;
@@ -105,6 +107,17 @@ python -c "import datasets, safetensors"
 manual setup. `safetensors` is lightweight and useful for inspecting model
 artifacts and checkpoints.
 
+The default runtime should also include `uv` so agents can run isolated Python
+tools without mutating the base environment. This is required by skills such as
+`hf-mem`, which runs through `uvx`.
+
+Expected smoke checks:
+
+```bash
+uv --version
+uvx --help
+```
+
 Do not include heavy training libraries in the default baseline.
 
 Specifically, these should be optional packs, not default installs:
@@ -174,10 +187,45 @@ hf-cli
 huggingface-spaces
 huggingface-datasets
 huggingface-local-models
+huggingface-best
+hf-mem
+huggingface-tool-builder
+huggingface-papers
+huggingface-gradio
+huggingface-zerogpu
 ```
 
 These cover the default ML Claw use case: Hub CLI operations, Spaces, datasets,
-buckets, and local model discovery.
+buckets, local model discovery, model selection, memory sizing, reusable Hub
+API scripts, paper lookup, Gradio demos, and ZeroGPU-aware Space development.
+
+These skills are instructions and examples. Including them in the default
+workspace must not imply that heavy runtime packages such as `torch`,
+`transformers`, `diffusers`, or `trl` are installed by default.
+
+Do not include these specialized skills in the default baseline:
+
+```text
+hf-cloud-aws-context-discovery
+hf-cloud-python-env-setup
+hf-cloud-sagemaker-deployment-planner
+hf-cloud-sagemaker-iam-preflight
+hf-cloud-sagemaker-production-defaults
+hf-cloud-serving-image-selection
+huggingface-community-evals
+huggingface-llm-trainer
+huggingface-lora-space-builder
+huggingface-paper-publisher
+huggingface-trackio
+huggingface-vision-trainer
+train-sentence-transformers
+transformers-js
+trl-training
+```
+
+Those belong to explicit optional packs because they either assume AWS,
+training/evaluation dependencies, JavaScript inference dependencies, or a more
+specialized publishing/demo workflow.
 
 ## Workspace Layout
 
@@ -226,7 +274,13 @@ Manifest shape:
       "hf-cli",
       "huggingface-spaces",
       "huggingface-datasets",
-      "huggingface-local-models"
+      "huggingface-local-models",
+      "huggingface-best",
+      "hf-mem",
+      "huggingface-tool-builder",
+      "huggingface-papers",
+      "huggingface-gradio",
+      "huggingface-zerogpu"
     ]
   },
   "templates": {
@@ -244,6 +298,17 @@ gateway runtime until users explicitly request them.
 ### Training Pack
 
 For model fine-tuning and RLHF-style work:
+
+Skills:
+
+```text
+huggingface-llm-trainer
+trl-training
+train-sentence-transformers
+huggingface-trackio
+```
+
+Packages:
 
 ```text
 transformers
@@ -265,6 +330,14 @@ bitsandbytes
 
 For image classification, object detection, segmentation, and model demos:
 
+Skills:
+
+```text
+huggingface-vision-trainer
+```
+
+Packages:
+
 ```text
 transformers
 datasets
@@ -276,6 +349,14 @@ opencv-python-headless
 ### Diffusion Pack
 
 For image generation and diffusion workflows:
+
+Skills:
+
+```text
+huggingface-lora-space-builder
+```
+
+Packages:
 
 ```text
 diffusers
@@ -289,11 +370,63 @@ pillow
 
 For model and agent evaluation:
 
+Skills:
+
+```text
+huggingface-community-evals
+```
+
+Packages:
+
 ```text
 lighteval
 inspect-ai
 evaluate
 ```
+
+### Research Publishing Pack
+
+For publishing and managing paper pages around models, datasets, and research
+artifacts:
+
+```text
+huggingface-paper-publisher
+```
+
+This should stay optional because publishing workflows can mutate public Hub
+metadata and are less central than reading/searching papers.
+
+### JavaScript Inference Pack
+
+For browser or Node.js inference with Transformers.js:
+
+Skills:
+
+```text
+transformers-js
+```
+
+Packages:
+
+```text
+@huggingface/transformers
+```
+
+### AWS SageMaker Pack
+
+For users who explicitly want AWS or SageMaker deployment help:
+
+```text
+hf-cloud-aws-context-discovery
+hf-cloud-python-env-setup
+hf-cloud-sagemaker-deployment-planner
+hf-cloud-sagemaker-iam-preflight
+hf-cloud-sagemaker-production-defaults
+hf-cloud-serving-image-selection
+```
+
+This pack must never be installed by default. It assumes AWS credentials,
+regions, IAM roles, quotas, and cloud billing outside Hugging Face.
 
 Pack selection can later be exposed through CLI flags or settings:
 
@@ -314,8 +447,8 @@ Preferred implementation:
 - build or vendor a pinned Hugging Face tooling bundle during ML Claw release;
 - include baseline Agent Skills in the npm package and generated Space runtime
   files;
-- install Python CLI tooling into the runtime image or a deterministic runtime
-  tool environment;
+- install Python CLI tooling and `uv` into the runtime image or a deterministic
+  runtime tool environment;
 - write the tooling manifest into the workspace before OpenClaw starts.
 
 For Space deployments, the strongest long-term option is to include `hf` and
@@ -361,8 +494,10 @@ Inside an ML Claw gateway runtime:
 ```bash
 which hf
 which hf-discover
+which uv
 hf auth whoami
 hf-discover --version
+uv --version
 python -c "import datasets, safetensors; from huggingface_hub import HfApi"
 ```
 
@@ -407,6 +542,7 @@ Do not make users run those commands for the default path.
 Unit tests:
 
 - baseline bundle contains every required skill;
+- baseline bundle excludes optional pack-only skills;
 - every bundled skill has `SKILL.md`;
 - seed function creates `.agents/skills/<skill-name>`;
 - seed function creates `.agents/mcp/huggingface.json`;
@@ -422,6 +558,7 @@ Runtime tests:
 - container image or generated Space build exposes `hf`;
 - container image or generated Space build exposes `hf-discover`;
 - runtime imports `huggingface_hub`, `datasets`, and `safetensors`;
+- `uv --version` succeeds;
 - `hf auth whoami` uses `HF_TOKEN`;
 - `hf-discover --version` succeeds;
 - `hf-discover search "train a model" --kind skill --json` succeeds or fails
@@ -455,14 +592,16 @@ Live test:
 
 - Fresh ML Claw deployments start with Hugging Face CLI installed.
 - Fresh ML Claw deployments start with `hf-discover` installed.
+- Fresh ML Claw deployments start with `uv` installed.
 - Fresh ML Claw deployments start with `huggingface_hub`, `datasets`, and
   `safetensors` importable.
 - Fresh ML Claw deployments start with baseline Hugging Face Agent Skills
   installed.
 - Fresh ML Claw deployments include an HF MCP config stub and HF examples.
 - The user does not need to run a separate tool or skill installation command.
-- The default baseline does not install heavy training packages such as `trl`;
-  those belong to optional packs.
+- The default baseline does not install heavy training packages such as `trl`
+  and does not install training, evaluation, JavaScript inference, or AWS
+  SageMaker skills; those belong to optional packs.
 - The first durable bucket snapshot preserves the preinstalled workspace skills,
   examples, MCP stub, and tooling manifest.
 - Existing user-modified skill folders are not overwritten.
