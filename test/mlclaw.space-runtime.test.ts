@@ -366,6 +366,28 @@ describe("ML Claw Space runtime", () => {
     expect(config.adminUsers).toEqual(["bob"]);
     expect(config.allowedUsers).toEqual(["alice", "bob", "osolmaz"]);
   });
+
+  it("uses template mode only for the canonical Space when the creator ID matches", () => {
+    const config = loadConfig({
+      SPACE_ID: "osolmaz/mlclaw",
+      SPACE_CREATOR_USER_ID: "42",
+      MLCLAW_CANONICAL_CREATOR_USER_ID: "42",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+
+    expect(config.mode).toBe("template");
+  });
+
+  it("does not use template mode for another Space by the canonical creator", () => {
+    const config = loadConfig({
+      SPACE_ID: "osolmaz/research",
+      SPACE_CREATOR_USER_ID: "42",
+      MLCLAW_CANONICAL_CREATOR_USER_ID: "42",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+
+    expect(config.mode).toBe("app");
+  });
 });
 
 async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<SpaceRuntimeConfig> {

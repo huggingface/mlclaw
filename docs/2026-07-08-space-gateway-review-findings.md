@@ -43,6 +43,15 @@ the fixes that should land before the browser gateway is treated as deployable.
    after the local gateway has already restored from the bucket, which can lose
    recent state.
 
+10. Template mode can classify non-canonical Spaces from the canonical creator
+    as source templates.
+    Creator ID is a useful extra guard, but the canonical Space ID must still
+    match before template mode is selected.
+
+11. The generated Space runtime bundle must be tracked.
+    The bundled Space path copies `dist/mlclaw-space-runtime.js`; clean
+    checkouts need that file committed just like the other runtime bundles.
+
 ## Fix Plan
 
 - Make cookie parsing skip malformed percent-encoded values.
@@ -58,5 +67,9 @@ the fixes that should land before the browser gateway is treated as deployable.
 - Require a handoff wait whenever the Space runtime may still be running,
   even if the runtime lease is missing or stale. Only already non-running Space
   states may skip the final-snapshot wait.
+- Require exact canonical Space ID before template mode, with creator ID as an
+  additional check when configured.
+- Unignore and commit `dist/mlclaw-space-runtime.js`.
 - Add regression tests for the crash, admin resolution, API `401`, preserved
-  `next`, generic upstream errors, and Space migration without a current lease.
+  `next`, generic upstream errors, Space migration without a current lease, and
+  template mode classification.

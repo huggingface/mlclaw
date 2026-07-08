@@ -106,17 +106,14 @@ function resolveMode(params: {
   if (params.env.MLCLAW_FORCE_APP === "1") {
     return "app";
   }
-  if (params.spaceId && params.spaceId === params.canonicalSpaceId) {
+  const isCanonicalSpace = Boolean(params.spaceId && params.spaceId === params.canonicalSpaceId);
+  if (!isCanonicalSpace) {
+    return "app";
+  }
+  if (!params.canonicalCreatorUserId || !params.spaceCreatorUserId) {
     return "template";
   }
-  if (
-    params.canonicalCreatorUserId &&
-    params.spaceCreatorUserId &&
-    params.canonicalCreatorUserId === params.spaceCreatorUserId
-  ) {
-    return "template";
-  }
-  return "app";
+  return params.canonicalCreatorUserId === params.spaceCreatorUserId ? "template" : "app";
 }
 
 function publicUrlFromEnv(env: NodeJS.ProcessEnv, port: number): string {
