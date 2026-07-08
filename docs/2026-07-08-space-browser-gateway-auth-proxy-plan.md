@@ -4,7 +4,7 @@ Status: implemented
 
 ## Goal
 
-Make the default ML Claw deployment a public Hugging Face Docker Space where
+Make the default ML Claw deployment a private Hugging Face Docker Space where
 the user signs in with their Hugging Face account and then enters the OpenClaw
 browser gateway directly.
 
@@ -93,7 +93,7 @@ HF_TOKEN
 Hugging Face injects `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` when the Space
 README metadata enables OAuth.
 
-Required/public Space variables:
+Required Space variables:
 
 ```text
 MLCLAW_CANONICAL_SPACE_ID=osolmaz/mlclaw
@@ -101,6 +101,11 @@ MLCLAW_CANONICAL_CREATOR_USER_ID=<known creator id when available>
 MLCLAW_ALLOWED_USERS=<optional comma-separated usernames>
 SPACE_HOST=<provided by HF or set by CLI when needed>
 ```
+
+Admin resolution is deterministic. `MLCLAW_ADMINS` wins when set. Otherwise
+the duplicated Space owner is the default admin. If the owner cannot be inferred
+from `SPACE_ID`, the first allowed user is the fallback admin. Admin users are
+implicitly allowed users.
 
 If `SPACE_CREATOR_USER_ID` is unavailable or the canonical creator id is not
 known yet, source detection falls back to exact `SPACE_ID`.
@@ -127,13 +132,25 @@ The duplicated Space renders:
 - `/` proxied to OpenClaw Control UI after HF sign-in;
 - `/mlclaw/status` for diagnostics;
 - `/mlclaw/openai` for authenticated OpenAI API-key setup;
-- `/mlclaw/logout`;
+- `/mlclaw/logout` and `/logout`;
 - `/oauth/login`;
 - `/oauth/callback`;
 - proxied HTTP/WebSocket traffic to the internal OpenClaw gateway.
 
+The wrapper owns `/health`, `/healthz`, `/assets/mlclaw.svg`, `/login`,
+`/logout`, `/oauth/*`, and `/mlclaw/*`. Identically named OpenClaw routes are
+not reachable through the Space gateway because those paths are reserved for
+health, auth, configuration, and diagnostics.
+
+Unauthenticated browser navigation gets a login page or redirect that preserves
+the originally requested path. Unauthenticated API-style requests, including
+`/mlclaw/status`, return `401` instead of a successful HTML response.
+
 If setup is incomplete, the app renders a setup status page instead of
 crashing. Missing secrets are reported by name, never by value.
+
+User-created Space gateways are private by default. The CLI supports an
+explicit `--public-space` opt-in for public demos and template-style Spaces.
 
 ## Security Rules
 
@@ -142,6 +159,8 @@ crashing. Missing secrets are reported by name, never by value.
   forwarding and re-add known-safe values server-side.
 - Do not proxy before session validation.
 - Use signed, HTTP-only, secure, SameSite=Lax cookies.
+- Logout clears the browser cookie. Signed sessions are stateless, so a copied
+  cookie remains valid until expiry unless the session secret is rotated.
 - Do not store OAuth access tokens. Exchange them only to resolve identity.
 - Do not log secrets, OAuth codes, session values, or provider tokens.
 - Treat the private Storage Bucket as the durable state source.

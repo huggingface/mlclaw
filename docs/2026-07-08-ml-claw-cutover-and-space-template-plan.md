@@ -85,14 +85,15 @@ point a deployment at a durable OpenClaw state bucket.
 
 ## Default User Experience
 
-Prioritize the public browser gateway in the duplicated Hugging Face Space.
+Prioritize the browser gateway in the duplicated Hugging Face Space.
 
 The default path should be:
 
 1. User opens the canonical public Space at `osolmaz/mlclaw`.
 2. Source Space explains ML Claw and asks the user to duplicate it.
 3. User duplicates the Space into their own namespace.
-4. The duplicated Space runs the actual ML Claw browser gateway.
+4. The duplicated Space runs the actual ML Claw browser gateway as a private
+   Space by default.
 5. User signs in to that Space with their Hugging Face account.
 6. User talks to the OpenClaw agent in the browser.
 
@@ -104,15 +105,17 @@ experience.
 Default deployment target:
 
 ```text
-public Hugging Face Docker Space
+private Hugging Face Docker Space
 HF OAuth-protected browser app
 private Storage Bucket for durable OpenClaw state
 HF Router / configured provider for inference
 ```
 
-The Space is public so the browser app can load without requiring the user to
-be a repository collaborator. Access to the agent itself is enforced in-app
-after Hugging Face sign-in. The state bucket remains private.
+The generated Space is private by default, so Hugging Face authentication gates
+the Space before the in-app OAuth flow gates the OpenClaw gateway. Access to
+the agent itself is still enforced in-app after Hugging Face sign-in. The state
+bucket remains private. Public Spaces are an explicit opt-in for demos and
+template-style deployments.
 
 Browser-only gateway mode should not require Telegram or Discord egress.
 Upgraded paid Space hardware is required when the user wants always-on behavior
@@ -330,7 +333,7 @@ Docs should recommend:
 
 - propose-only or restricted HF tokens where possible;
 - no broad write/delete token for untrusted scraping workflows;
-- public Space browser gateway as the default UX;
+- private Space browser gateway as the default UX;
 - in-app HF OAuth before a user can access the agent gateway;
 - private Storage Buckets for durable state;
 - explicit cost confirmation before upgrading Space hardware;

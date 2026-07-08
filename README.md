@@ -5,7 +5,7 @@
 # ML Claw
 
 ML Claw deploys an OpenClaw agent on Hugging Face with durable state in a
-private Storage Bucket. The default deployment is a public Hugging Face Space
+private Storage Bucket. The default deployment is a private Hugging Face Space
 with a browser gateway protected by Hugging Face OAuth.
 
 The browser never receives an OpenClaw gateway token. ML Claw authenticates the
@@ -46,7 +46,7 @@ npx mlclaw bootstrap --name research
 This creates:
 
 - a private Storage Bucket for OpenClaw state;
-- a public Docker Space for the browser gateway;
+- a private Docker Space for the browser gateway;
 - a self-contained Space runtime generated from the installed `mlclaw` package;
 - Hugging Face OAuth metadata in the Space README;
 - Space variables and write-only secrets for state sync and session signing;
@@ -54,6 +54,12 @@ This creates:
 
 Open the Space, sign in with your Hugging Face account, and use the OpenClaw
 browser gateway directly.
+
+Create a public Space only when you explicitly want a public demo or template:
+
+```bash
+npx mlclaw bootstrap --name research --public-space
+```
 
 Choose a Hugging Face Router model with `--model`:
 

@@ -53,20 +53,26 @@ export class SpaceRuntimeServer {
 
     const server = http.createServer((req, res) => {
       this.handle(req, res).catch((err) => {
+        process.stderr.write(`[mlclaw] request failed: ${formatError(err)}\n`);
         if (!res.headersSent) {
           res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         }
-        res.end(err instanceof Error ? err.message : String(err));
+        res.end("Internal server error\n");
       });
     });
     server.on("upgrade", (req, socket, head) => {
-      const session = this.readSession(req);
       const netSocket = socket as net.Socket;
-      if (!session || !this.isAllowed(session.username)) {
+      try {
+        const session = this.readSession(req);
+        if (!session || !this.isAllowed(session.username)) {
+          rejectWebSocket(netSocket);
+          return;
+        }
+        proxyWebSocket(req, netSocket, head, this.config, { username: session.username });
+      } catch (err) {
+        process.stderr.write(`[mlclaw] websocket upgrade failed: ${formatError(err)}\n`);
         rejectWebSocket(netSocket);
-        return;
       }
-      proxyWebSocket(req, netSocket, head, this.config, { username: session.username });
     });
 
     try {
@@ -134,7 +140,11 @@ export class SpaceRuntimeServer {
       await this.handleOauthCallback(req, res, url);
       return;
     }
-    if (url.pathname === "/logout") {
+    if (url.pathname === "/login") {
+      this.sendHtml(res, loginPage(this.config, undefined, normalizeNext(url.searchParams.get("next") ?? "/")));
+      return;
+    }
+    if (url.pathname === "/logout" || url.pathname === "/mlclaw/logout") {
       res.writeHead(302, {
         location: "/",
         "set-cookie": clearCookie(SESSION_COOKIE, this.config.cookieSecure),
@@ -144,7 +154,7 @@ export class SpaceRuntimeServer {
     }
     const session = this.readSession(req);
     if (!session) {
-      this.sendHtml(res, loginPage(this.config));
+      this.sendUnauthenticated(req, res, url);
       return;
     }
     if (!this.isAllowed(session.username)) {
@@ -181,7 +191,7 @@ export class SpaceRuntimeServer {
 
   private handleOauthLogin(res: http.ServerResponse, next: string): void {
     if (!this.config.oauthClientId || !this.config.oauthClientSecret) {
-      this.sendHtml(res, loginPage(this.config, "Hugging Face OAuth is not configured."));
+      this.sendHtml(res, loginPage(this.config, "Hugging Face OAuth is not configured.", normalizeNext(next)));
       return;
     }
     const state = randomState();
@@ -313,6 +323,24 @@ export class SpaceRuntimeServer {
     }
   }
 
+  private sendUnauthenticated(req: http.IncomingMessage, res: http.ServerResponse, url: URL): void {
+    const next = normalizeNext(`${url.pathname}${url.search}`);
+    if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) {
+      this.sendHtml(res, loginPage(this.config, undefined, next));
+      return;
+    }
+    if (isBrowserNavigation(req) && !isApiPath(url.pathname)) {
+      this.sendRedirect(res, `/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    this.sendHtml(res, loginPage(this.config, undefined, next), 401);
+  }
+
+  private sendRedirect(res: http.ServerResponse, location: string): void {
+    res.writeHead(302, { location });
+    res.end();
+  }
+
   private sendHtml(res: http.ServerResponse, body: string, status = 200): void {
     res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
     res.end(body);
@@ -330,10 +358,25 @@ export class SpaceRuntimeServer {
 }
 
 function normalizeNext(value: string): string {
-  if (!value.startsWith("/") || value.startsWith("//")) {
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\r") || value.includes("\n")) {
     return "/";
   }
   return value;
+}
+
+function isBrowserNavigation(req: http.IncomingMessage): boolean {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return false;
+  }
+  return String(req.headers.accept ?? "").includes("text/html");
+}
+
+function isApiPath(pathname: string): boolean {
+  return pathname === "/mlclaw/status";
+}
+
+function formatError(err: unknown): string {
+  return err instanceof Error ? err.stack ?? err.message : String(err);
 }
 
 async function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {

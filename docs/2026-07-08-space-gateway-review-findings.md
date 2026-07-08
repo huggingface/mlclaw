@@ -1,0 +1,53 @@
+# 2026-07-08 Space Gateway Review Findings
+
+This records the review findings for `feat/mlclaw-space-browser-gateway` and
+the fixes that should land before the browser gateway is treated as deployable.
+
+## Findings
+
+1. Malformed cookies can crash WebSocket upgrade handling.
+   `decodeURIComponent` throws on invalid cookie values. The HTTP path catches
+   the exception, but the WebSocket upgrade path did not.
+
+2. The duplicated Space owner is not always the default admin.
+   If `MLCLAW_ALLOWED_USERS` is set without `MLCLAW_ADMINS`, the first allowed
+   user becomes admin instead of the Space owner.
+
+3. Unauthenticated API-like requests return `200` with HTML.
+   Gateway API callers should get a real `401` instead of a successful HTML
+   login response.
+
+4. Internal error strings are returned to clients.
+   Upstream connection errors and catch-all server errors should be generic in
+   the browser response and detailed only in server logs.
+
+5. Wrapper routes need to be explicit.
+   ML Claw reserves wrapper routes such as `/health`, `/oauth/*`,
+   `/mlclaw/*`, `/logout`, and `/assets/mlclaw.svg`; these are not proxied to
+   OpenClaw.
+
+6. Logout is stateless.
+   Logout clears the browser cookie. A copied signed cookie remains valid until
+   its expiry because the gateway does not keep a server-side session store.
+
+7. Login should preserve the originally requested path.
+   A user who opens a deep Control UI path before login should return there
+   after Hugging Face OAuth.
+
+8. WebSocket proxy socket lifecycle should close both sides.
+   Client-side socket errors or closes should tear down the upstream socket too.
+
+## Fix Plan
+
+- Make cookie parsing skip malformed percent-encoded values.
+- Wrap upgrade handling and reject bad upgrades instead of letting exceptions
+  reach the process.
+- Resolve admins as explicit admins first, then Space owner, then first allowed
+  user; union admins into the allowed set.
+- Return `401` for unauthenticated API/non-navigation requests and preserve
+  `next` on login links.
+- Use generic `500` and `502` client responses while logging details server-side.
+- Support both `/logout` and `/mlclaw/logout`.
+- Tighten WebSocket proxy cleanup.
+- Add regression tests for the crash, admin resolution, API `401`, preserved
+  `next`, and generic upstream errors.

@@ -46,13 +46,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     canonicalCreatorUserId,
     spaceCreatorUserId,
   });
-  const allowedUsers = splitUsers(env.MLCLAW_ALLOWED_USERS ?? env.ALLOWED_USERS);
   const owner = ownerFromSpaceId(spaceId);
-  if (owner && !allowedUsers.includes(owner)) {
-    allowedUsers.push(owner);
-  }
-  const adminUsers = splitUsers(env.MLCLAW_ADMINS);
-  const resolvedAdmins = adminUsers.length > 0 ? adminUsers : allowedUsers.slice(0, 1);
+  const configuredAllowedUsers = splitUsers(env.MLCLAW_ALLOWED_USERS ?? env.ALLOWED_USERS);
+  const configuredAdmins = splitUsers(env.MLCLAW_ADMINS);
+  const resolvedAdmins = uniqueUsers(configuredAdmins.length > 0
+    ? configuredAdmins
+    : owner ? [owner] : configuredAllowedUsers.slice(0, 1));
+  const allowedUsers = uniqueUsers([
+    ...configuredAllowedUsers,
+    ...resolvedAdmins,
+    ...(owner ? [owner] : []),
+  ]);
   const publicUrl = publicUrlFromEnv(env, port);
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
@@ -141,6 +145,10 @@ function splitUsers(value: string | undefined): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function uniqueUsers(users: string[]): string[] {
+  return [...new Set(users)];
 }
 
 function splitArgs(value: string | undefined): string[] | undefined {

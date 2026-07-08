@@ -1,10 +1,11 @@
 import http from "node:http";
+import net from "node:net";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
-import type { SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
+import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -36,7 +37,7 @@ describe("ML Claw Space runtime", () => {
 
     const anonymous = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`);
 
-    expect(anonymous.status).toBe(200);
+    expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("content-type")).toContain("text/html");
     expect(await anonymous.text()).toContain("Sign in with Hugging Face");
 
@@ -59,6 +60,53 @@ describe("ML Claw Space runtime", () => {
         allowedUsers: ["alice"],
       },
     });
+  });
+
+  it("keeps the requested browser path as OAuth next while APIs return 401", async () => {
+    const config = await testConfig();
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const browser = await fetch(`http://127.0.0.1:${config.port}/control/deep?tab=chat`, {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+
+    expect(browser.status).toBe(302);
+    expect(browser.headers.get("location")).toBe("/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat");
+
+    const login = await fetch(`http://127.0.0.1:${config.port}/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat`);
+    expect(login.status).toBe(200);
+    expect(await login.text()).toContain("/oauth/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat");
+
+    const api = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`, {
+      headers: { accept: "application/json" },
+    });
+    expect(api.status).toBe(401);
+  });
+
+  it("rejects malformed-cookie WebSocket upgrades without crashing", async () => {
+    const config = await testConfig();
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const response = await websocketUpgrade(config.port, [
+      "GET / HTTP/1.1",
+      `Host: 127.0.0.1:${config.port}`,
+      "Connection: Upgrade",
+      "Upgrade: websocket",
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+      "Sec-WebSocket-Version: 13",
+      "Cookie: mlclaw_session=%",
+      "",
+      "",
+    ].join("\r\n"));
+
+    expect(response).toContain("401 Unauthorized");
+    const health = await fetch(`http://127.0.0.1:${config.port}/health`);
+    expect(health.status).toBe(200);
   });
 
   it("proxies browser traffic as an authenticated trusted proxy user", async () => {
@@ -135,6 +183,28 @@ describe("ML Claw Space runtime", () => {
 
     expect(response.status).toBe(200);
     expect(capturedHeaders?.["x-openclaw-scopes"]).toBe("operator.read,operator.write,operator.approvals");
+  });
+
+  it("returns a generic upstream error when OpenClaw is unavailable", async () => {
+    const config = await testConfig();
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+    const cookie = createSignedCookie({
+      name: "mlclaw_session",
+      secret: config.sessionSecret,
+      maxAgeSeconds: 60,
+      secure: false,
+    }, { username: "alice" });
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/`, {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(502);
+    const body = await response.text();
+    expect(body).toBe("OpenClaw gateway is not ready\n");
+    expect(body).not.toMatch(/ECONNREFUSED|127\.0\.0\.1/);
   });
 
   it("stores OpenAI credentials as a Space secret and a 0600 runtime file", async () => {
@@ -273,6 +343,29 @@ describe("ML Claw Space runtime", () => {
       await waitFor(() => !processIsAlive(pid));
     }
   });
+
+  it("makes the duplicated Space owner the default admin", () => {
+    const config = loadConfig({
+      SPACE_ID: "osolmaz/research",
+      MLCLAW_ALLOWED_USERS: "alice,bob",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+
+    expect(config.adminUsers).toEqual(["osolmaz"]);
+    expect(config.allowedUsers).toEqual(["alice", "bob", "osolmaz"]);
+  });
+
+  it("implicitly allows explicit admins", () => {
+    const config = loadConfig({
+      SPACE_ID: "osolmaz/research",
+      MLCLAW_ALLOWED_USERS: "alice",
+      MLCLAW_ADMINS: "bob",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+
+    expect(config.adminUsers).toEqual(["bob"]);
+    expect(config.allowedUsers).toEqual(["alice", "bob", "osolmaz"]);
+  });
 });
 
 async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<SpaceRuntimeConfig> {
@@ -352,6 +445,24 @@ async function closeServer(server: http.Server): Promise<void> {
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
+}
+
+async function websocketUpgrade(port: number, request: string): Promise<string> {
+  const socket = net.connect(port, "127.0.0.1");
+  cleanups.push(() => {
+    socket.destroy();
+  });
+  socket.setEncoding("utf8");
+  let output = "";
+  await new Promise<void>((resolve, reject) => {
+    socket.once("error", reject);
+    socket.on("data", (chunk) => {
+      output += chunk;
+    });
+    socket.once("close", resolve);
+    socket.write(request);
+  });
+  return output;
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {

@@ -85,7 +85,15 @@ function parseCookies(header: string | undefined): Map<string, string> {
     if (equals <= 0) {
       continue;
     }
-    cookies.set(part.slice(0, equals).trim(), decodeURIComponent(part.slice(equals + 1).trim()));
+    const name = part.slice(0, equals).trim();
+    if (!name) {
+      continue;
+    }
+    try {
+      cookies.set(name, decodeURIComponent(part.slice(equals + 1).trim()));
+    } catch {
+      continue;
+    }
   }
   return cookies;
 }

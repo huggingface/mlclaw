@@ -705,7 +705,7 @@ describe("mlclaw CLI", () => {
       args: [
         "alice/research",
         {
-          private: false,
+          private: true,
           hardware: "cpu-upgrade",
           sleepTimeSeconds: -1,
         },
@@ -788,13 +788,31 @@ describe("mlclaw CLI", () => {
     expect(stderr.join("\n")).toBe("");
     expect(hub.calls).toContainEqual({
       name: "createDockerSpace",
-      args: ["alice/research", { private: false, hardware: "cpu-basic" }],
+      args: ["alice/research", { private: true, hardware: "cpu-basic" }],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
       args: ["alice/research", "MLCLAW_ALLOWED_USERS", "alice"],
     });
     expect(hub.calls.some((call) => call.name === "addSpaceSecret" && call.args[1] === "TELEGRAM_BOT_TOKEN")).toBe(false);
+  });
+
+  it("can create a public browser Space when requested", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--public-space",
+    ], await createRuntime(hub, prompt));
+
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({
+      name: "createDockerSpace",
+      args: ["alice/research", { private: false, hardware: "cpu-basic" }],
+    });
   });
 
   it("allowlists the authenticated user for org-owned browser Spaces", async () => {
@@ -812,7 +830,7 @@ describe("mlclaw CLI", () => {
     expect(code).toBe(0);
     expect(hub.calls).toContainEqual({
       name: "createDockerSpace",
-      args: ["research-org/research", { private: false, hardware: "cpu-basic" }],
+      args: ["research-org/research", { private: true, hardware: "cpu-basic" }],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",

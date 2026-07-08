@@ -16,15 +16,18 @@ export function templatePage(config: SpaceRuntimeConfig): string {
   `);
 }
 
-export function loginPage(config: SpaceRuntimeConfig, message?: string): string {
+export function loginPage(config: SpaceRuntimeConfig, message?: string, next = "/"): string {
   const oauthReady = Boolean(config.oauthClientId && config.oauthClientSecret);
+  const loginHref = next === "/"
+    ? "/oauth/login"
+    : `/oauth/login?next=${encodeURIComponent(next)}`;
   return page("ML Claw Login", `
     <main>
       <img src="/assets/mlclaw.svg" alt="ML Claw" class="logo">
       <h1>ML Claw</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
       ${oauthReady
-        ? `<a class="button" href="/oauth/login">Sign in with Hugging Face</a>`
+        ? `<a class="button" href="${escapeHtml(loginHref)}">Sign in with Hugging Face</a>`
         : `<p class="notice">Hugging Face OAuth is not configured for this Space. Update the Space README metadata to include <code>hf_oauth: true</code>, then rebuild.</p>`}
     </main>
   `);
@@ -36,7 +39,7 @@ export function unauthorizedPage(username: string): string {
       <h1>Access not allowed</h1>
       <p>The signed-in Hugging Face account <strong>${escapeHtml(username)}</strong> is not allowed to operate this Space.</p>
       <p class="muted">Set <code>MLCLAW_ALLOWED_USERS</code> to a comma-separated list of usernames, then restart the Space.</p>
-      <a class="button secondary" href="/logout">Sign out</a>
+      <a class="button secondary" href="/mlclaw/logout">Sign out</a>
     </main>
   `);
 }

@@ -53,10 +53,11 @@ export async function proxyHttp(
   });
 
   upstream.on("error", (err) => {
+    process.stderr.write(`[mlclaw] upstream HTTP proxy failed: ${err.stack ?? err.message}\n`);
     if (!res.headersSent) {
       res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
     }
-    res.end(`OpenClaw gateway is not ready: ${err.message}`);
+    res.end("OpenClaw gateway is not ready\n");
   });
 
   req.pipe(upstream);
@@ -70,7 +71,13 @@ export function proxyWebSocket(
   identity: ProxyIdentity,
 ): void {
   const upstream = net.connect(config.openclawPort, config.openclawHost);
+  let connected = false;
+  const destroyBoth = () => {
+    upstream.destroy();
+    socket.destroy();
+  };
   upstream.on("connect", () => {
+    connected = true;
     const headers = sanitizeHeaders(req.headers);
     headers.host = `${config.openclawHost}:${config.openclawPort}`;
     headers.connection = "Upgrade";
@@ -93,10 +100,16 @@ export function proxyWebSocket(
     upstream.pipe(socket);
     socket.pipe(upstream);
   });
-  upstream.on("error", () => {
-    socket.write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
-    socket.destroy();
+  upstream.on("error", (err) => {
+    process.stderr.write(`[mlclaw] upstream WebSocket proxy failed: ${err.stack ?? err.message}\n`);
+    if (!connected && !socket.destroyed) {
+      socket.write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+    }
+    destroyBoth();
   });
+  socket.on("error", destroyBoth);
+  socket.on("close", () => upstream.destroy());
+  upstream.on("close", () => socket.destroy());
 }
 
 export function rejectWebSocket(socket: net.Socket): void {

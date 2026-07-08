@@ -69,6 +69,7 @@ type BootstrapOptions = {
   sleepTime?: number;
   model?: string;
   runtimeImage?: string;
+  publicSpace?: boolean;
   gatewayToken?: string;
   dockerContext?: string;
   pull?: boolean;
@@ -101,6 +102,7 @@ type GatewayCommandOptions = {
   dockerContext?: string;
   pull?: boolean;
   takeover?: boolean;
+  publicSpace?: boolean;
   yes?: boolean;
   tail?: number;
 };
@@ -201,6 +203,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
     .option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL)
     .option("--runtime-image <image>", "ML Claw runtime image")
+    .option("--public-space", "Create the Hugging Face Space as public instead of private", false)
     .addOption(new Option("--gateway-token <token>").hideHelp())
     .option("--docker-context <name>", "Docker context for local gateway mode")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
@@ -301,6 +304,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--hardware <flavor>", "Hugging Face Space hardware flavor")
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
     .option("--runtime-image <image>", "ML Claw runtime image")
+    .option("--public-space", "Create the Hugging Face Space as public instead of private", false)
     .option("--docker-context <name>", "Docker context for local gateway startup when migrating to local")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
@@ -428,6 +432,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     ...(opts.telegramProxy ? { telegramProxy: opts.telegramProxy } : {}),
     ...(opts.telegramApiRoot ? { telegramApiRoot: opts.telegramApiRoot } : {}),
   });
+  let deployedSpaceRuntime: string | undefined;
   if (gatewayLocation === "space") {
     await assertNoLiveForeignLease({
       hub,
@@ -445,7 +450,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       yes: Boolean(opts.yes),
       runtime,
     });
-    await deploySpaceGateway({
+    const deployed = await deploySpaceGateway({
       hub,
       runtime,
       hfToken,
@@ -453,9 +458,11 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       secrets,
       allowedUsers: me.name,
       hardware: paidHardware.hardware,
+      publicSpace: Boolean(opts.publicSpace),
       ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
       ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
     });
+    deployedSpaceRuntime = deployed.runtimeImage;
     await writeLocalDeployment(runtime.configRoot, manifest, secrets);
   } else {
     await assertNoLiveForeignLease({
@@ -487,6 +494,9 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     runtime.stdout.log(`Docker:  ${manifest.localGateway.dockerContext}`);
   }
   runtime.stdout.log(`Runtime image: ${runtimeImage}`);
+  if (deployedSpaceRuntime) {
+    runtime.stdout.log(`Space runtime: ${deployedSpaceRuntime}`);
+  }
   runtime.prompt.outro(gatewayLocation === "space"
     ? "Restart requested. Build logs may take a few minutes to appear."
     : "Local gateway start requested.");
@@ -755,11 +765,12 @@ async function deploySpaceGateway(params: {
   hardware: string;
   sleepTime?: number;
   templateRuntimeImage?: string;
-}): Promise<void> {
+  publicSpace?: boolean;
+}): Promise<{ runtimeImage: string }> {
   const { hub, runtime, hfToken, manifest, secrets } = params;
-  runtime.stdout.log(`Creating public Space ${manifest.space}`);
+  runtime.stdout.log(`Creating ${params.publicSpace ? "public" : "private"} Space ${manifest.space}`);
   await hub.createDockerSpace(manifest.space, {
-    private: false,
+    private: !params.publicSpace,
     hardware: params.hardware,
     ...(typeof params.sleepTime === "number" ? { sleepTimeSeconds: params.sleepTime } : {}),
   });
@@ -799,6 +810,7 @@ async function deploySpaceGateway(params: {
     ...(secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}),
   });
   await hub.restartSpace(manifest.space, true);
+  return { runtimeImage: spaceRuntimeRef };
 }
 
 async function startLocalGateway(params: {
@@ -994,6 +1006,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       },
       allowedUsers: me.name,
       hardware: paidHardware.hardware,
+      publicSpace: Boolean(opts.publicSpace),
       ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
       ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
     });
