@@ -440,6 +440,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       ...(typeof opts.sleepTime === "number"
         ? { requestedSleepTime: opts.sleepTime }
         : telegramToken ? { requestedSleepTime: TELEGRAM_SLEEP_TIME } : {}),
+      requiresMessagingEgress: Boolean(telegramToken),
       yes: Boolean(opts.yes),
       runtime,
     });
@@ -961,6 +962,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       ...(typeof opts.sleepTime === "number"
         ? { requestedSleepTime: opts.sleepTime }
         : secrets.TELEGRAM_BOT_TOKEN ? { requestedSleepTime: TELEGRAM_SLEEP_TIME } : {}),
+      requiresMessagingEgress: Boolean(secrets.TELEGRAM_BOT_TOKEN),
       yes: Boolean(opts.yes),
       runtime,
     });
@@ -1630,11 +1632,15 @@ async function promptAgentName(runtime: Required<CliRuntime>): Promise<string> {
 async function resolveHardware(params: {
   requestedHardware: string;
   requestedSleepTime?: number;
+  requiresMessagingEgress?: boolean;
   yes: boolean;
   runtime: Required<CliRuntime>;
 }): Promise<{ hardware: string; sleepTime?: number }> {
   const hardware = params.requestedHardware;
   const sleepTime = params.requestedSleepTime ?? TELEGRAM_SLEEP_TIME;
+  if (params.requiresMessagingEgress && !isPaidHardware(hardware)) {
+    throw new Error(`Telegram requires upgraded paid Space hardware today; use --hardware ${TELEGRAM_HARDWARE} or --gateway local`);
+  }
   if (isPaidHardware(hardware)) {
     await confirmPaidHardware({
       hardware,

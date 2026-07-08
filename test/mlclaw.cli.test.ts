@@ -751,6 +751,28 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
   });
 
+  it("rejects free Space hardware when Telegram is configured", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+
+    const code = await main([
+      "bootstrap",
+      "--gateway",
+      "space",
+      "--telegram-token",
+      "telegram-token",
+      "--telegram-user-id",
+      "1234567890",
+      "--hardware",
+      "cpu-basic",
+    ], await createRuntime(hub, prompt, stderr));
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("Telegram requires upgraded paid Space hardware");
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+  });
+
   it("runs non-interactive browser Space bootstrap without Telegram", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
@@ -977,6 +999,36 @@ describe("mlclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(startIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+  });
+
+  it("rejects free Space hardware when migrating a Telegram-enabled local gateway", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(0);
+    await writeSecretEnv(runtime.configRoot, "research", {
+      ...await readSecretEnv(runtime.configRoot, "research"),
+      TELEGRAM_BOT_TOKEN: "telegram-token",
+      TELEGRAM_ALLOWED_USERS: "1234567890",
+    });
+    hub.calls.length = 0;
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "space",
+      "--hardware",
+      "cpu-basic",
+    ], runtime)).resolves.toBe(1);
+
+    expect(stderr.join("\n")).toContain("Telegram requires upgraded paid Space hardware");
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "stop")).toBe(false);
   });
 
   it("migrates from Space to an explicit local Docker context when the previous context is stale", async () => {
