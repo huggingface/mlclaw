@@ -443,6 +443,7 @@ Live test:
 
 ## Related Plans
 
-Preinstalled Hugging Face skills are handled by
-`docs/2026-07-09-preinstalled-huggingface-skills-plan.md`. They should be
-seeded during bootstrap and should not require a separate UI setup step.
+Preinstalled Hugging Face tooling is handled by
+`docs/2026-07-09-preinstalled-huggingface-tooling-plan.md`. Hugging Face CLI,
+`hf-discover`, and baseline Hugging Face Agent Skills should be available from
+bootstrap and should not require a separate UI setup step.
