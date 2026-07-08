@@ -55,13 +55,13 @@ Space names from that.
 With Node.js:
 
 ```bash
-npx mlclaw bootstrap --name research
+npx mlclaw bootstrap --name mlclaw
 ```
 
 Without Node.js on macOS/Linux:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name research
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name mlclaw
 ```
 
 On Windows PowerShell:
@@ -83,14 +83,14 @@ node dist/mlclaw.mjs --help
 Interactive:
 
 ```bash
-npx mlclaw bootstrap --name research
+npx mlclaw bootstrap --name mlclaw
 ```
 
 Automation:
 
 ```bash
 npx mlclaw bootstrap \
-  --name research \
+  --name mlclaw \
   --model huggingface/google/gemma-4-26B-A4B-it \
   --yes
 ```
@@ -104,7 +104,7 @@ Create a public Space only when the user explicitly asks for a public demo or
 template-style deployment:
 
 ```bash
-npx mlclaw bootstrap --name research --public-space
+npx mlclaw bootstrap --name mlclaw --public-space
 ```
 
 ## Optional Telegram
@@ -113,7 +113,7 @@ Telegram is optional and should not be required for the default setup.
 
 ```bash
 npx mlclaw bootstrap \
-  --telegram-token-file ~/secrets/research_bot.env \
+  --telegram-token-file ~/secrets/mlclaw_bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
@@ -129,7 +129,7 @@ restriction because messaging traffic originates from the user's machine.
 Use local gateway mode when the user wants the gateway on their machine:
 
 ```bash
-npx mlclaw bootstrap --gateway local --name research
+npx mlclaw bootstrap --gateway local --name mlclaw
 ```
 
 If the user has multiple Docker engines, pin the intended context:
@@ -137,7 +137,7 @@ If the user has multiple Docker engines, pin the intended context:
 ```bash
 npx mlclaw bootstrap \
   --gateway local \
-  --name research \
+  --name mlclaw \
   --docker-context desktop-linux
 ```
 
@@ -154,7 +154,7 @@ Default/recommended:
 
 ```bash
 npx mlclaw bootstrap \
-  --name research \
+  --name mlclaw \
   --model huggingface/google/gemma-4-26B-A4B-it
 ```
 

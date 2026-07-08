@@ -40,7 +40,7 @@ token into someone else's app; the bootstrapper runs locally.
 ## Default Flow
 
 ```bash
-npx mlclaw bootstrap --name research
+npx mlclaw bootstrap --name mlclaw
 ```
 
 This creates:
@@ -58,14 +58,14 @@ browser gateway directly.
 Create a public Space only when you explicitly want a public demo or template:
 
 ```bash
-npx mlclaw bootstrap --name research --public-space
+npx mlclaw bootstrap --name mlclaw --public-space
 ```
 
 Choose a Hugging Face Router model with `--model`:
 
 ```bash
 npx mlclaw bootstrap \
-  --name research \
+  --name mlclaw \
   --model huggingface/google/gemma-4-26B-A4B-it
 ```
 
@@ -83,7 +83,7 @@ the Space and bucket names from the bot username.
 
 ```bash
 npx mlclaw bootstrap \
-  --telegram-token-file ~/secrets/research_bot.env \
+  --telegram-token-file ~/secrets/mlclaw_bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
@@ -99,7 +99,7 @@ only for automation.
 You can run the gateway locally instead of inside a Space:
 
 ```bash
-npx mlclaw bootstrap --gateway local --name research
+npx mlclaw bootstrap --gateway local --name mlclaw
 ```
 
 Local mode uses Docker on your machine and the same private Storage Bucket.
@@ -109,17 +109,17 @@ from your network.
 Move between local and Space without losing state:
 
 ```bash
-mlclaw gateway migrate research --to local
-mlclaw gateway migrate research --to space
+mlclaw gateway migrate mlclaw --to local
+mlclaw gateway migrate mlclaw --to space
 ```
 
 Useful operations:
 
 ```bash
-mlclaw gateway status research
-mlclaw gateway logs research
-mlclaw gateway stop research
-mlclaw gateway start research
+mlclaw gateway status mlclaw
+mlclaw gateway logs mlclaw
+mlclaw gateway stop mlclaw
+mlclaw gateway start mlclaw
 ```
 
 Local Docker deployments are pinned to the Docker context used at bootstrap
@@ -127,7 +127,7 @@ time. Rebind explicitly if you move between Docker Desktop, OrbStack, Colima,
 or another Docker engine:
 
 ```bash
-mlclaw gateway rebind research --docker-context desktop-linux
+mlclaw gateway rebind mlclaw --docker-context desktop-linux
 ```
 
 ## Update and Repair
@@ -135,14 +135,14 @@ mlclaw gateway rebind research --docker-context desktop-linux
 Update an existing Space to the current ML Claw implementation:
 
 ```bash
-mlclaw update your-hf-username/research
+mlclaw update your-hf-username/mlclaw
 ```
 
 Check a deployment and apply safe configuration repairs:
 
 ```bash
-mlclaw doctor your-hf-username/research
-mlclaw doctor your-hf-username/research --fix
+mlclaw doctor your-hf-username/mlclaw
+mlclaw doctor your-hf-username/mlclaw --fix
 ```
 
 `doctor --fix` may update Space variables and missing session-secret plumbing.

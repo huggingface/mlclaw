@@ -16443,7 +16443,7 @@ async function promptAgentName(runtime) {
   }
   const value = await runtime.prompt.text({
     message: "Agent name",
-    placeholder: "bob",
+    placeholder: "mlclaw",
     initialValue: "mlclaw"
   });
   return readPromptValue(value, "Agent name");

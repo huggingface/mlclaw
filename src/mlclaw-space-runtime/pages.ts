@@ -8,9 +8,9 @@ export function templatePage(config: SpaceRuntimeConfig): string {
       <p>Run the local bootstrapper to create a Hugging Face hosted OpenClaw agent for ML workflows.</p>
       <p class="notice">Do not set this up by only clicking Duplicate. The bootstrapper creates the private Space, private Storage Bucket, OAuth settings, secrets, model configuration, and local manifest.</p>
       <h2>With Node.js</h2>
-      <pre><code>npx mlclaw bootstrap --name research</code></pre>
+      <pre><code>npx mlclaw bootstrap --name mlclaw</code></pre>
       <h2>macOS or Linux without Node.js</h2>
-      <pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name research</code></pre>
+      <pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name mlclaw</code></pre>
       <h2>Windows PowerShell</h2>
       <pre><code>irm https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.ps1 | iex</code></pre>
       <ol>

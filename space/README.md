@@ -30,13 +30,13 @@ secrets, model configuration, and local manifest for you.
 With Node.js:
 
 ```bash
-npx mlclaw bootstrap --name research
+npx mlclaw bootstrap --name mlclaw
 ```
 
 On macOS or Linux without Node.js:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name research
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name mlclaw
 ```
 
 On Windows PowerShell:

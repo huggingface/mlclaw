@@ -1720,7 +1720,7 @@ async function promptAgentName(runtime: Required<CliRuntime>): Promise<string> {
   }
   const value = await runtime.prompt.text({
     message: "Agent name",
-    placeholder: "bob",
+    placeholder: "mlclaw",
     initialValue: "mlclaw",
   });
   return readPromptValue(value, "Agent name");
