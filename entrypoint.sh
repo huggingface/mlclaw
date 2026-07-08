@@ -28,7 +28,14 @@ CONFIG_PATH="$OPENCLAW_CONFIG_PATH"
 # restore target is the live dir itself and must not exist yet. Fails the boot
 # if the bucket has state but its manifest or every snapshot is corrupt (never
 # silently start fresh then snapshot over a bucket that still holds data).
-node /app/hf-state-sync.js restore
+echo "[hf-state-sync] starting restore"
+RESTORE_TIMEOUT_SECONDS="${MLCLAW_RESTORE_TIMEOUT_SECONDS:-180}"
+if command -v timeout >/dev/null 2>&1; then
+  timeout "${RESTORE_TIMEOUT_SECONDS}s" node /app/hf-state-sync.js restore
+else
+  node /app/hf-state-sync.js restore
+fi
+echo "[hf-state-sync] restore complete"
 
 mkdir -p "$LIVE_DIR" "$WORKSPACE_DIR" "$STATE_DIR"
 chown -R node:node "$LIVE_DIR"
