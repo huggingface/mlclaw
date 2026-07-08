@@ -768,7 +768,34 @@ describe("mlclaw CLI", () => {
       name: "createDockerSpace",
       args: ["alice/research", { private: false, hardware: "cpu-basic" }],
     });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "MLCLAW_ALLOWED_USERS", "alice"],
+    });
     expect(hub.calls.some((call) => call.name === "addSpaceSecret" && call.args[1] === "TELEGRAM_BOT_TOKEN")).toBe(false);
+  });
+
+  it("allowlists the authenticated user for org-owned browser Spaces", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--owner",
+      "research-org",
+    ], await createRuntime(hub, prompt));
+
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({
+      name: "createDockerSpace",
+      args: ["research-org/research", { private: false, hardware: "cpu-basic" }],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["research-org/research", "MLCLAW_ALLOWED_USERS", "alice"],
+    });
   });
 
   it("updates Space hardware settings through the Hugging Face settings API", async () => {

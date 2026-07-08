@@ -106,6 +106,24 @@ describe("ML Claw Space runtime", () => {
     const mode = (await fs.stat(config.openaiCredentialFile)).mode & 0o777;
     expect(mode).toBe(0o600);
   });
+
+  it("exits the wrapper when OpenClaw exits unexpectedly", async () => {
+    const exitCodes: number[] = [];
+    const config = await testConfig({
+      openclawArgs: ["-e", "process.exit(7)"],
+    });
+    const runtime = new SpaceRuntimeServer(config, {
+      exitProcess: (code) => {
+        exitCodes.push(code);
+      },
+    });
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    await waitFor(() => exitCodes.length > 0);
+
+    expect(exitCodes).toEqual([7]);
+  });
 });
 
 async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<SpaceRuntimeConfig> {
@@ -167,4 +185,14 @@ async function closeServer(server: http.Server): Promise<void> {
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error("timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }

@@ -15334,6 +15334,7 @@ async function bootstrap(opts, runtime) {
       hfToken,
       manifest,
       secrets,
+      allowedUsers: me2.name,
       hardware: paidHardware.hardware,
       ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}
     });
@@ -15590,7 +15591,7 @@ async function deploySpaceGateway(params) {
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
-    MLCLAW_ALLOWED_USERS: manifest.owner,
+    MLCLAW_ALLOWED_USERS: params.allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: "osolmaz/mlclaw",
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
@@ -15771,6 +15772,7 @@ async function gatewayMigrate(agent, opts, runtime) {
       takeover: Boolean(opts.takeover)
     });
     await handoffAndStopLocalGateway({ manifest: current, hub, runtime, bucketPrefix });
+    const me2 = await hub.whoami();
     await deploySpaceGateway({
       hub,
       runtime,
@@ -15781,6 +15783,7 @@ async function gatewayMigrate(agent, opts, runtime) {
         MLCLAW_GATEWAY_LOCATION: "space",
         MLCLAW_RUNTIME_IMAGE: updated.runtimeImage
       },
+      allowedUsers: me2.name,
       hardware: paidHardware.hardware,
       ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}
     });
@@ -16190,9 +16193,9 @@ async function doctor(repoId, opts, hub, runtime) {
     issues.push(`OPENCLAW_GATEWAY_PORT is not ${DEFAULT_SPACE_OPENCLAW_PORT}`);
   }
   if (!variables.has("MLCLAW_ALLOWED_USERS")) {
-    const owner = repoId.split("/")[0];
-    if (fix && owner) {
-      await hub.addSpaceVariable(repoId, "MLCLAW_ALLOWED_USERS", owner);
+    if (fix) {
+      const me2 = await hub.whoami();
+      await hub.addSpaceVariable(repoId, "MLCLAW_ALLOWED_USERS", me2.name);
       fixed.push("set MLCLAW_ALLOWED_USERS");
     } else {
       issues.push("MLCLAW_ALLOWED_USERS is missing");

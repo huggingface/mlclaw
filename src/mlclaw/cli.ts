@@ -454,6 +454,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       hfToken,
       manifest,
       secrets,
+      allowedUsers: me.name,
       hardware: paidHardware.hardware,
       ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
     });
@@ -761,6 +762,7 @@ async function deploySpaceGateway(params: {
   hfToken: string;
   manifest: DeploymentManifest;
   secrets: Record<string, string>;
+  allowedUsers: string;
   hardware: string;
   sleepTime?: number;
 }): Promise<void> {
@@ -788,7 +790,7 @@ async function deploySpaceGateway(params: {
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
-    MLCLAW_ALLOWED_USERS: manifest.owner,
+    MLCLAW_ALLOWED_USERS: params.allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: "osolmaz/mlclaw",
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
@@ -984,6 +986,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       takeover: Boolean(opts.takeover),
     });
     await handoffAndStopLocalGateway({ manifest: current, hub, runtime, bucketPrefix });
+    const me = await hub.whoami();
     await deploySpaceGateway({
       hub,
       runtime,
@@ -994,6 +997,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
         MLCLAW_GATEWAY_LOCATION: "space",
         MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       },
+      allowedUsers: me.name,
       hardware: paidHardware.hardware,
       ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
     });
@@ -1492,9 +1496,9 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
     issues.push(`OPENCLAW_GATEWAY_PORT is not ${DEFAULT_SPACE_OPENCLAW_PORT}`);
   }
   if (!variables.has("MLCLAW_ALLOWED_USERS")) {
-    const owner = repoId.split("/")[0];
-    if (fix && owner) {
-      await hub.addSpaceVariable(repoId, "MLCLAW_ALLOWED_USERS", owner);
+    if (fix) {
+      const me = await hub.whoami();
+      await hub.addSpaceVariable(repoId, "MLCLAW_ALLOWED_USERS", me.name);
       fixed.push("set MLCLAW_ALLOWED_USERS");
     } else {
       issues.push("MLCLAW_ALLOWED_USERS is missing");

@@ -32,11 +32,19 @@ type StatePayload = {
   exp: number;
 };
 
+type SpaceRuntimeServerOptions = {
+  exitProcess?: (code: number) => void;
+};
+
 export class SpaceRuntimeServer {
   private openclaw: ChildProcess | undefined;
   private openclawStarting = false;
+  private openclawStopping = false;
+  private readonly exitProcess: (code: number) => void;
 
-  constructor(private readonly config: SpaceRuntimeConfig) {}
+  constructor(private readonly config: SpaceRuntimeConfig, options: SpaceRuntimeServerOptions = {}) {
+    this.exitProcess = options.exitProcess ?? ((code) => process.exit(code));
+  }
 
   async start(): Promise<http.Server> {
     if (this.config.mode === "app") {
@@ -69,26 +77,29 @@ export class SpaceRuntimeServer {
   }
 
   async stop(): Promise<void> {
-    if (!this.openclaw || this.openclaw.killed) {
+    const child = this.openclaw;
+    if (!child || child.killed) {
       return;
     }
-    this.openclaw.kill("SIGTERM");
+    this.openclawStopping = true;
+    child.kill("SIGTERM");
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
-        this.openclaw?.kill("SIGKILL");
-        resolve();
+        child.kill("SIGKILL");
       }, 10_000);
-      this.openclaw?.once("exit", () => {
+      child.once("exit", () => {
         clearTimeout(timer);
         resolve();
       });
     });
+    this.openclawStopping = false;
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", this.config.publicUrl);
     if (url.pathname === "/health" || url.pathname === "/healthz") {
-      this.sendText(res, 200, "ok\n");
+      const healthy = this.config.mode !== "app" || Boolean(this.openclaw && !this.openclaw.killed);
+      this.sendText(res, healthy ? 200 : 503, healthy ? "ok\n" : "openclaw is not running\n");
       return;
     }
     if (url.pathname === "/assets/mlclaw.svg") {
@@ -247,6 +258,10 @@ export class SpaceRuntimeServer {
       this.openclaw.once("exit", (code, signal) => {
         process.stdout.write(`[mlclaw] openclaw exited code=${code ?? "null"} signal=${signal ?? "null"}\n`);
         this.openclaw = undefined;
+        if (!this.openclawStopping) {
+          const exitCode = typeof code === "number" && code !== 0 ? code : 1;
+          this.exitProcess(exitCode);
+        }
       });
     } finally {
       this.openclawStarting = false;

@@ -38,7 +38,6 @@ const required = [
   "tsconfig.json",
   "assets/mlclaw.svg",
   "space/README.md",
-  "space/package-lock.json",
   "scripts/configure-telegram.mjs",
   "scripts/configure-huggingface-model.mjs",
   "scripts/report-telegram-probe.mjs",
