@@ -4408,12 +4408,20 @@ function templatePage(config2) {
     <main>
       <img src="/assets/mlclaw.svg" alt="ML Claw" class="logo">
       <h1>ML Claw</h1>
-      <p>Duplicate this Space to create a Hugging Face hosted OpenClaw agent for ML workflows.</p>
+      <p>Run the local bootstrapper to create a Hugging Face hosted OpenClaw agent for ML workflows.</p>
+      <p class="notice">Do not set this up by only clicking Duplicate. The bootstrapper creates the private Space, private Storage Bucket, OAuth settings, secrets, model configuration, and local manifest.</p>
+      <h2>With Node.js</h2>
+      <pre><code>npx mlclaw bootstrap --name research</code></pre>
+      <h2>macOS or Linux without Node.js</h2>
+      <pre><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name research</code></pre>
+      <h2>Windows PowerShell</h2>
+      <pre><code>irm https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.ps1 | iex</code></pre>
       <ol>
-        <li>Duplicate the Space into your own Hugging Face account.</li>
-        <li>Let the Space create OAuth credentials during duplication.</li>
-        <li>Open the duplicate and sign in with Hugging Face.</li>
+        <li>Run one of the commands above on your own machine.</li>
+        <li>Follow the prompts and choose an agent name.</li>
+        <li>Open the Space that ML Claw creates and sign in with Hugging Face.</li>
       </ol>
+      <p class="muted">Manual duplication is for development or advanced setup only.</p>
       <p class="muted">Source Space: ${escapeHtml(config2.spaceId ?? config2.canonicalSpaceId)}</p>
     </main>
   `);
@@ -4503,8 +4511,10 @@ function page(title, body) {
     main { width: min(680px, calc(100vw - 40px)); padding: 32px 0; }
     .logo { width: 72px; height: 72px; display: block; margin-bottom: 20px; }
     h1 { font-size: 42px; line-height: 1.05; margin: 0 0 16px; letter-spacing: 0; }
+    h2 { font-size: 16px; line-height: 1.35; margin: 22px 0 8px; letter-spacing: 0; }
     p, li { font-size: 17px; line-height: 1.55; }
     ol { padding-left: 22px; }
+    pre { overflow-x: auto; margin: 0 0 10px; padding: 14px 16px; border-radius: 8px; background: #111827; color: #f9fafb; }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
     label { display: block; font-weight: 650; margin-bottom: 8px; }
     input { box-sizing: border-box; width: 100%; padding: 12px 14px; border: 1px solid #c7d2fe; border-radius: 8px; font-size: 16px; margin-bottom: 14px; background: white; color: #111827; }
@@ -4515,6 +4525,7 @@ function page(title, body) {
     .ok { color: #047857; }
     @media (prefers-color-scheme: dark) {
       body { background: #0b1020; color: #f9fafb; }
+      pre { background: #020617; }
       input { background: #111827; color: #f9fafb; border-color: #374151; }
       .button { background: #f9fafb; color: #111827; }
       .secondary { background: #9ca3af; color: #111827; }

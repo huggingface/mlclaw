@@ -21,8 +21,35 @@ secrets:
 </p>
 
 ML Claw runs OpenClaw in a Hugging Face Space with a browser gateway protected
-by Hugging Face OAuth. Duplicate this Space or use `mlclaw bootstrap` to create
-your own deployment.
+by Hugging Face OAuth.
+
+Do not set up ML Claw by only clicking Duplicate. Run the local bootstrapper
+instead. It creates the private Space, private Storage Bucket, OAuth settings,
+secrets, model configuration, and local manifest for you.
+
+With Node.js:
+
+```bash
+npx mlclaw bootstrap --name research
+```
+
+On macOS or Linux without Node.js:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.sh) --name research
+```
+
+On Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/osolmaz/mlclaw/main/mlclaw.ps1 | iex
+```
+
+After the command finishes, open the Space it created and sign in with your
+Hugging Face account.
+
+Duplicating this Space manually is only useful for development or for people
+who already know how to configure the required secrets and variables.
 
 The public Space process is an ML Claw proxy. It authenticates the signed-in
 Hugging Face user, then forwards browser traffic to OpenClaw on loopback using
