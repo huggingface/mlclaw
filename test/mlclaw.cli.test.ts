@@ -570,12 +570,7 @@ describe("mlclaw CLI", () => {
 
   it("refreshes a running local gateway without changing its runtime id", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt([
-      "telegram-token",
-      "1234567890",
-      "telegram-token",
-      "1234567890",
-    ]);
+    const { prompt } = createPrompt([]);
     const runtime = await createRuntime(hub, prompt);
 
     await expect(main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
@@ -865,6 +860,7 @@ describe("mlclaw CLI", () => {
       message: expect.stringContaining("Fresh deployment: use a different name, for example --name mlclaw-2"),
     }));
     expect(stdout.join("\n")).toContain("Using existing private bucket alice/mlclaw-data");
+    expect(stdout.join("\n")).toContain("Updating existing Space alice/mlclaw");
     expect(hub.calls).toContainEqual({ name: "bucketExists", args: ["alice/mlclaw-data"] });
     expect(hub.calls).toContainEqual({ name: "spaceExists", args: ["alice/mlclaw"] });
     expect(hub.calls).not.toContainEqual({ name: "createBucket", args: ["alice/mlclaw-data", true] });

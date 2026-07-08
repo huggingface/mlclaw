@@ -469,6 +469,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       secrets,
       allowedUsers: me.name,
       hardware: paidHardware.hardware,
+      spaceExists: spacePlan.exists,
       publicSpace: Boolean(opts.publicSpace),
       ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
       ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
@@ -643,7 +644,7 @@ async function promptAlternativeBootstrapName(params: {
 }): Promise<string | undefined> {
   const existingDefaultBucket = !params.explicitBucket && params.plan.bucketPlan.exists;
   const existingSpace = params.plan.spacePlan?.exists === true;
-  if (params.plan.hasExistingManifest || (!existingDefaultBucket && !existingSpace) || params.yes || !params.runtime.prompt.isInteractive()) {
+  if ((!existingDefaultBucket && !existingSpace) || params.yes || !params.runtime.prompt.isInteractive()) {
     return undefined;
   }
 
@@ -697,7 +698,7 @@ async function confirmBootstrapPlan(params: {
   } else {
     lines.push(`Local runtime: ${containerNameFor(params.manifest.agent)} (${params.hardware})`);
   }
-  if (!params.hasExistingManifest && (params.bucketPlan.exists || params.spacePlan?.exists)) {
+  if (params.bucketPlan.exists || params.spacePlan?.exists) {
     lines.push(`Fresh deployment: use a different name, for example --name ${params.manifest.agent}-2`);
   }
   lines.push(`Model: ${params.manifest.model}`);
@@ -962,9 +963,12 @@ async function deploySpaceGateway(params: {
   sleepTime?: number;
   templateRuntimeImage?: string;
   publicSpace?: boolean;
+  spaceExists?: boolean;
 }): Promise<{ runtimeImage: string }> {
   const { hub, runtime, hfToken, manifest, secrets } = params;
-  runtime.stdout.log(`Creating ${params.publicSpace ? "public" : "private"} Space ${manifest.space}`);
+  runtime.stdout.log(params.spaceExists
+    ? `Updating existing Space ${manifest.space}`
+    : `Creating ${params.publicSpace ? "public" : "private"} Space ${manifest.space}`);
   await hub.createDockerSpace(manifest.space, {
     private: !params.publicSpace,
     hardware: params.hardware,
