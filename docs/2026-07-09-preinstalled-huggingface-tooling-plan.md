@@ -16,6 +16,10 @@ The baseline includes:
 
 - Hugging Face CLI (`hf`) installed on `PATH`;
 - `hf-discover` installed on `PATH`;
+- lightweight Hugging Face Python libraries available for agent-written
+  scripts;
+- an HF MCP configuration stub for future MCP-capable runtimes;
+- HF-ready workspace templates and examples;
 - official Hugging Face Agent Skills preinstalled in the OpenClaw workspace;
 - runtime environment variables wired so those tools authenticate through the
   deployment's existing `HF_TOKEN`.
@@ -78,6 +82,83 @@ that too:
 hf discover "help me train a model" --json
 ```
 
+### Python SDK And Lightweight Libraries
+
+The default runtime should include lightweight Hugging Face Python libraries
+that agents commonly use for Hub automation and dataset work:
+
+```text
+huggingface_hub
+datasets
+safetensors
+```
+
+Expected smoke checks:
+
+```bash
+python -c "from huggingface_hub import HfApi; print(HfApi().whoami())"
+python -c "import datasets, safetensors"
+```
+
+`huggingface_hub` provides the Python API for Hub resources and includes the
+`hf` CLI. `datasets` makes dataset inspection and publishing practical without
+manual setup. `safetensors` is lightweight and useful for inspecting model
+artifacts and checkpoints.
+
+Do not include heavy training libraries in the default baseline.
+
+Specifically, these should be optional packs, not default installs:
+
+```text
+torch
+transformers
+accelerate
+trl
+peft
+diffusers
+sentence-transformers
+bitsandbytes
+evaluate
+lighteval
+inspect-ai
+```
+
+### HF MCP Configuration Stub
+
+Ship a ready-to-use MCP configuration stub for the official Hugging Face MCP
+Server, but do not require the MCP server to be active for the default
+OpenClaw gateway path.
+
+The stub should live in the workspace so future MCP-capable OpenClaw runtimes
+or compatible agents can enable it without rediscovering the config:
+
+```text
+workspace/.agents/mcp/huggingface.json
+```
+
+It should reference the official Hugging Face MCP endpoint and use environment
+authentication, not embedded tokens.
+
+### Workspace Templates
+
+Seed HF-oriented workspace examples and notes:
+
+```text
+workspace/examples/huggingface/
+workspace/.env.example
+```
+
+Useful examples:
+
+- create or update a dataset repository;
+- upload files to a dataset/model/Space;
+- sync files to a Storage Bucket;
+- run a basic `hf-discover` search;
+- inspect the configured model/provider.
+
+These are examples for the agent to read or reuse. They must not contain
+secrets.
+
 ### Hugging Face Agent Skills
 
 Use the official Hugging Face skills repository:
@@ -131,6 +212,13 @@ Manifest shape:
       "revision": "<git-sha-or-package-version>"
     }
   },
+  "python": {
+    "packages": {
+      "huggingface_hub": "<version>",
+      "datasets": "<version>",
+      "safetensors": "<version>"
+    }
+  },
   "skills": {
     "source": "https://github.com/huggingface/skills",
     "revision": "<git-sha>",
@@ -140,9 +228,82 @@ Manifest shape:
       "huggingface-datasets",
       "huggingface-local-models"
     ]
+  },
+  "templates": {
+    "mcpConfig": "workspace/.agents/mcp/huggingface.json",
+    "examples": "workspace/examples/huggingface"
   }
 }
 ```
+
+## Optional Tooling Packs
+
+Optional packs can be added later, but they should not ship in the default
+gateway runtime until users explicitly request them.
+
+### Training Pack
+
+For model fine-tuning and RLHF-style work:
+
+```text
+transformers
+datasets
+accelerate
+trl
+peft
+safetensors
+evaluate
+```
+
+CUDA-specific variants may also include:
+
+```text
+bitsandbytes
+```
+
+### Vision Pack
+
+For image classification, object detection, segmentation, and model demos:
+
+```text
+transformers
+datasets
+timm
+pillow
+opencv-python-headless
+```
+
+### Diffusion Pack
+
+For image generation and diffusion workflows:
+
+```text
+diffusers
+transformers
+accelerate
+safetensors
+pillow
+```
+
+### Evaluation Pack
+
+For model and agent evaluation:
+
+```text
+lighteval
+inspect-ai
+evaluate
+```
+
+Pack selection can later be exposed through CLI flags or settings:
+
+```bash
+mlclaw bootstrap --pack training
+mlclaw tooling install-pack training
+```
+
+The default plan intentionally excludes these packs to keep Space builds
+smaller, startup faster, and gateway deployments focused.
 
 ## Installation Strategy
 
@@ -173,12 +334,14 @@ For a new deployment:
 
 1. create or verify the private Storage Bucket;
 2. ensure `hf` and `hf-discover` are available in the gateway runtime;
-3. seed the baseline Hugging Face Agent Skills into the OpenClaw workspace
+3. ensure default Python packages are importable;
+4. seed the baseline Hugging Face Agent Skills into the OpenClaw workspace
    before the first gateway start;
-4. write `.agents/.mlclaw-hf-tooling.json`;
-5. start the local or Space gateway;
-6. let the first state snapshot persist `.agents/skills` and the tooling
-   manifest to the bucket.
+5. seed the HF MCP config stub and workspace examples;
+6. write `.agents/.mlclaw-hf-tooling.json`;
+7. start the local or Space gateway;
+8. let the first state snapshot persist `.agents/skills`, templates, examples,
+   and the tooling manifest to the bucket.
 
 For local gateway mode, seed into the local live workspace before Docker start.
 
@@ -200,6 +363,7 @@ which hf
 which hf-discover
 hf auth whoami
 hf-discover --version
+python -c "import datasets, safetensors; from huggingface_hub import HfApi"
 ```
 
 should work without extra user setup.
@@ -211,9 +375,9 @@ HF_TOKEN=<Space/local secret>
 HUGGINGFACE_HUB_TOKEN=<same value>
 ```
 
-The agent should be able to use `hf` and `hf-discover` in normal OpenClaw tool
-execution paths. These tools are part of the agent environment, not the ML Claw
-settings UI.
+The agent should be able to use `hf`, `hf-discover`, the Python SDK, and the
+seeded examples in normal OpenClaw tool execution paths. These tools are part
+of the agent environment, not the ML Claw settings UI.
 
 ## Update Behavior
 
@@ -245,6 +409,8 @@ Unit tests:
 - baseline bundle contains every required skill;
 - every bundled skill has `SKILL.md`;
 - seed function creates `.agents/skills/<skill-name>`;
+- seed function creates `.agents/mcp/huggingface.json`;
+- seed function creates `examples/huggingface/`;
 - seed function writes `.agents/.mlclaw-hf-tooling.json`;
 - seed function does not overwrite an existing skill folder;
 - local bootstrap calls the seed function before gateway start;
@@ -255,6 +421,7 @@ Runtime tests:
 
 - container image or generated Space build exposes `hf`;
 - container image or generated Space build exposes `hf-discover`;
+- runtime imports `huggingface_hub`, `datasets`, and `safetensors`;
 - `hf auth whoami` uses `HF_TOKEN`;
 - `hf-discover --version` succeeds;
 - `hf-discover search "train a model" --kind skill --json` succeeds or fails
@@ -267,6 +434,8 @@ Package tests:
 - generated Space files include the baseline skill bundle or runtime code
   needed to seed it;
 - generated Docker/runtime files install or provide `hf` and `hf-discover`.
+- generated Docker/runtime files install default Python packages without
+  installing optional training packs.
 
 Live test:
 
@@ -276,17 +445,25 @@ Live test:
 4. verify `.agents/.mlclaw-hf-tooling.json` records the installed baseline;
 5. run `hf auth whoami` inside the runtime;
 6. run `hf-discover --version` inside the runtime;
-7. restart the Space;
-8. verify skills and tooling manifest are restored from the bucket snapshot.
+7. run `python -c "import datasets, safetensors; from huggingface_hub import HfApi"`;
+8. verify `.agents/mcp/huggingface.json` and `examples/huggingface/` exist;
+9. restart the Space;
+10. verify skills, templates, examples, and tooling manifest are restored from
+    the bucket snapshot.
 
 ## Acceptance Criteria
 
 - Fresh ML Claw deployments start with Hugging Face CLI installed.
 - Fresh ML Claw deployments start with `hf-discover` installed.
+- Fresh ML Claw deployments start with `huggingface_hub`, `datasets`, and
+  `safetensors` importable.
 - Fresh ML Claw deployments start with baseline Hugging Face Agent Skills
   installed.
+- Fresh ML Claw deployments include an HF MCP config stub and HF examples.
 - The user does not need to run a separate tool or skill installation command.
-- The first durable bucket snapshot preserves the preinstalled workspace skills
-  and tooling manifest.
+- The default baseline does not install heavy training packages such as `trl`;
+  those belong to optional packs.
+- The first durable bucket snapshot preserves the preinstalled workspace skills,
+  examples, MCP stub, and tooling manifest.
 - Existing user-modified skill folders are not overwritten.
 - Tooling and skill bundle contents are pinned and reproducible.
