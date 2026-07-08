@@ -81,7 +81,8 @@ describe("ML Claw Space runtime", () => {
     expect(login.status).toBe(200);
     const loginHtml = await login.text();
     expect(loginHtml).toContain(`${config.publicUrl}/oauth/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat`);
-    expect(loginHtml).toContain('target="_top"');
+    expect(loginHtml).toContain('target="_blank"');
+    expect(loginHtml).toContain('rel="noopener"');
 
     const api = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`, {
       headers: { accept: "application/json" },
