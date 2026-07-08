@@ -79,6 +79,42 @@ mlclaw state adopt <agent> --bucket <owner/bucket>
 That is not a Hugging Claw migration path. It is the standard ML Claw way to
 point a deployment at a durable OpenClaw state bucket.
 
+## Default User Experience
+
+Prioritize the public browser gateway in the duplicated Hugging Face Space.
+
+The default path should be:
+
+1. User opens the canonical public Space at `osolmaz/mlclaw`.
+2. Source Space explains ML Claw and asks the user to duplicate it.
+3. User duplicates the Space into their own namespace.
+4. The duplicated Space runs the actual ML Claw browser gateway.
+5. User signs in to that Space with their Hugging Face account.
+6. User talks to the OpenClaw agent in the browser.
+
+Telegram and Discord are optional connectors, not the primary onboarding path.
+Local gateway mode is still useful for development, power users, and users who
+do not want any hosted runtime, but it should not be the default public product
+experience.
+
+Default deployment target:
+
+```text
+public Hugging Face Docker Space
+HF OAuth-protected browser app
+private Storage Bucket for durable OpenClaw state
+HF Router / configured provider for inference
+```
+
+The Space is public so the browser app can load without requiring the user to
+be a repository collaborator. Access to the agent itself is enforced in-app
+after Hugging Face sign-in. The state bucket remains private.
+
+Browser-only gateway mode should not require Telegram or Discord egress.
+Upgraded paid Space hardware is required when the user wants always-on behavior
+or messaging connectors that need persistent outbound connections. A free Space
+can be valid for the browser gateway if sleep/wake behavior is acceptable.
+
 ## Public Space Behavior
 
 The canonical public Space should be:
@@ -94,7 +130,10 @@ show a human-readable template page:
 - what gets created when duplicated;
 - what secrets the duplicate needs;
 - when paid Space hardware is required;
-- how local gateway mode differs from Space gateway mode;
+- how the browser gateway works;
+- how optional Telegram/Discord connectors differ from the default browser
+  gateway;
+- how local gateway mode differs from the default Space gateway;
 - what the Storage Bucket stores;
 - how to duplicate the Space;
 - links to the CLI path for users who prefer local setup.
@@ -106,17 +145,24 @@ The source Space is effectively the product page and deploy template.
 When a user duplicates the Space into their namespace, the same code should run
 as the real ML Claw app.
 
+The duplicated Space should default to a browser-based OpenClaw gateway. Before
+showing the gateway, it should require Hugging Face sign-in and establish an
+app session, following the same pattern used in `xtap-pool`.
+
 The duplicated app should show:
 
+- "Sign in with Hugging Face" when the user is unauthenticated;
+- the browser chat/gateway surface after sign-in;
 - setup status;
 - configured agent name;
+- signed-in Hugging Face username;
 - bucket connection status;
 - gateway running/stopped status;
 - current model/provider;
-- Telegram/Discord connectivity status when configured;
+- optional Telegram/Discord connectivity status when configured;
 - last successful state snapshot time;
 - latest startup/runtime errors;
-- paid hardware warning when messaging gateway mode requires it;
+- paid hardware warning when always-on or messaging connector mode requires it;
 - links to logs and repair commands.
 
 The duplicated Space should never show the source-template onboarding page
@@ -173,8 +219,11 @@ Add an explicit Space UI boundary:
 ```text
 src/space/
   mode.ts
+  oauth.ts
+  session.ts
   template-page.tsx
   app-page.tsx
+  gateway-page.tsx
   status.ts
 ```
 
@@ -186,11 +235,29 @@ src/space/
 safe when secrets are missing. Missing secrets should render actionable status,
 not crash the Space.
 
+`oauth.ts` and `session.ts` should implement Hugging Face OAuth and signed
+HTTP-only session cookies, matching the `xtap-pool` approach:
+
+- Space README metadata enables OAuth with `hf_oauth: true`;
+- OAuth scopes are `openid profile`;
+- unauthenticated users see a Hugging Face sign-in entry point;
+- `/oauth/login` creates state and redirects to Hugging Face;
+- `/oauth/callback` validates state, resolves the HF username, and sets a
+  signed session cookie;
+- app routes require a valid session;
+- API routes use the signed session identity for attribution and access
+  control.
+
+Default authorization should allow the duplicated Space owner/admin. Additional
+users can be configured through a comma-separated `MLCLAW_ALLOWED_USERS`
+variable or later through an in-app admin screen.
+
 ## CLI Changes
 
 Rename commands and docs to `mlclaw`.
 
-Primary install path:
+Primary public path is duplicate-and-use in the Space. The CLI remains the
+automation and local-operations path:
 
 ```bash
 npx mlclaw bootstrap
@@ -219,6 +286,9 @@ mlclaw state adopt <agent> --bucket <owner/bucket>
 mlclaw doctor <owner/space>
 mlclaw settings <owner/space> --hardware cpu-upgrade --sleep-time -1
 ```
+
+`mlclaw bootstrap` should default to the Space browser gateway path. Local
+gateway and Telegram/Discord setup must be explicit choices.
 
 Skillflag integration should expose the bundled agent skill under the new name:
 
@@ -255,9 +325,12 @@ Docs should recommend:
 
 - propose-only or restricted HF tokens where possible;
 - no broad write/delete token for untrusted scraping workflows;
-- local gateway mode as the default for users who do not want paid Space
-  hardware;
-- paid Space mode only after an explicit cost confirmation.
+- public Space browser gateway as the default UX;
+- in-app HF OAuth before a user can access the agent gateway;
+- private Storage Buckets for durable state;
+- explicit cost confirmation before upgrading Space hardware;
+- local gateway mode as an optional escape hatch for users who do not want any
+  hosted runtime.
 
 Future integration points:
 
@@ -282,7 +355,9 @@ The README should not include the full implementation plan. It should present:
 
 - what ML Claw is;
 - install commands;
-- local vs Space gateway choice;
+- duplicate-to-use Space flow;
+- browser gateway with Hugging Face sign-in;
+- local vs Space gateway choice as an advanced option;
 - cost warning;
 - safe auth guidance;
 - troubleshooting links.
@@ -294,18 +369,22 @@ The README should not include the full implementation plan. It should present:
 3. Rename bundled skill from `huggingclaw` to `mlclaw`.
 4. Remove old-name launchers, examples, config defaults, and skill names.
 5. Add Space mode detection and template/app UI split.
-6. Publish `ghcr.io/osolmaz/mlclaw-runtime:<version>`.
-7. Publish `mlclaw` to npm.
-8. Deprecate `huggingclaw` on npm with a pointer to `mlclaw`; do not publish a
+6. Add HF OAuth session flow for the browser gateway.
+7. Make the duplicated Space browser gateway the default user path.
+8. Publish `ghcr.io/osolmaz/mlclaw-runtime:<version>`.
+9. Publish `mlclaw` to npm.
+10. Deprecate `huggingclaw` on npm with a pointer to `mlclaw`; do not publish a
    wrapper release.
-9. Rename or recreate the canonical Space as `osolmaz/mlclaw`.
-10. Run an end-to-end duplicate test:
+11. Rename or recreate the canonical Space as `osolmaz/mlclaw`.
+12. Run an end-to-end duplicate test:
     - source Space shows template page;
     - duplicate Space shows app page;
+    - duplicate Space requires Hugging Face sign-in;
+    - signed-in owner can use the browser gateway;
     - missing secrets render setup status;
     - configured secrets start the gateway;
     - bucket restore works;
-    - local gateway migration still works.
+    - local gateway remains available as an explicit secondary path.
 
 ## Test Plan
 
@@ -335,18 +414,24 @@ Space mode tests:
 
 - unit-test `getSpaceMode()` for canonical source, duplicate, forced template,
   and forced app cases;
+- unit-test OAuth state validation, callback handling, session cookie signing,
+  and unauthenticated redirects;
 - run the Space app locally with `MLCLAW_FORCE_TEMPLATE=1`;
 - run the Space app locally with `MLCLAW_FORCE_APP=1`;
 - deploy/update `osolmaz/mlclaw` and verify it shows the template page;
-- duplicate into a test namespace and verify it shows the app page.
+- duplicate into a test namespace and verify it shows the app page;
+- verify unauthenticated browser gateway requests redirect to HF sign-in;
+- verify signed-in owner access is allowed;
+- verify non-allowed signed-in users are rejected when an allowlist is set.
 
 Live tests:
 
-- bootstrap a new test agent with `mlclaw bootstrap --gateway local`;
-- send a Telegram message and verify the gateway replies;
-- migrate to Space gateway with paid hardware confirmation;
-- send a Telegram message and verify the Space gateway replies;
-- migrate back to local gateway and verify history/state survives;
+- duplicate the source Space into a test namespace;
+- sign in with Hugging Face and verify the browser gateway loads;
+- send a browser message and verify the agent replies;
+- restart/rebuild the Space and verify state restores from the bucket;
+- bootstrap a local gateway only as an explicit secondary-path test;
+- optionally configure Telegram/Discord and verify connector status/replies;
 - verify a duplicated Space can adopt the same bucket only with explicit
   `--bucket` confirmation.
 
@@ -356,3 +441,6 @@ Live tests:
   hard-coded in source or set as a public Space variable in the source Space?
 - Should the source Space include an embedded setup checklist, or only link to
   CLI docs and Hugging Face duplicate instructions?
+- Should owner access be derived only from `SPACE_AUTHOR_NAME`, or should the
+  duplicated Space require an explicit `MLCLAW_ALLOWED_USERS` value before the
+  browser gateway is enabled?
