@@ -79,7 +79,9 @@ describe("ML Claw Space runtime", () => {
 
     const login = await fetch(`http://127.0.0.1:${config.port}/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat`);
     expect(login.status).toBe(200);
-    expect(await login.text()).toContain("/oauth/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat");
+    const loginHtml = await login.text();
+    expect(loginHtml).toContain(`${config.publicUrl}/oauth/login?next=%2Fcontrol%2Fdeep%3Ftab%3Dchat`);
+    expect(loginHtml).toContain('target="_top"');
 
     const api = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`, {
       headers: { accept: "application/json" },

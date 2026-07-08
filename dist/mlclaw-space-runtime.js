@@ -4420,13 +4420,14 @@ function templatePage(config2) {
 }
 function loginPage(config2, message, next = "/") {
   const oauthReady = Boolean(config2.oauthClientId && config2.oauthClientSecret);
-  const loginHref = next === "/" ? "/oauth/login" : `/oauth/login?next=${encodeURIComponent(next)}`;
+  const loginPath = next === "/" ? "/oauth/login" : `/oauth/login?next=${encodeURIComponent(next)}`;
+  const loginHref = new URL(loginPath, config2.publicUrl).toString();
   return page("ML Claw Login", `
     <main>
       <img src="/assets/mlclaw.svg" alt="ML Claw" class="logo">
       <h1>ML Claw</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
-      ${oauthReady ? `<a class="button" href="${escapeHtml(loginHref)}">Sign in with Hugging Face</a>` : `<p class="notice">Hugging Face OAuth is not configured for this Space. Update the Space README metadata to include <code>hf_oauth: true</code>, then rebuild.</p>`}
+      ${oauthReady ? `<a class="button" href="${escapeHtml(loginHref)}" target="_top">Sign in with Hugging Face</a>` : `<p class="notice">Hugging Face OAuth is not configured for this Space. Update the Space README metadata to include <code>hf_oauth: true</code>, then rebuild.</p>`}
     </main>
   `);
 }
