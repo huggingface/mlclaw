@@ -1,6 +1,7 @@
 import http from "node:http";
 import net from "node:net";
 import type { SpaceRuntimeConfig } from "./config.js";
+import { injectMlClawShell, shouldInjectShell } from "./shell.js";
 
 export type ProxyIdentity = {
   username: string;
@@ -48,8 +49,30 @@ export async function proxyHttp(
     path: req.url,
     headers,
   }, (upstreamResponse) => {
-    res.writeHead(upstreamResponse.statusCode ?? 502, sanitizeHeaders(upstreamResponse.headers));
-    upstreamResponse.pipe(res);
+    const responseHeaders = sanitizeHeaders(upstreamResponse.headers);
+    const inject = shouldInjectShell({
+      method: req.method,
+      requestAccept: String(req.headers.accept ?? ""),
+      responseContentType: headerValue(upstreamResponse.headers["content-type"]),
+      responseContentEncoding: headerValue(upstreamResponse.headers["content-encoding"]),
+    });
+    if (!inject) {
+      res.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
+      upstreamResponse.pipe(res);
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    upstreamResponse.on("data", (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    upstreamResponse.on("end", () => {
+      const body = injectMlClawShell(Buffer.concat(chunks).toString("utf8"));
+      delete responseHeaders["content-length"];
+      delete responseHeaders["Content-Length"];
+      res.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
+      res.end(body);
+    });
   });
 
   upstream.on("error", (err) => {
@@ -154,4 +177,14 @@ function resolveControlUiScopes(
   return config.adminUsers.includes(identity.username)
     ? ADMIN_CONTROL_UI_SCOPES
     : USER_CONTROL_UI_SCOPES;
+}
+
+function headerValue(value: string | string[] | number | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value.join(",");
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return value;
 }
