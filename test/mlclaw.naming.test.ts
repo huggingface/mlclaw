@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { namesFor, slugifyAgentName } from "../src/hclaw/naming.js";
+import { namesFor, slugifyAgentName } from "../src/mlclaw/naming.js";
 
-describe("hclaw naming", () => {
+describe("mlclaw naming", () => {
   it("derives deployable names from Telegram bot usernames", () => {
     expect(slugifyAgentName("@Bob_Bot")).toBe("bob");
     expect(slugifyAgentName("research-helper-bot")).toBe("research-helper");

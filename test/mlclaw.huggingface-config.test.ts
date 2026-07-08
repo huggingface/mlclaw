@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 
 describe("Hugging Face model config", () => {
   it("registers the selected HF Router model as an explicit provider model", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-hf-model-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-model-"));
     const configPath = path.join(dir, "openclaw.json");
     await fs.writeFile(configPath, JSON.stringify({
       agents: {
@@ -45,7 +45,7 @@ describe("Hugging Face model config", () => {
   });
 
   it("does nothing for non-Hugging Face model refs", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-hf-model-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-model-"));
     const configPath = path.join(dir, "openclaw.json");
     await fs.writeFile(configPath, "{}");
 

@@ -1,6 +1,6 @@
 # Space Browser Gateway Auth Proxy Plan
 
-Status: implementation target
+Status: implemented
 
 ## Goal
 
@@ -86,10 +86,11 @@ Required Space secrets:
 
 ```text
 MLCLAW_SESSION_SECRET
-OAUTH_CLIENT_ID
-OAUTH_CLIENT_SECRET
 HF_TOKEN
 ```
+
+Hugging Face injects `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` when the Space
+README metadata enables OAuth.
 
 Required/public Space variables:
 
@@ -121,9 +122,10 @@ The page explains:
 
 The duplicated Space renders:
 
-- `/login` for unauthenticated users;
+- `/` renders the sign-in page for unauthenticated users;
 - `/` proxied to OpenClaw Control UI after HF sign-in;
 - `/mlclaw/status` for diagnostics;
+- `/mlclaw/openai` for authenticated OpenAI API-key setup;
 - `/mlclaw/logout`;
 - `/oauth/login`;
 - `/oauth/callback`;

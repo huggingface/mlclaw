@@ -3,8 +3,8 @@ set -euo pipefail
 
 LIVE_DIR="${OPENCLAW_LIVE_DIR:-/tmp/openclaw-live}"
 
-if [ "${HUGGINGCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
-  echo "[huggingclaw] gateway disabled"
+if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
+  echo "[mlclaw] gateway disabled"
   exit 0
 fi
 
@@ -19,6 +19,7 @@ fi
 export OPENCLAW_STATE_DIR="$LIVE_DIR/.openclaw"
 export OPENCLAW_WORKSPACE_DIR="$LIVE_DIR/workspace"
 export OPENCLAW_CONFIG_PATH="$LIVE_DIR/.openclaw/openclaw.json"
+export OPENCLAW_GATEWAY_PORT="${MLCLAW_OPENCLAW_PORT:-7861}"
 STATE_DIR="$OPENCLAW_STATE_DIR"
 WORKSPACE_DIR="$OPENCLAW_WORKSPACE_DIR"
 CONFIG_PATH="$OPENCLAW_CONFIG_PATH"
@@ -76,4 +77,4 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE
 fi
 
 chown -R node:node "$LIVE_DIR"
-exec gosu node node /app/hf-state-sync.js supervise -- openclaw gateway
+exec gosu node node /app/hf-state-sync.js supervise -- node /app/mlclaw-space-runtime.js

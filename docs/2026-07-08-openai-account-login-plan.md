@@ -1,6 +1,6 @@
 # OpenAI Account Login Plan
 
-Status: implementation target
+Status: implemented
 
 ## Goal
 
@@ -13,10 +13,11 @@ history.
 
 Implement secure API-key entry first.
 
-The browser app exposes an authenticated setup route where the signed-in HF
-user can submit an OpenAI API key. The key is sent over HTTPS to the ML Claw
-Space server and written into the local OpenClaw live config/env surface needed
-by the gateway.
+The browser app exposes `/mlclaw/openai`, an authenticated setup route where
+the signed-in HF user can submit an OpenAI API key. The key is sent over HTTPS
+to the ML Claw Space server, stored as a Hugging Face Space Secret when the
+Space has `HF_TOKEN`, written to a local 0600 runtime file for immediate use,
+and loaded into the restarted OpenClaw gateway as `OPENAI_API_KEY`.
 
 The key is:
 
@@ -24,14 +25,12 @@ The key is:
 - accepted only from the Space owner/admin allowlist;
 - never logged;
 - never returned to the browser;
-- stored on the Space filesystem with `0600` permissions where possible;
-- included in the bucket snapshot only if OpenClaw itself requires it for
-  durable operation.
-
-If durable provider credentials should not enter bucket snapshots, the next
-iteration should move this to Hugging Face Space Secrets through the Hub API.
-That requires the user's HF token or a delegated Hub action and should be
-handled by a broker/approval flow.
+- stored on the Space filesystem with `0600` permissions for immediate runtime
+  use;
+- persisted as a Hugging Face Space Secret for restart durability when the
+  Space has permission to update itself;
+- kept outside the OpenClaw live directory so state snapshots do not include
+  the API key.
 
 ## Long-Term Account OAuth
 

@@ -143,11 +143,11 @@ export class CliDockerRunner implements DockerRunner {
 }
 
 export function containerNameFor(agent: string): string {
-  return `huggingclaw-${agent}`;
+  return `mlclaw-${agent}`;
 }
 
 export function volumeNameFor(agent: string): string {
-  return `huggingclaw-${agent}-live`;
+  return `mlclaw-${agent}-live`;
 }
 
 export function mergeDockerLogStreams(stdout: string, stderr: string): string {

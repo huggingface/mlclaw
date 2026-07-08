@@ -56,6 +56,6 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/huggingclaw-runtime:latest
-            ghcr.io/${{ github.repository_owner }}/huggingclaw-runtime:${{ steps.package-version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/huggingclaw-runtime:v${{ steps.package-version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/mlclaw-runtime:latest
+            ghcr.io/${{ github.repository_owner }}/mlclaw-runtime:${{ steps.package-version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/mlclaw-runtime:v${{ steps.package-version.outputs.version }}

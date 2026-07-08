@@ -4,7 +4,7 @@ Status: proposed
 
 ## Goal
 
-Cut over from Hugging Claw to **ML Claw** and make the public Hugging Face Space act
+Cut over from ML Claw to **ML Claw** and make the public Hugging Face Space act
 as both:
 
 - the canonical source/template Space, where users learn what ML Claw does and
@@ -47,27 +47,27 @@ This is a hard cutover, not a compatibility migration.
 
 The cutover is:
 
-1. Rename the repository from `huggingclaw` to `mlclaw`.
+1. Rename the repository from `mlclaw` to `mlclaw`.
 2. Publish a new npm package named `mlclaw`.
 3. Publish a new runtime image named `ghcr.io/osolmaz/mlclaw-runtime`.
 4. Update documentation, examples, launchers, skills, and runtime defaults to
    use only `mlclaw`.
-5. Deprecate the old `huggingclaw` npm package metadata with a pointer to
+5. Deprecate the old `mlclaw` npm package metadata with a pointer to
    `mlclaw`.
 
 Do not implement a legacy bridge.
 
 Specifically, do not add:
 
-- `hclaw` aliases;
-- `huggingclaw` package wrappers;
-- `migrate-from-huggingclaw` commands;
-- automatic reads from `~/.config/huggingclaw`;
-- `HUGGINGCLAW_*` environment variable aliases;
+- `mlclaw` aliases;
+- `mlclaw` package wrappers;
+- `migrate-from-mlclaw` commands;
+- automatic reads from `~/.config/mlclaw`;
+- `MLCLAW_*` environment variable aliases;
 - old container or volume name adoption;
 - automatic remote bucket renames.
 
-Users who need the old implementation can keep using the old `huggingclaw`
+Users who need the old implementation can keep using the old `mlclaw`
 release. New users and new docs use `mlclaw` only.
 
 Existing buckets can still be used through the normal explicit adoption path:
@@ -76,7 +76,7 @@ Existing buckets can still be used through the normal explicit adoption path:
 mlclaw state adopt <agent> --bucket <owner/bucket>
 ```
 
-That is not a Hugging Claw migration path. It is the standard ML Claw way to
+That is not a ML Claw migration path. It is the standard ML Claw way to
 point a deployment at a durable OpenClaw state bucket.
 
 ## Default User Experience
@@ -298,7 +298,7 @@ mlclaw --skill show mlclaw
 mlclaw --skill export mlclaw
 ```
 
-The old skill name `huggingclaw` should not be used for new releases.
+The old skill name `mlclaw` should not be used for new releases.
 
 ## Runtime and State Changes
 
@@ -366,14 +366,14 @@ The README should not include the full implementation plan. It should present:
 
 1. Rename repository branding and package metadata.
 2. Rename CLI binary to `mlclaw`.
-3. Rename bundled skill from `huggingclaw` to `mlclaw`.
+3. Rename bundled skill from `mlclaw` to `mlclaw`.
 4. Remove old-name launchers, examples, config defaults, and skill names.
 5. Add Space mode detection and template/app UI split.
 6. Add HF OAuth session flow for the browser gateway.
 7. Make the duplicated Space browser gateway the default user path.
 8. Publish `ghcr.io/osolmaz/mlclaw-runtime:<version>`.
 9. Publish `mlclaw` to npm.
-10. Deprecate `huggingclaw` on npm with a pointer to `mlclaw`; do not publish a
+10. Deprecate `mlclaw` on npm with a pointer to `mlclaw`; do not publish a
    wrapper release.
 11. Rename or recreate the canonical Space as `osolmaz/mlclaw`.
 12. Run an end-to-end duplicate test:
@@ -404,8 +404,8 @@ node dist/mlclaw.mjs --skill export mlclaw
 Cutover tests:
 
 - verify `npx mlclaw` exposes the CLI;
-- verify no `hclaw` binary is published by `mlclaw`;
-- verify package files do not contain old `huggingclaw` command examples;
+- verify no `mlclaw` binary is published by `mlclaw`;
+- verify package files do not contain old `mlclaw` command examples;
 - verify new deployments write only to `~/.config/mlclaw`;
 - verify `MLCLAW_*` variables are used for ML Claw-specific configuration;
 - verify explicit bucket adoption works with `mlclaw state adopt`.

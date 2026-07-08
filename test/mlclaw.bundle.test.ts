@@ -7,12 +7,12 @@ import { describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 
-describe("hclaw bundle", () => {
+describe("mlclaw bundle", () => {
   it("matches the committed source build", async () => {
-    const tmp = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-bundle-")), "hclaw.mjs");
+    const tmp = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-bundle-")), "mlclaw.mjs");
     await execFileAsync("npx", [
       "esbuild",
-      "src/hclaw/cli.ts",
+      "src/mlclaw/cli.ts",
       "--bundle",
       "--platform=node",
       "--target=node22",
@@ -22,18 +22,18 @@ describe("hclaw bundle", () => {
     ]);
     const [expected, actual] = await Promise.all([
       fs.readFile(tmp, "utf8"),
-      fs.readFile("dist/hclaw.mjs", "utf8"),
+      fs.readFile("dist/mlclaw.mjs", "utf8"),
     ]);
     expect(actual).toBe(expected);
   });
 
-  it("exposes the bundled HuggingClaw skill", async () => {
-    const list = await execFileAsync("node", ["dist/hclaw.mjs", "--skill", "list"]);
-    expect(list.stdout).toContain("huggingclaw\t");
+  it("exposes the bundled ML Claw skill", async () => {
+    const list = await execFileAsync("node", ["dist/mlclaw.mjs", "--skill", "list"]);
+    expect(list.stdout).toContain("mlclaw\t");
     expect(list.stdout).not.toContain("skillflag\t");
 
-    const show = await execFileAsync("node", ["dist/hclaw.mjs", "--skill", "show", "huggingclaw"]);
-    expect(show.stdout).toContain("# HuggingClaw");
-    expect(show.stdout).toContain("npx huggingclaw bootstrap");
+    const show = await execFileAsync("node", ["dist/mlclaw.mjs", "--skill", "show", "mlclaw"]);
+    expect(show.stdout).toContain("# ML Claw");
+    expect(show.stdout).toContain("npx mlclaw bootstrap");
   });
 });

@@ -9,11 +9,11 @@ import {
   renderSecretEnv,
   writeManifest,
   writeSecretEnv,
-} from "../src/hclaw/local-config.js";
+} from "../src/mlclaw/local-config.js";
 
-describe("local Hugging Claw config", () => {
+describe("local ML Claw config", () => {
   it("round-trips manifests", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-config-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-config-"));
 
     await writeManifest(root, {
       version: 1,
@@ -47,7 +47,7 @@ describe("local Hugging Claw config", () => {
   });
 
   it("writes secret env files with user-only permissions", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-config-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-config-"));
 
     await writeSecretEnv(root, "research", {
       HF_TOKEN: "hf_test",

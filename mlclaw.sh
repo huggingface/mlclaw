@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MIN_NODE_MAJOR="${HCLAW_MIN_NODE_MAJOR:-22}"
-NODE_VERSION="${HCLAW_NODE_VERSION:-v24.16.0}"
-PACKAGE_SPEC="${HCLAW_NPM_SPEC:-huggingclaw}"
-CACHE_ROOT="${HCLAW_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/huggingclaw}"
+MIN_NODE_MAJOR="${MLCLAW_MIN_NODE_MAJOR:-22}"
+NODE_VERSION="${MLCLAW_NODE_VERSION:-v24.16.0}"
+PACKAGE_SPEC="${MLCLAW_NPM_SPEC:-mlclaw}"
+CACHE_ROOT="${MLCLAW_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/mlclaw}"
 
 die() {
-  printf 'hclaw: %s\n' "$*" >&2
+  printf 'mlclaw: %s\n' "$*" >&2
   exit 1
 }
 
@@ -64,9 +64,9 @@ install_node() {
     return
   fi
 
-  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hclaw-node.XXXXXX")"
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/mlclaw-node.XXXXXX")"
   mkdir -p "$(dirname "$target_dir")"
-  printf 'hclaw: installing Node.js %s into %s\n' "$NODE_VERSION" "$target_dir" >&2
+  printf 'mlclaw: installing Node.js %s into %s\n' "$NODE_VERSION" "$target_dir" >&2
   if ! curl -fsSL "$url" -o "$temp_dir/node.tar.xz"; then
     rm -rf "$temp_dir"
     die "failed to download Node.js from $url"
@@ -88,10 +88,10 @@ run_with_node() {
   node_path="$(dirname "$node_bin")"
   npm_cli="$(dirname "$node_bin")/../lib/node_modules/npm/bin/npm-cli.js"
   if [ -f "$npm_cli" ]; then
-    PATH="$node_path:$PATH" exec "$node_bin" "$npm_cli" exec --yes --package "$PACKAGE_SPEC" -- huggingclaw "$@"
+    PATH="$node_path:$PATH" exec "$node_bin" "$npm_cli" exec --yes --package "$PACKAGE_SPEC" -- mlclaw "$@"
   fi
   if command -v npm >/dev/null 2>&1; then
-    PATH="$node_path:$PATH" exec npm exec --yes --package "$PACKAGE_SPEC" -- huggingclaw "$@"
+    PATH="$node_path:$PATH" exec npm exec --yes --package "$PACKAGE_SPEC" -- mlclaw "$@"
   fi
   die "npm was not found for Node runtime $node_bin"
 }

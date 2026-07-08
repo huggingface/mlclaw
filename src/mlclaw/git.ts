@@ -15,9 +15,9 @@ export async function pushTemplateToSpace(params: {
   sourceDir?: string;
   runtimeImage?: string;
 }): Promise<{ templateRev: string }> {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-space-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-space-"));
   try {
-    const sourceDir = params.sourceDir ?? process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
+    const sourceDir = params.sourceDir ?? process.env.MLCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
     const templateRev = await currentTemplateRev(sourceDir);
     const outDir = path.join(tempRoot, "space");
     await fs.mkdir(outDir, { recursive: true });
@@ -35,7 +35,7 @@ export async function pushTemplateToSpace(params: {
     await hub.commitSpaceFiles(params.targetRepo, {
       files,
       deletePaths,
-      title: `Deploy Hugging Claw ${templateRev.slice(0, 12)}`,
+      title: `Deploy ML Claw ${templateRev.slice(0, 12)}`,
     });
     return { templateRev };
   } finally {
@@ -44,7 +44,7 @@ export async function pushTemplateToSpace(params: {
 }
 
 export async function currentTemplateRev(sourceDir?: string): Promise<string> {
-  sourceDir ??= process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
+  sourceDir ??= process.env.MLCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
   try {
     const { stdout } = await execFileAsync("git", ["-C", sourceDir, "rev-parse", "HEAD"]);
     const rev = stdout.trim();
@@ -58,7 +58,7 @@ export async function currentTemplateRev(sourceDir?: string): Promise<string> {
     name?: string;
     version?: string;
   };
-  return `npm:${pkg.name ?? "huggingclaw"}@${pkg.version ?? "unknown"}`;
+  return `npm:${pkg.name ?? "mlclaw"}@${pkg.version ?? "unknown"}`;
 }
 
 export async function generateSpaceRepo(
@@ -68,7 +68,7 @@ export async function generateSpaceRepo(
 ): Promise<void> {
   const copies: Array<[string, string]> = [
     [".gitattributes", ".gitattributes"],
-    ["assets/huggingclaw.svg", "assets/huggingclaw.svg"],
+    ["assets/mlclaw.svg", "assets/mlclaw.svg"],
     ["space/README.md", "README.md"],
   ];
   for (const [from, to] of copies) {
@@ -90,7 +90,7 @@ async function findPackagedSourceRoot(): Promise<string> {
     }
     const parent = path.dirname(dir);
     if (parent === dir) {
-      throw new Error("Could not find packaged Hugging Claw source files. Reinstall the huggingclaw npm package.");
+      throw new Error("Could not find packaged ML Claw source files. Reinstall the mlclaw npm package.");
     }
     dir = parent;
   }

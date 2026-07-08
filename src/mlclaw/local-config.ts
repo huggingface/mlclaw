@@ -31,15 +31,15 @@ export type LocalConfigPaths = {
 };
 
 export function defaultConfigRoot(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = env.HUGGINGCLAW_CONFIG_HOME?.trim();
+  const explicit = env.MLCLAW_CONFIG_HOME?.trim();
   if (explicit) {
     return explicit;
   }
   const xdg = env.XDG_CONFIG_HOME?.trim();
   if (xdg) {
-    return path.join(xdg, "huggingclaw");
+    return path.join(xdg, "mlclaw");
   }
-  return path.join(os.homedir(), ".config", "huggingclaw");
+  return path.join(os.homedir(), ".config", "mlclaw");
 }
 
 export function localConfigPaths(root: string): LocalConfigPaths {

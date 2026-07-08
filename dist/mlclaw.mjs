@@ -8951,7 +8951,7 @@ var init_cli = __esm({
   }
 });
 
-// src/hclaw/cli.ts
+// src/mlclaw/cli.ts
 import fs14 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import process4 from "node:process";
@@ -8976,7 +8976,7 @@ var {
   Help
 } = import_index.default;
 
-// src/hclaw/cli.ts
+// src/mlclaw/cli.ts
 init_dist4();
 
 // node_modules/skillflag/dist/skillflag.js
@@ -9586,7 +9586,7 @@ async function handleSkillflag(argv, opts) {
   }
 }
 
-// src/hclaw/auth.ts
+// src/mlclaw/auth.ts
 import fs10 from "node:fs/promises";
 import os3 from "node:os";
 import path11 from "node:path";
@@ -9613,7 +9613,7 @@ async function readToken(env = process.env) {
   throw new Error("HF token not found. Set HF_TOKEN or run `hf auth login` once.");
 }
 
-// src/hclaw/docker.ts
+// src/mlclaw/docker.ts
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
@@ -9713,10 +9713,10 @@ var CliDockerRunner = class {
   }
 };
 function containerNameFor(agent) {
-  return `huggingclaw-${agent}`;
+  return `mlclaw-${agent}`;
 }
 function volumeNameFor(agent) {
-  return `huggingclaw-${agent}-live`;
+  return `mlclaw-${agent}-live`;
 }
 function mergeDockerLogStreams(stdout, stderr) {
   return `${stdout}${stderr}`;
@@ -9746,7 +9746,7 @@ function dockerErrorMessage(err) {
   return (err instanceof Error ? err.message : String(err)).toLowerCase();
 }
 
-// src/hclaw/gateway-location.ts
+// src/mlclaw/gateway-location.ts
 function parseGatewayLocation(value) {
   if (value === "local" || value === "space") {
     return value;
@@ -9754,7 +9754,7 @@ function parseGatewayLocation(value) {
   throw new Error("gateway must be one of: local, space");
 }
 
-// src/hclaw/git.ts
+// src/mlclaw/git.ts
 import { execFile as execFile2 } from "node:child_process";
 import fs12 from "node:fs/promises";
 import os4 from "node:os";
@@ -14510,7 +14510,7 @@ var BucketClient = class {
   }
 };
 
-// src/hclaw/hub-api.ts
+// src/mlclaw/hub-api.ts
 var HubApiError2 = class extends Error {
   constructor(status, url, body) {
     super(`Hub request failed: ${status} ${url}: ${body.slice(0, 500)}`);
@@ -14778,14 +14778,14 @@ function sseDataToText(raw) {
   return lines.join("");
 }
 
-// src/hclaw/runtime-image.ts
+// src/mlclaw/runtime-image.ts
 import fs11 from "node:fs";
 import path12 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-var RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/huggingclaw-runtime";
+var RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/mlclaw-runtime";
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${readPackageVersion()}`;
 function resolveRuntimeImage(value, env = process.env) {
-  return value?.trim() || env.HUGGINGCLAW_RUNTIME_IMAGE?.trim() || DEFAULT_RUNTIME_IMAGE;
+  return value?.trim() || env.MLCLAW_RUNTIME_IMAGE?.trim() || DEFAULT_RUNTIME_IMAGE;
 }
 function readPackageVersion() {
   let dir = path12.dirname(fileURLToPath2(import.meta.url));
@@ -14812,12 +14812,12 @@ function isMissingFileError(err) {
   return err instanceof Error && "code" in err && err.code === "ENOENT";
 }
 
-// src/hclaw/git.ts
+// src/mlclaw/git.ts
 var execFileAsync2 = promisify2(execFile2);
 async function pushTemplateToSpace(params) {
-  const tempRoot = await fs12.mkdtemp(path13.join(os4.tmpdir(), "hclaw-space-"));
+  const tempRoot = await fs12.mkdtemp(path13.join(os4.tmpdir(), "mlclaw-space-"));
   try {
-    const sourceDir = params.sourceDir ?? process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
+    const sourceDir = params.sourceDir ?? process.env.MLCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
     const templateRev = await currentTemplateRev(sourceDir);
     const outDir = path13.join(tempRoot, "space");
     await fs12.mkdir(outDir, { recursive: true });
@@ -14834,7 +14834,7 @@ async function pushTemplateToSpace(params) {
     await hub.commitSpaceFiles(params.targetRepo, {
       files,
       deletePaths,
-      title: `Deploy Hugging Claw ${templateRev.slice(0, 12)}`
+      title: `Deploy ML Claw ${templateRev.slice(0, 12)}`
     });
     return { templateRev };
   } finally {
@@ -14842,7 +14842,7 @@ async function pushTemplateToSpace(params) {
   }
 }
 async function currentTemplateRev(sourceDir) {
-  sourceDir ??= process.env.HCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
+  sourceDir ??= process.env.MLCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
   try {
     const { stdout } = await execFileAsync2("git", ["-C", sourceDir, "rev-parse", "HEAD"]);
     const rev = stdout.trim();
@@ -14852,12 +14852,12 @@ async function currentTemplateRev(sourceDir) {
   } catch {
   }
   const pkg = JSON.parse(await fs12.readFile(path13.join(sourceDir, "package.json"), "utf8"));
-  return `npm:${pkg.name ?? "huggingclaw"}@${pkg.version ?? "unknown"}`;
+  return `npm:${pkg.name ?? "mlclaw"}@${pkg.version ?? "unknown"}`;
 }
 async function generateSpaceRepo(sourceDir, outDir, options = {}) {
   const copies = [
     [".gitattributes", ".gitattributes"],
-    ["assets/huggingclaw.svg", "assets/huggingclaw.svg"],
+    ["assets/mlclaw.svg", "assets/mlclaw.svg"],
     ["space/README.md", "README.md"]
   ];
   for (const [from, to] of copies) {
@@ -14879,7 +14879,7 @@ async function findPackagedSourceRoot() {
     }
     const parent = path13.dirname(dir);
     if (parent === dir) {
-      throw new Error("Could not find packaged Hugging Claw source files. Reinstall the huggingclaw npm package.");
+      throw new Error("Could not find packaged ML Claw source files. Reinstall the mlclaw npm package.");
     }
     dir = parent;
   }
@@ -14951,7 +14951,7 @@ function normalizeBucketPrefix(prefix) {
   return normalized || DEFAULT_BUCKET_PREFIX;
 }
 
-// src/hclaw/lease.ts
+// src/mlclaw/lease.ts
 var RUNTIME_STATUS_NAME = "runtime/status.json";
 var RUNTIME_HANDOFF_REQUEST_NAME = "runtime/handoff-request.json";
 var RUNTIME_HANDOFF_ACK_NAME = "runtime/handoff-ack.json";
@@ -14998,20 +14998,20 @@ async function assertNoLiveForeignLease(params) {
   );
 }
 
-// src/hclaw/local-config.ts
+// src/mlclaw/local-config.ts
 import fs13 from "node:fs/promises";
 import os5 from "node:os";
 import path14 from "node:path";
 function defaultConfigRoot(env = process.env) {
-  const explicit = env.HUGGINGCLAW_CONFIG_HOME?.trim();
+  const explicit = env.MLCLAW_CONFIG_HOME?.trim();
   if (explicit) {
     return explicit;
   }
   const xdg = env.XDG_CONFIG_HOME?.trim();
   if (xdg) {
-    return path14.join(xdg, "huggingclaw");
+    return path14.join(xdg, "mlclaw");
   }
-  return path14.join(os5.homedir(), ".config", "huggingclaw");
+  return path14.join(os5.homedir(), ".config", "mlclaw");
 }
 function localConfigPaths(root) {
   return {
@@ -15086,7 +15086,7 @@ function renderEnvLine(key, value) {
   return `${key}=${value}`;
 }
 
-// src/hclaw/naming.ts
+// src/mlclaw/naming.ts
 function slugifyAgentName(raw) {
   const cleaned = raw.trim().replace(/^@/, "").replace(/(?:[_-]?bot)$/i, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").replace(/--+/g, "-");
   if (!cleaned) {
@@ -15101,7 +15101,7 @@ function namesFor(owner, agentName) {
   };
 }
 
-// src/hclaw/telegram.ts
+// src/mlclaw/telegram.ts
 var TELEGRAM_GET_ME_TIMEOUT_MS = 3e4;
 var TELEGRAM_GET_ME_ATTEMPTS = 4;
 async function getTelegramBot(token, apiRoot = "https://api.telegram.org", fetchImpl = fetch) {
@@ -15136,20 +15136,21 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// src/hclaw/cli.ts
+// src/mlclaw/cli.ts
 var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it";
 var DEFAULT_HARDWARE = "cpu-basic";
 var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;
-var DEFAULT_GATEWAY_LOCATION = "local";
+var DEFAULT_GATEWAY_LOCATION = "space";
 var DEFAULT_LOCAL_PORT = 7860;
-var LOCAL_VOLUME_MOUNT_PATH = "/tmp/huggingclaw-local";
+var DEFAULT_SPACE_OPENCLAW_PORT = 7861;
+var LOCAL_VOLUME_MOUNT_PATH = "/tmp/mlclaw-local";
 var LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
 var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
 var SPACE_HANDOFF_POLL_MS = 5e3;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
-var PAID_HARDWARE_COST_NOTE = "Telegram requires upgraded Hugging Face Space hardware today. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
+var PAID_HARDWARE_COST_NOTE = "Paid Hugging Face Space hardware costs money while allocated. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
   isInteractive: () => Boolean(process4.stdin.isTTY && process4.stdout.isTTY),
   intro: ge,
@@ -15178,18 +15179,18 @@ function createRuntime(overrides = {}) {
 function createProgram(runtimeOverrides = {}) {
   const runtime = createRuntime(runtimeOverrides);
   const program2 = new Command();
-  program2.name("hclaw").description("Deploy OpenClaw to a private Hugging Face Space and bucket").showHelpAfterError().exitOverride((err) => {
+  program2.name("mlclaw").description("Deploy OpenClaw to a Hugging Face Space and private bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).description("Create or update a private Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs", DEFAULT_GATEWAY_LOCATION).option("--telegram-token <token>", "Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "Hugging Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
+  program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "ML Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token for local gateway mode").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
-  program2.command("update").description("Regenerate and upload current HuggingClaw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--force", "Update even if the Space does not look like HuggingClaw", false).action(async (repoId, opts) => {
+  program2.command("update").description("Regenerate and upload current ML Claw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--force", "Update even if the Space does not look like ML Claw", false).action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await update(repoId, opts, hub, token, runtime);
   });
-  program2.command("doctor").description("Check a HuggingClaw Space deployment").argument("<owner/space>", "Hugging Face Space repo ID").option("--fix", "Apply safe config repairs", false).option("--bucket <owner/bucket>", "State bucket to set when missing").action(async (repoId, opts) => {
+  program2.command("doctor").description("Check a ML Claw Space deployment").argument("<owner/space>", "Hugging Face Space repo ID").option("--fix", "Apply safe config repairs", false).option("--bucket <owner/bucket>", "State bucket to set when missing").action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await doctor(repoId, opts, hub, runtime);
@@ -15199,7 +15200,7 @@ function createProgram(runtimeOverrides = {}) {
     const hub = runtime.hubFactory(token);
     await settings(repoId, opts, hub, runtime);
   });
-  const gateway = program2.command("gateway").description("Operate a Hugging Claw gateway");
+  const gateway = program2.command("gateway").description("Operate a ML Claw gateway");
   gateway.command("start").argument("<agent>", "Agent name").option("--docker-context <name>", "Set Docker context only when the deployment has no pinned context").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
     await gatewayStart(agent, opts, runtime);
   });
@@ -15216,13 +15217,13 @@ function createProgram(runtimeOverrides = {}) {
   gateway.command("logs").argument("<agent>", "Agent name").option("--tail <lines>", "Number of log lines", parseInteger, 200).action(async (agent, opts) => {
     await gatewayLogs(agent, opts, runtime);
   });
-  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor", TELEGRAM_HARDWARE).option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger, TELEGRAM_SLEEP_TIME).option("--runtime-image <image>", "Hugging Claw runtime image").option("--docker-context <name>", "Docker context for local gateway startup when migrating to local").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
+  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--runtime-image <image>", "ML Claw runtime image").option("--docker-context <name>", "Docker context for local gateway startup when migrating to local").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
     await gatewayMigrate(agent, opts, runtime);
   });
   gateway.command("rebind").argument("<agent>", "Agent name").requiredOption("--docker-context <name>", "Target Docker context").option("--no-pull", "Do not docker pull before starting the rebound local gateway").option("--takeover", "Rebind even if the old Docker context is unavailable", false).action(async (agent, opts) => {
     await gatewayRebind(agent, opts, runtime);
   });
-  const state = program2.command("state").description("Operate Hugging Claw durable state");
+  const state = program2.command("state").description("Operate ML Claw durable state");
   state.command("adopt").description("Point an existing deployment at a state bucket").argument("<agent>", "Agent name").requiredOption("--bucket <owner/bucket>", "State bucket to adopt").option("--no-pull", "Do not docker pull before restarting a local gateway").option("--takeover", "Adopt even if another live runtime lease is present", false).option("--yes", "Confirm adoption prompts for automation", false).action(async (agent, opts) => {
     await stateAdopt(agent, opts, runtime);
   });
@@ -15243,30 +15244,29 @@ async function main(argv = process4.argv.slice(2), runtimeOverrides = {}) {
   }
 }
 async function bootstrap(opts, runtime) {
-  runtime.prompt.intro("HuggingClaw bootstrap");
-  const gatewayLocation = parseGatewayLocation(opts.gateway ?? DEFAULT_GATEWAY_LOCATION);
-  if (opts.dockerContext && gatewayLocation !== "local") {
-    throw new Error("--docker-context only applies to local gateway mode");
-  }
+  runtime.prompt.intro("ML Claw bootstrap");
+  const requestedGatewayLocation = opts.gateway ? parseGatewayLocation(opts.gateway) : void 0;
   const hfToken = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(hfToken);
   const me2 = await hub.whoami();
   const owner = opts.owner ?? me2.name;
-  const telegramToken = await readTelegramToken(opts, runtime);
-  const bot = await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot);
-  const agentName = slugifyAgentName(opts.name ?? bot.username);
-  const telegramUserId = opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime);
-  if (!telegramUserId) {
-    throw new Error("Telegram allowed user ID is required");
-  }
+  const telegramToken = await readOptionalTelegramToken(opts, runtime);
+  const bot = telegramToken ? await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot) : void 0;
+  const agentName = slugifyAgentName(opts.name ?? bot?.username ?? await promptAgentName(runtime));
+  const telegramUserId = telegramToken ? opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime) : void 0;
   const names = namesFor(owner, agentName);
   const model = opts.model ?? DEFAULT_MODEL;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
   const providedGatewayToken = opts.gatewayToken;
-  const gatewayToken = providedGatewayToken ?? randomBytes(32).toString("base64url");
+  const sessionSecret = randomBytes(48).toString("base64url");
   const now = runtime.now().toISOString();
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
+  const gatewayLocation = requestedGatewayLocation ?? existingManifest?.gatewayLocation ?? DEFAULT_GATEWAY_LOCATION;
+  const gatewayToken = gatewayLocation === "local" ? providedGatewayToken ?? randomBytes(32).toString("base64url") : providedGatewayToken;
+  if (opts.dockerContext && gatewayLocation !== "local") {
+    throw new Error("--docker-context only applies to local gateway mode");
+  }
   const bucketPrefix = bootstrapBucketPrefix(existingManifest, existingSecrets, runtime);
   const localRuntimeId = existingManifest?.localRuntimeId ?? newLocalRuntimeId(agentName);
   const localGateway = gatewayLocation === "local" ? await resolveLocalGatewayBinding({
@@ -15300,9 +15300,10 @@ async function bootstrap(opts, runtime) {
   };
   const secrets = deploymentSecrets({
     hfToken,
-    telegramToken,
-    telegramUserId,
-    gatewayToken,
+    ...telegramToken ? { telegramToken } : {},
+    ...telegramUserId ? { telegramUserId } : {},
+    ...gatewayToken ? { gatewayToken } : {},
+    sessionSecret,
     bucket,
     model,
     agentName,
@@ -15322,8 +15323,8 @@ async function bootstrap(opts, runtime) {
       takeover: Boolean(opts.takeover)
     });
     const paidHardware = await resolveHardware({
-      ...opts.hardware ? { requestedHardware: opts.hardware } : {},
-      ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : {},
+      requestedHardware: opts.hardware ?? (telegramToken ? TELEGRAM_HARDWARE : DEFAULT_HARDWARE),
+      ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : telegramToken ? { requestedSleepTime: TELEGRAM_SLEEP_TIME } : {},
       yes: Boolean(opts.yes),
       runtime
     });
@@ -15366,12 +15367,12 @@ async function bootstrap(opts, runtime) {
     runtime.stdout.log(`Docker:  ${manifest.localGateway.dockerContext}`);
   }
   runtime.stdout.log(`Runtime image: ${runtimeImage}`);
-  if (!providedGatewayToken) {
+  if (gatewayLocation === "local" && !providedGatewayToken && gatewayToken) {
     runtime.stdout.log("");
     runtime.stdout.log("Generated OpenClaw gateway token:");
     runtime.stdout.log(`  ${gatewayToken}`);
     runtime.stdout.log("");
-    runtime.stdout.log("Save this token now. Hugging Face stores it as a write-only Space Secret.");
+    runtime.stdout.log("Save this token now. The local gateway env file stores it on this machine.");
   }
   runtime.prompt.outro(gatewayLocation === "space" ? "Restart requested. Build logs may take a few minutes to appear." : "Local gateway start requested.");
 }
@@ -15451,9 +15452,9 @@ async function stateAdopt(agent, opts, runtime) {
     OPENCLAW_HF_STATE_BUCKET: bucket,
     OPENCLAW_AGENT_NAME: updated.agent,
     OPENCLAW_MODEL: updated.model,
-    HUGGINGCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
-    HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-    HUGGINGCLAW_RUNTIME_ID: runtimeIdFor(updated)
+    MLCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
+    MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+    MLCLAW_RUNTIME_ID: runtimeIdFor(updated)
   };
   await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
   if (updated.gatewayLocation === "local") {
@@ -15465,8 +15466,8 @@ async function stateAdopt(agent, opts, runtime) {
   } else {
     await setDeploymentVariables(hub, updated.space, {
       OPENCLAW_HF_STATE_BUCKET: bucket,
-      HUGGINGCLAW_GATEWAY_LOCATION: "space",
-      HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
     });
     await clearSpaceGatewayDisabled(hub, updated.space);
     if (bucketChanged) {
@@ -15490,7 +15491,7 @@ async function inspectStateBucket(hub, bucket, bucketPrefix) {
     (entry) => entry.path === manifestPath2 || entry.path.startsWith(`${prefixWithSlash}snapshots/`) || entry.path.startsWith(`${prefixWithSlash}runtime/`)
   );
   if (fileEntries.length > 0 && stateEntries.length === 0) {
-    throw new Error(`bucket ${bucket} contains objects but no HuggingClaw state under ${prefix}`);
+    throw new Error(`bucket ${bucket} contains objects but no ML Claw state under ${prefix}`);
   }
   const hasSnapshotManifest = stateEntries.some((entry) => entry.path === manifestPath2);
   if (hasSnapshotManifest) {
@@ -15544,16 +15545,18 @@ function deploymentSecrets(params) {
   return {
     HF_TOKEN: params.hfToken,
     HUGGINGFACE_HUB_TOKEN: params.hfToken,
-    TELEGRAM_BOT_TOKEN: params.telegramToken,
-    TELEGRAM_ALLOWED_USERS: params.telegramUserId,
-    OPENCLAW_GATEWAY_TOKEN: params.gatewayToken,
     OPENCLAW_HF_STATE_BUCKET: params.bucket,
     OPENCLAW_MODEL: params.model,
     OPENCLAW_AGENT_NAME: params.agentName,
-    HUGGINGCLAW_GATEWAY_LOCATION: params.gatewayLocation,
-    HUGGINGCLAW_RUNTIME_IMAGE: params.runtimeImage,
-    HUGGINGCLAW_RUNTIME_ID: params.runtimeId,
-    OPENCLAW_GATEWAY_PORT: String(DEFAULT_LOCAL_PORT),
+    MLCLAW_GATEWAY_LOCATION: params.gatewayLocation,
+    MLCLAW_RUNTIME_IMAGE: params.runtimeImage,
+    MLCLAW_RUNTIME_ID: params.runtimeId,
+    MLCLAW_SESSION_SECRET: params.sessionSecret,
+    MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
+    OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
+    ...params.telegramToken ? { TELEGRAM_BOT_TOKEN: params.telegramToken } : {},
+    ...params.telegramUserId ? { TELEGRAM_ALLOWED_USERS: params.telegramUserId } : {},
+    ...params.gatewayToken ? { OPENCLAW_GATEWAY_TOKEN: params.gatewayToken } : {},
     ...params.bucketPrefix ? { OPENCLAW_HF_STATE_PREFIX: params.bucketPrefix } : {},
     ...params.telegramProxy ? { TELEGRAM_PROXY: params.telegramProxy } : {},
     ...params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}
@@ -15565,14 +15568,14 @@ async function writeLocalDeployment(configRoot2, manifest, secrets) {
 }
 async function deploySpaceGateway(params) {
   const { hub, runtime, hfToken, manifest, secrets } = params;
-  runtime.stdout.log(`Creating private Space ${manifest.space}`);
+  runtime.stdout.log(`Creating public Space ${manifest.space}`);
   await hub.createDockerSpace(manifest.space, {
-    private: true,
+    private: false,
     hardware: params.hardware,
     ...typeof params.sleepTime === "number" ? { sleepTimeSeconds: params.sleepTime } : {}
   });
   await hub.requestSpaceHardware(manifest.space, params.hardware, params.sleepTime);
-  runtime.stdout.log("Generating Space files from huggingclaw runtime image");
+  runtime.stdout.log("Generating Space files from mlclaw runtime image");
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: manifest.space,
     token: hfToken,
@@ -15581,20 +15584,24 @@ async function deploySpaceGateway(params) {
   await setDeploymentVariables(hub, manifest.space, {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
     ...secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {},
-    OPENCLAW_HF_TEMPLATE_REV: templateRev,
+    MLCLAW_TEMPLATE_REV: templateRev,
     OPENCLAW_MODEL: manifest.model,
     OPENCLAW_AGENT_NAME: manifest.agent,
-    HUGGINGCLAW_GATEWAY_LOCATION: "space",
-    HUGGINGCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
-    HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent)
+    MLCLAW_GATEWAY_LOCATION: "space",
+    MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
+    MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+    MLCLAW_ALLOWED_USERS: manifest.owner,
+    MLCLAW_CANONICAL_SPACE_ID: "osolmaz/mlclaw",
+    MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
+    OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
   });
   await clearSpaceGatewayDisabled(hub, manifest.space);
   await setDeploymentSecrets(hub, manifest.space, {
-    OPENCLAW_GATEWAY_TOKEN: requiredSecret(secrets, "OPENCLAW_GATEWAY_TOKEN"),
     HF_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
     HUGGINGFACE_HUB_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
-    TELEGRAM_BOT_TOKEN: requiredSecret(secrets, "TELEGRAM_BOT_TOKEN"),
-    TELEGRAM_ALLOWED_USERS: requiredSecret(secrets, "TELEGRAM_ALLOWED_USERS"),
+    MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
+    ...secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {},
+    ...secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {},
     ...secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {},
     ...secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}
   });
@@ -15751,8 +15758,8 @@ async function gatewayMigrate(agent, opts, runtime) {
   };
   if (target === "space") {
     const paidHardware = await resolveHardware({
-      requestedHardware: opts.hardware ?? TELEGRAM_HARDWARE,
-      requestedSleepTime: typeof opts.sleepTime === "number" ? opts.sleepTime : TELEGRAM_SLEEP_TIME,
+      requestedHardware: opts.hardware ?? (secrets.TELEGRAM_BOT_TOKEN ? TELEGRAM_HARDWARE : DEFAULT_HARDWARE),
+      ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : secrets.TELEGRAM_BOT_TOKEN ? { requestedSleepTime: TELEGRAM_SLEEP_TIME } : {},
       yes: Boolean(opts.yes),
       runtime
     });
@@ -15771,17 +15778,17 @@ async function gatewayMigrate(agent, opts, runtime) {
       manifest: updated,
       secrets: {
         ...secrets,
-        HUGGINGCLAW_GATEWAY_LOCATION: "space",
-        HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage
+        MLCLAW_GATEWAY_LOCATION: "space",
+        MLCLAW_RUNTIME_IMAGE: updated.runtimeImage
       },
       hardware: paidHardware.hardware,
       ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}
     });
     await writeSecretEnv(runtime.configRoot, agent, {
       ...secrets,
-      HUGGINGCLAW_GATEWAY_LOCATION: "space",
-      HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-      HUGGINGCLAW_RUNTIME_ID: spaceRuntimeId(agent)
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      MLCLAW_RUNTIME_ID: spaceRuntimeId(agent)
     });
   } else {
     updated.localGateway = await resolveLocalGatewayBinding({
@@ -15810,9 +15817,9 @@ async function gatewayMigrate(agent, opts, runtime) {
     });
     await writeSecretEnv(runtime.configRoot, agent, {
       ...secrets,
-      HUGGINGCLAW_GATEWAY_LOCATION: "local",
-      HUGGINGCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-      HUGGINGCLAW_RUNTIME_ID: updated.localRuntimeId
+      MLCLAW_GATEWAY_LOCATION: "local",
+      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      MLCLAW_RUNTIME_ID: updated.localRuntimeId
     });
     await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
   }
@@ -15908,7 +15915,7 @@ async function resolveLocalGatewayBinding(params) {
   const agent = params.agent ?? params.manifest?.agent ?? "deployment";
   if (existing && requestedContext && existing.dockerContext !== requestedContext) {
     throw new Error(
-      `local gateway ${agent} is pinned to Docker context ${existing.dockerContext}. Run \`hclaw gateway rebind ${agent} --docker-context ${requestedContext}\` to move it.`
+      `local gateway ${agent} is pinned to Docker context ${existing.dockerContext}. Run \`mlclaw gateway rebind ${agent} --docker-context ${requestedContext}\` to move it.`
     );
   }
   const dockerContext = existing?.dockerContext ?? requestedContext ?? await params.runtime.dockerRunner.currentContext();
@@ -15917,7 +15924,7 @@ async function resolveLocalGatewayBinding(params) {
   }
   if (!await params.runtime.dockerRunner.contextExists(dockerContext)) {
     throw new Error(
-      `Docker context ${dockerContext} is not available. Run \`hclaw gateway rebind ${agent} --docker-context <context>\` to move this local gateway to another Docker engine.`
+      `Docker context ${dockerContext} is not available. Run \`mlclaw gateway rebind ${agent} --docker-context <context>\` to move this local gateway to another Docker engine.`
     );
   }
   if (existing) {
@@ -16018,7 +16025,7 @@ async function disableAndPauseSpaceGateway(params) {
   const requestId = randomBytes(16).toString("hex");
   const shouldWaitForHandoff = await spaceGatewayCanAcknowledgeHandoff(params);
   if (!shouldWaitForHandoff) {
-    await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
+    await params.hub.addSpaceVariable(params.manifest.space, "MLCLAW_GATEWAY_DISABLED", "1");
     await clearRuntimeHandoffRequest(params.hub, params.manifest.bucket, params.bucketPrefix).catch(() => void 0);
     await params.hub.pauseSpace(params.manifest.space);
     params.runtime.stdout.log(`Space pause requested: ${params.manifest.space}`);
@@ -16032,7 +16039,7 @@ async function disableAndPauseSpaceGateway(params) {
     requestedAt: handoffStartedAt.toISOString(),
     targetRuntimeId: params.targetRuntimeId ?? params.manifest.localRuntimeId
   }, params.bucketPrefix);
-  await params.hub.addSpaceVariable(params.manifest.space, "HUGGINGCLAW_GATEWAY_DISABLED", "1");
+  await params.hub.addSpaceVariable(params.manifest.space, "MLCLAW_GATEWAY_DISABLED", "1");
   params.runtime.stdout.log("Waiting for Space gateway to upload a final snapshot");
   await waitForRuntimeHandoffAck({
     hub: params.hub,
@@ -16103,8 +16110,8 @@ function shouldPull(opts) {
 }
 async function update(repoId, opts, hub, hfToken, runtime) {
   const variables = await hub.getSpaceVariables(repoId);
-  if (!variables.has("OPENCLAW_HF_TEMPLATE_REV") && !opts.force) {
-    throw new Error(`${repoId} does not look like a HuggingClaw deployment; pass --force to update anyway`);
+  if (!variables.has("MLCLAW_TEMPLATE_REV") && !variables.has("OPENCLAW_HF_TEMPLATE_REV") && !opts.force) {
+    throw new Error(`${repoId} does not look like a ML Claw deployment; pass --force to update anyway`);
   }
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
   const agentName = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
@@ -16114,10 +16121,12 @@ async function update(repoId, opts, hub, hfToken, runtime) {
     token: hfToken,
     runtimeImage
   });
-  await hub.addSpaceVariable(repoId, "OPENCLAW_HF_TEMPLATE_REV", templateRev);
-  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_RUNTIME_IMAGE", runtimeImage);
-  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_GATEWAY_LOCATION", "space");
-  await hub.addSpaceVariable(repoId, "HUGGINGCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
+  await hub.addSpaceVariable(repoId, "MLCLAW_TEMPLATE_REV", templateRev);
+  await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_IMAGE", runtimeImage);
+  await hub.addSpaceVariable(repoId, "MLCLAW_GATEWAY_LOCATION", "space");
+  await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
+  await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
+  await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.restartSpace(repoId, true);
   await doctor(repoId, { fix: true }, hub, runtime);
 }
@@ -16148,19 +16157,46 @@ async function doctor(repoId, opts, hub, runtime) {
       }
     }
   }
-  for (const key of ["OPENCLAW_GATEWAY_TOKEN", "HF_TOKEN"]) {
-    if (!secrets.has(key)) {
-      issues.push(`secret ${key} is missing`);
+  if (!secrets.has("HF_TOKEN")) {
+    issues.push("secret HF_TOKEN is missing");
+  }
+  if (!secrets.has("MLCLAW_SESSION_SECRET")) {
+    if (fix) {
+      await hub.addSpaceSecret(repoId, "MLCLAW_SESSION_SECRET", randomBytes(48).toString("base64url"));
+      fixed.push("set secret MLCLAW_SESSION_SECRET");
+    } else {
+      issues.push("secret MLCLAW_SESSION_SECRET is missing");
     }
   }
-  if (!variables.has("OPENCLAW_HF_TEMPLATE_REV")) {
-    issues.push("OPENCLAW_HF_TEMPLATE_REV is missing; updates cannot verify template lineage");
+  if (!variables.has("MLCLAW_TEMPLATE_REV") && !variables.has("OPENCLAW_HF_TEMPLATE_REV")) {
+    issues.push("MLCLAW_TEMPLATE_REV is missing; updates cannot verify template lineage");
   }
-  if ((variables.get("HUGGINGCLAW_GATEWAY_LOCATION")?.value ?? "") !== "space") {
-    issues.push("HUGGINGCLAW_GATEWAY_LOCATION is not set to space");
+  if ((variables.get("MLCLAW_GATEWAY_LOCATION")?.value ?? "") !== "space") {
+    issues.push("MLCLAW_GATEWAY_LOCATION is not set to space");
   }
-  if (!variables.has("HUGGINGCLAW_RUNTIME_IMAGE")) {
-    issues.push("HUGGINGCLAW_RUNTIME_IMAGE is missing");
+  if (!variables.has("MLCLAW_RUNTIME_IMAGE")) {
+    issues.push("MLCLAW_RUNTIME_IMAGE is missing");
+  }
+  if ((variables.get("MLCLAW_OPENCLAW_PORT")?.value ?? "") !== String(DEFAULT_SPACE_OPENCLAW_PORT) && fix) {
+    await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
+    fixed.push("set MLCLAW_OPENCLAW_PORT");
+  } else if ((variables.get("MLCLAW_OPENCLAW_PORT")?.value ?? "") !== String(DEFAULT_SPACE_OPENCLAW_PORT)) {
+    issues.push(`MLCLAW_OPENCLAW_PORT is not ${DEFAULT_SPACE_OPENCLAW_PORT}`);
+  }
+  if ((variables.get("OPENCLAW_GATEWAY_PORT")?.value ?? "") !== String(DEFAULT_SPACE_OPENCLAW_PORT) && fix) {
+    await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
+    fixed.push("set OPENCLAW_GATEWAY_PORT");
+  } else if ((variables.get("OPENCLAW_GATEWAY_PORT")?.value ?? "") !== String(DEFAULT_SPACE_OPENCLAW_PORT)) {
+    issues.push(`OPENCLAW_GATEWAY_PORT is not ${DEFAULT_SPACE_OPENCLAW_PORT}`);
+  }
+  if (!variables.has("MLCLAW_ALLOWED_USERS")) {
+    const owner = repoId.split("/")[0];
+    if (fix && owner) {
+      await hub.addSpaceVariable(repoId, "MLCLAW_ALLOWED_USERS", owner);
+      fixed.push("set MLCLAW_ALLOWED_USERS");
+    } else {
+      issues.push("MLCLAW_ALLOWED_USERS is missing");
+    }
   }
   if (bucket) {
     await hub.assertBucketAccessible(bucket);
@@ -16200,10 +16236,10 @@ async function doctor(repoId, opts, hub, runtime) {
 }
 async function settings(repoId, opts, hub, runtime) {
   if (opts.gateway) {
-    throw new Error("gateway location changes must use `hclaw gateway migrate` to preserve state");
+    throw new Error("gateway location changes must use `mlclaw gateway migrate` to preserve state");
   }
   if (!opts.hardware && typeof opts.sleepTime !== "number") {
-    throw new Error("usage: hclaw settings <owner/space> [--hardware flavor] [--sleep-time seconds]");
+    throw new Error("usage: mlclaw settings <owner/space> [--hardware flavor] [--sleep-time seconds]");
   }
   if (opts.hardware && isPaidHardware(opts.hardware)) {
     await confirmPaidHardware({
@@ -16248,7 +16284,7 @@ async function setDeploymentSecrets(hub, repoId, secrets) {
 }
 async function clearSpaceGatewayDisabled(hub, repoId) {
   try {
-    await hub.deleteSpaceVariable(repoId, "HUGGINGCLAW_GATEWAY_DISABLED");
+    await hub.deleteSpaceVariable(repoId, "MLCLAW_GATEWAY_DISABLED");
   } catch (err) {
     if (err instanceof HubApiError2 && err.status === 404) {
       return;
@@ -16256,7 +16292,7 @@ async function clearSpaceGatewayDisabled(hub, repoId) {
     throw err;
   }
 }
-async function readTelegramToken(opts, runtime) {
+async function readOptionalTelegramToken(opts, runtime) {
   const direct = opts.telegramToken ?? runtime.env.TELEGRAM_BOT_TOKEN;
   if (direct) {
     return direct;
@@ -16266,28 +16302,32 @@ async function readTelegramToken(opts, runtime) {
     const match = raw.match(/(?:^|\n)\s*TELEGRAM_BOT_TOKEN\s*=\s*['"]?([^'"\n]+)['"]?/);
     return (match?.[1] ?? raw.trim()).trim();
   }
+  return void 0;
+}
+async function promptAgentName(runtime) {
   if (!runtime.prompt.isInteractive()) {
-    throw new Error("Telegram bot token is required; pass --telegram-token or --telegram-token-file");
+    return "mlclaw";
   }
-  const value = await runtime.prompt.password({
-    message: "Telegram bot token",
-    placeholder: "123456:ABC..."
+  const value = await runtime.prompt.text({
+    message: "Agent name",
+    placeholder: "bob",
+    initialValue: "mlclaw"
   });
-  return readPromptValue(value, "Telegram bot token");
+  return readPromptValue(value, "Agent name");
 }
 async function resolveHardware(params) {
-  const hardware = params.requestedHardware ?? TELEGRAM_HARDWARE;
-  if (!isPaidHardware(hardware)) {
-    throw new Error(`Telegram requires upgraded paid Space hardware today; use --hardware ${TELEGRAM_HARDWARE}`);
-  }
+  const hardware = params.requestedHardware;
   const sleepTime = params.requestedSleepTime ?? TELEGRAM_SLEEP_TIME;
-  await confirmPaidHardware({
-    hardware,
-    sleepTime,
-    yes: params.yes,
-    runtime: params.runtime
-  });
-  return { hardware, sleepTime };
+  if (isPaidHardware(hardware)) {
+    await confirmPaidHardware({
+      hardware,
+      sleepTime,
+      yes: params.yes,
+      runtime: params.runtime
+    });
+    return { hardware, sleepTime };
+  }
+  return typeof params.requestedSleepTime === "number" ? { hardware, sleepTime: params.requestedSleepTime } : { hardware };
 }
 async function confirmPaidHardware(params) {
   if (params.yes) {
@@ -16366,6 +16406,7 @@ export {
   DEFAULT_HARDWARE,
   DEFAULT_LOCAL_PORT,
   DEFAULT_MODEL,
+  DEFAULT_SPACE_OPENCLAW_PORT,
   LOCAL_LIVE_DIR,
   LOCAL_VOLUME_MOUNT_PATH,
   SPACE_HANDOFF_POLL_MS,

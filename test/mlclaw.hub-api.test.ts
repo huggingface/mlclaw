@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HubApi } from "../src/hclaw/hub-api.js";
+import { HubApi } from "../src/mlclaw/hub-api.js";
 
 describe("HubApi Space commits", () => {
   it("uploads files and deletes stale paths through the commit API", async () => {
@@ -13,7 +13,7 @@ describe("HubApi Space commits", () => {
     });
 
     await hub.commitSpaceFiles("alice/research", {
-      title: "Deploy Hugging Claw test",
+      title: "Deploy ML Claw test",
       files: [{ path: "README.md", content: Buffer.from("hello") }],
       deletePaths: ["old.txt"],
     });
@@ -35,7 +35,7 @@ describe("HubApi Space commits", () => {
       {
         key: "header",
         value: {
-          summary: "Deploy Hugging Claw test",
+          summary: "Deploy ML Claw test",
         },
       },
       {

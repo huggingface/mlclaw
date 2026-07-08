@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/hclaw/cli.js";
-import { DEFAULT_RUNTIME_IMAGE } from "../src/hclaw/runtime-image.js";
-import { readManifest, readSecretEnv, writeManifest, writeSecretEnv, type DeploymentManifest } from "../src/hclaw/local-config.js";
-import type { HubApi, SpaceRuntime } from "../src/hclaw/hub-api.js";
-import type { DockerRunner, DockerInspect, DockerRunParams } from "../src/hclaw/docker.js";
+import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/mlclaw/cli.js";
+import { DEFAULT_RUNTIME_IMAGE } from "../src/mlclaw/runtime-image.js";
+import { readManifest, readSecretEnv, writeManifest, writeSecretEnv, type DeploymentManifest } from "../src/mlclaw/local-config.js";
+import type { HubApi, SpaceRuntime } from "../src/mlclaw/hub-api.js";
+import type { DockerRunner, DockerInspect, DockerRunParams } from "../src/mlclaw/docker.js";
 import type { BucketEntry } from "../src/hf-bucket-client/client.js";
 
 type PromptAnswer = string | boolean;
@@ -128,9 +128,9 @@ function createFakeHub(opts: {
       bucketObjects.set(`${prefix}/runtime/status.json`, JSON.stringify({
         schemaVersion: 1,
         agent,
-        runtimeId: variables.get("HUGGINGCLAW_RUNTIME_ID")?.value ?? `space-${agent}`,
-        gatewayLocation: variables.get("HUGGINGCLAW_GATEWAY_LOCATION")?.value ?? "space",
-        runtimeImage: variables.get("HUGGINGCLAW_RUNTIME_IMAGE")?.value ?? DEFAULT_RUNTIME_IMAGE,
+        runtimeId: variables.get("MLCLAW_RUNTIME_ID")?.value ?? `space-${agent}`,
+        gatewayLocation: variables.get("MLCLAW_GATEWAY_LOCATION")?.value ?? "space",
+        runtimeImage: variables.get("MLCLAW_RUNTIME_IMAGE")?.value ?? DEFAULT_RUNTIME_IMAGE,
         startedAt: "2026-06-16T00:00:00.000Z",
         lastHeartbeatAt: "2026-06-16T00:00:01.000Z",
         lastSnapshotId: `${bucket}/snapshot.tar.zst`,
@@ -183,7 +183,7 @@ function seedValidStateSnapshot(hub: ReturnType<typeof createFakeHub>, prefix = 
 
 async function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt>["prompt"], stderr: string[] = []) {
   const docker = createFakeDocker();
-  const configRoot = await fs.mkdtemp(path.join(os.tmpdir(), "hclaw-cli-test-"));
+  const configRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-cli-test-"));
   return {
     env: {},
     stdout: { log: () => undefined },
@@ -260,13 +260,13 @@ function createFakeDocker(): DockerRunner & {
   };
 }
 
-describe("hclaw CLI", () => {
-  it("runs bootstrap as local gateway by default", async () => {
+describe("mlclaw CLI", () => {
+  it("runs bootstrap as an explicit local gateway", async () => {
     const hub = createFakeHub();
-    const { prompt, notes } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt, notes } = createPrompt([]);
 
     const runtime = await createRuntime(hub, prompt);
-    const code = await main(["--gateway-token", "gateway-token", "--no-pull"], runtime);
+    const code = await main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime);
 
     expect(code).toBe(0);
     expect(notes).toEqual([]);
@@ -276,7 +276,7 @@ describe("hclaw CLI", () => {
       name: "run",
       args: [
         expect.objectContaining({
-          containerName: "huggingclaw-research",
+          containerName: "mlclaw-research",
           image: DEFAULT_RUNTIME_IMAGE,
           volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
           liveDir: LOCAL_LIVE_DIR,
@@ -288,7 +288,7 @@ describe("hclaw CLI", () => {
     expect(manifest.localRuntimeId).toMatch(/^local-research-[a-f0-9]{16}$/);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       HUGGINGFACE_HUB_TOKEN: "hf_test_token",
-      HUGGINGCLAW_RUNTIME_ID: manifest.localRuntimeId,
+      MLCLAW_RUNTIME_ID: manifest.localRuntimeId,
       HF_TOKEN: "hf_test_token",
       OPENCLAW_MODEL: DEFAULT_MODEL,
     });
@@ -296,10 +296,10 @@ describe("hclaw CLI", () => {
 
   it("pulls the runtime image by default for a new local gateway", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt([]);
     const runtime = await createRuntime(hub, prompt);
 
-    const code = await main(["--gateway-token", "gateway-token"], runtime);
+    const code = await main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token"], runtime);
 
     expect(code).toBe(0);
     expect(runtime.dockerRunner.calls).toContainEqual({
@@ -310,11 +310,11 @@ describe("hclaw CLI", () => {
 
   it("pins the current Docker context during local bootstrap", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt([]);
     const runtime = await createRuntime(hub, prompt);
     runtime.dockerRunner.currentContextValue = "colima";
 
-    const code = await main(["--gateway-token", "gateway-token", "--no-pull"], runtime);
+    const code = await main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime);
 
     expect(code).toBe(0);
     await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
@@ -336,10 +336,14 @@ describe("hclaw CLI", () => {
 
   it("honors an explicit Docker context during local bootstrap", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt([]);
     const runtime = await createRuntime(hub, prompt);
 
     const code = await main([
+      "--gateway",
+      "local",
+      "--name",
+      "research",
       "--docker-context",
       "colima",
       "--gateway-token",
@@ -397,7 +401,7 @@ describe("hclaw CLI", () => {
     expect(stdout.join("\n")).toContain("Docker: desktop-linux");
     expect(runtime.dockerRunner.calls).toContainEqual({
       name: "inspect",
-      args: ["huggingclaw-research", "desktop-linux"],
+      args: ["mlclaw-research", "desktop-linux"],
     });
   });
 
@@ -427,38 +431,42 @@ describe("hclaw CLI", () => {
     const code = await main(["gateway", "start", "research", "--docker-context", "colima"], runtime);
 
     expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("Run `hclaw gateway rebind research --docker-context colima`");
+    expect(stderr.join("\n")).toContain("Run `mlclaw gateway rebind research --docker-context colima`");
     expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
 
   it("uses an explicit bootstrap bucket as the durable state pointer", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt([]);
     const runtime = await createRuntime(hub, prompt);
 
     const code = await main([
+      "--gateway",
+      "local",
+      "--name",
+      "research",
       "--bucket",
-      "alice/onurclawtest-data",
+      "alice/research-archive-data",
       "--gateway-token",
       "gateway-token",
       "--no-pull",
     ], runtime);
 
     expect(code).toBe(0);
-    expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/onurclawtest-data", true] });
+    expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/research-archive-data", true] });
     expect(hub.calls).not.toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
     await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
-      bucket: "alice/onurclawtest-data",
+      bucket: "alice/research-archive-data",
       space: "alice/research",
     });
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
-      OPENCLAW_HF_STATE_BUCKET: "alice/onurclawtest-data",
+      OPENCLAW_HF_STATE_BUCKET: "alice/research-archive-data",
     });
   });
 
   it("pins an existing manifest bucket during repeated bootstrap", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const runtime = await createRuntime(hub, prompt);
     await writeManifest(runtime.configRoot, {
       version: 1,
@@ -481,7 +489,7 @@ describe("hclaw CLI", () => {
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
-      "7216393410",
+      "1234567890",
       "--gateway-token",
       "gateway-token",
       "--no-pull",
@@ -496,7 +504,7 @@ describe("hclaw CLI", () => {
     });
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       OPENCLAW_HF_STATE_BUCKET: "alice/archive-data",
-      HUGGINGCLAW_RUNTIME_ID: "local-research-existing",
+      MLCLAW_RUNTIME_ID: "local-research-existing",
     });
   });
 
@@ -529,7 +537,7 @@ describe("hclaw CLI", () => {
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
-      "7216393410",
+      "1234567890",
       "--gateway-token",
       "gateway-token",
       "--no-pull",
@@ -545,13 +553,13 @@ describe("hclaw CLI", () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([
       "telegram-token",
-      "7216393410",
+      "1234567890",
       "telegram-token",
-      "7216393410",
+      "1234567890",
     ]);
     const runtime = await createRuntime(hub, prompt);
 
-    await expect(main(["--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     const original = await readManifest(runtime.configRoot, "research");
     hub.bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
       schemaVersion: 1,
@@ -582,7 +590,7 @@ describe("hclaw CLI", () => {
       "run",
     ]);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
-      HUGGINGCLAW_RUNTIME_ID: original.localRuntimeId,
+      MLCLAW_RUNTIME_ID: original.localRuntimeId,
     });
   });
 
@@ -591,7 +599,7 @@ describe("hclaw CLI", () => {
     hub.bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
       schemaVersion: 1,
       agent: "research",
-      runtimeId: "space-research",
+      runtimeId: "space-someone-else",
       gatewayLocation: "space",
       runtimeImage: "example/runtime:old",
       startedAt: new Date().toISOString(),
@@ -622,7 +630,7 @@ describe("hclaw CLI", () => {
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
-      "7216393410",
+      "1234567890",
       "--gateway-token",
       "gateway-token",
       "--no-pull",
@@ -656,7 +664,7 @@ describe("hclaw CLI", () => {
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
-      "7216393410",
+      "1234567890",
       "--gateway-token",
       "gateway-token",
       "--yes",
@@ -670,9 +678,19 @@ describe("hclaw CLI", () => {
 
   it("runs bootstrap as Space gateway when requested and prompts for paid hardware", async () => {
     const hub = createFakeHub();
-    const { prompt, notes } = createPrompt(["telegram-token", "7216393410", true]);
+    const { prompt, notes } = createPrompt([true]);
 
-    const code = await main(["bootstrap", "--gateway", "space", "--gateway-token", "gateway-token"], await createRuntime(hub, prompt));
+    const code = await main([
+      "bootstrap",
+      "--gateway",
+      "space",
+      "--name",
+      "research",
+      "--telegram-token",
+      "telegram-token",
+      "--telegram-user-id",
+      "1234567890",
+    ], await createRuntime(hub, prompt));
 
     expect(code).toBe(0);
     expect(notes).toEqual([
@@ -687,7 +705,7 @@ describe("hclaw CLI", () => {
       args: [
         "alice/research",
         {
-          private: true,
+          private: false,
           hardware: "cpu-upgrade",
           sleepTimeSeconds: -1,
         },
@@ -699,7 +717,7 @@ describe("hclaw CLI", () => {
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_GATEWAY_LOCATION", "space"],
+      args: ["alice/research", "MLCLAW_GATEWAY_LOCATION", "space"],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
@@ -707,7 +725,7 @@ describe("hclaw CLI", () => {
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
-      args: ["alice/research", "TELEGRAM_ALLOWED_USERS", "7216393410"],
+      args: ["alice/research", "TELEGRAM_ALLOWED_USERS", "1234567890"],
     });
   });
 
@@ -723,7 +741,7 @@ describe("hclaw CLI", () => {
       "--telegram-token",
       "telegram-token",
       "--telegram-user-id",
-      "7216393410",
+      "1234567890",
       "--gateway-token",
       "gateway-token",
     ], await createRuntime(hub, prompt, stderr));
@@ -733,22 +751,24 @@ describe("hclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
   });
 
-  it("fails non-interactive bootstrap without Telegram token", async () => {
+  it("runs non-interactive browser Space bootstrap without Telegram", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
 
     const code = await main([
       "bootstrap",
-      "--telegram-user-id",
-      "7216393410",
-      "--gateway-token",
-      "gateway-token",
+      "--name",
+      "research",
     ], await createRuntime(hub, prompt, stderr));
 
-    expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("Telegram bot token is required");
-    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+    expect(code).toBe(0);
+    expect(stderr.join("\n")).toBe("");
+    expect(hub.calls).toContainEqual({
+      name: "createDockerSpace",
+      args: ["alice/research", { private: false, hardware: "cpu-basic" }],
+    });
+    expect(hub.calls.some((call) => call.name === "addSpaceSecret" && call.args[1] === "TELEGRAM_BOT_TOKEN")).toBe(false);
   });
 
   it("updates Space hardware settings through the Hugging Face settings API", async () => {
@@ -785,13 +805,13 @@ describe("hclaw CLI", () => {
     ], await createRuntime(hub, prompt, stderr));
 
     expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("gateway location changes must use `hclaw gateway migrate`");
+    expect(stderr.join("\n")).toContain("gateway location changes must use `mlclaw gateway migrate`");
   });
 
   it("uses the current runtime image during update by default", async () => {
     const hub = createFakeHub();
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
-    await hub.addSpaceVariable("alice/research", "HUGGINGCLAW_RUNTIME_IMAGE", "registry.example/huggingclaw:test");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", "registry.example/mlclaw:test");
     const { prompt } = createPrompt([]);
     const baseRuntime = await createRuntime(hub, prompt);
     const pushed: Array<{ runtimeImage: string | undefined }> = [];
@@ -809,22 +829,22 @@ describe("hclaw CLI", () => {
     expect(pushed).toEqual([{ runtimeImage: DEFAULT_RUNTIME_IMAGE }]);
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE],
+      args: ["alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_GATEWAY_LOCATION", "space"],
+      args: ["alice/research", "MLCLAW_GATEWAY_LOCATION", "space"],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_RUNTIME_ID", "space-research"],
+      args: ["alice/research", "MLCLAW_RUNTIME_ID", "space-research"],
     });
   });
 
   it("honors an explicit runtime image override during update", async () => {
     const hub = createFakeHub();
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
-    await hub.addSpaceVariable("alice/research", "HUGGINGCLAW_RUNTIME_IMAGE", "registry.example/huggingclaw:old");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", "registry.example/mlclaw:old");
     const { prompt } = createPrompt([]);
     const baseRuntime = await createRuntime(hub, prompt);
     const pushed: Array<{ runtimeImage: string | undefined }> = [];
@@ -836,30 +856,30 @@ describe("hclaw CLI", () => {
       },
     };
 
-    const code = await main(["update", "alice/research", "--runtime-image", "registry.example/huggingclaw:new"], runtime);
+    const code = await main(["update", "alice/research", "--runtime-image", "registry.example/mlclaw:new"], runtime);
 
     expect(code).toBe(0);
-    expect(pushed).toEqual([{ runtimeImage: "registry.example/huggingclaw:new" }]);
+    expect(pushed).toEqual([{ runtimeImage: "registry.example/mlclaw:new" }]);
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_RUNTIME_IMAGE", "registry.example/huggingclaw:new"],
+      args: ["alice/research", "MLCLAW_RUNTIME_IMAGE", "registry.example/mlclaw:new"],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_GATEWAY_LOCATION", "space"],
+      args: ["alice/research", "MLCLAW_GATEWAY_LOCATION", "space"],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_RUNTIME_ID", "space-research"],
+      args: ["alice/research", "MLCLAW_RUNTIME_ID", "space-research"],
     });
   });
 
   it("migrates local to Space and back without starting both gateways", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const runtime = await createRuntime(hub, prompt);
 
-    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     hub.calls.length = 0;
     runtime.dockerRunner.calls.length = 0;
 
@@ -902,7 +922,7 @@ describe("hclaw CLI", () => {
 
     const disableIndex = hub.calls.findIndex((call) =>
       call.name === "addSpaceVariable" &&
-      call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED" &&
+      call.args[1] === "MLCLAW_GATEWAY_DISABLED" &&
       call.args[2] === "1"
     );
     const handoffIndex = hub.calls.findIndex((call) =>
@@ -951,9 +971,9 @@ describe("hclaw CLI", () => {
       OPENCLAW_HF_STATE_BUCKET: "alice/research-data",
       OPENCLAW_AGENT_NAME: "research",
       OPENCLAW_MODEL: "test-model",
-      HUGGINGCLAW_GATEWAY_LOCATION: "space",
-      HUGGINGCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
-      HUGGINGCLAW_RUNTIME_ID: "space-research",
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
+      MLCLAW_RUNTIME_ID: "space-research",
     });
 
     await expect(main([
@@ -987,10 +1007,10 @@ describe("hclaw CLI", () => {
 
   it("adopts a state bucket for a local deployment and resets stale live disk", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const runtime = await createRuntime(hub, prompt);
 
-    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     seedValidStateSnapshot(hub);
     hub.calls.length = 0;
     runtime.dockerRunner.calls.length = 0;
@@ -1000,17 +1020,17 @@ describe("hclaw CLI", () => {
       "adopt",
       "research",
       "--bucket",
-      "alice/onurclawtest-data",
+      "alice/research-archive-data",
       "--yes",
       "--no-pull",
     ], runtime)).resolves.toBe(0);
 
     await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
-      bucket: "alice/onurclawtest-data",
+      bucket: "alice/research-archive-data",
       gatewayLocation: "local",
     });
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
-      OPENCLAW_HF_STATE_BUCKET: "alice/onurclawtest-data",
+      OPENCLAW_HF_STATE_BUCKET: "alice/research-archive-data",
     });
     const stopIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "stop");
     const removeIndex = runtime.dockerRunner.calls.findIndex((call) => call.name === "rm");
@@ -1069,12 +1089,12 @@ describe("hclaw CLI", () => {
     expect(disableRestartIndex).toBeGreaterThanOrEqual(0);
     expect(runtime.dockerRunner.calls[disableRestartIndex]).toEqual({
       name: "disableRestart",
-      args: ["huggingclaw-research", "desktop-linux"],
+      args: ["mlclaw-research", "desktop-linux"],
     });
     expect(stopIndex).toBeGreaterThan(disableRestartIndex);
     expect(runtime.dockerRunner.calls[stopIndex]).toEqual({
       name: "stop",
-      args: ["huggingclaw-research", "desktop-linux"],
+      args: ["mlclaw-research", "desktop-linux"],
     });
     expect(removeIndex).toBeGreaterThan(stopIndex);
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
@@ -1279,7 +1299,7 @@ describe("hclaw CLI", () => {
     expect(stopIndex).toBeGreaterThanOrEqual(0);
     expect(runtime.dockerRunner.calls[stopIndex]).toEqual({
       name: "stop",
-      args: ["huggingclaw-research", "desktop-linux"],
+      args: ["mlclaw-research", "desktop-linux"],
     });
     expect(runIndex).toBeGreaterThan(stopIndex);
     expect(runtime.dockerRunner.calls[runIndex]).toEqual({
@@ -1382,10 +1402,10 @@ describe("hclaw CLI", () => {
 
   it("migrates with a custom bucket prefix and clock-skewed handoff ack", async () => {
     const hub = createFakeHub({ ackCompletedAt: "2026-06-15T23:59:59.000Z" });
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const runtime = await createRuntime(hub, prompt);
 
-    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     await writeSecretEnv(runtime.configRoot, "research", {
       ...await readSecretEnv(runtime.configRoot, "research"),
       OPENCLAW_HF_STATE_PREFIX: "custom/prefix",
@@ -1421,11 +1441,11 @@ describe("hclaw CLI", () => {
 
   it("blocks local to Space migration when another live runtime owns the lease", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const stderr: string[] = [];
     const runtime = await createRuntime(hub, prompt, stderr);
 
-    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     hub.calls.length = 0;
     runtime.dockerRunner.calls.length = 0;
     hub.bucketObjects.set("openclaw-state/runtime/status.json", JSON.stringify({
@@ -1454,11 +1474,11 @@ describe("hclaw CLI", () => {
 
   it("blocks Space to local migration when another live runtime owns the lease", async () => {
     const hub = createFakeHub();
-    const { prompt } = createPrompt(["telegram-token", "7216393410"]);
+    const { prompt } = createPrompt(["telegram-token", "1234567890"]);
     const stderr: string[] = [];
     const runtime = await createRuntime(hub, prompt, stderr);
 
-    await expect(main(["bootstrap", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime)).resolves.toBe(0);
     await expect(main([
       "gateway",
       "migrate",
@@ -1491,7 +1511,7 @@ describe("hclaw CLI", () => {
     expect(stderr.join("\n")).toContain("another gateway appears active");
     expect(hub.calls.some((call) =>
       call.name === "addSpaceVariable" &&
-      call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED"
+      call.args[1] === "MLCLAW_GATEWAY_DISABLED"
     )).toBe(false);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
@@ -1521,7 +1541,7 @@ describe("hclaw CLI", () => {
 
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
-      args: ["alice/research", "HUGGINGCLAW_GATEWAY_DISABLED", "1"],
+      args: ["alice/research", "MLCLAW_GATEWAY_DISABLED", "1"],
     });
     expect(hub.calls.some((call) =>
       call.name === "bucket.uploadFiles" &&
@@ -1564,7 +1584,7 @@ describe("hclaw CLI", () => {
 
     const disableIndex = hub.calls.findIndex((call) =>
       call.name === "addSpaceVariable" &&
-      call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED"
+      call.args[1] === "MLCLAW_GATEWAY_DISABLED"
     );
     const handoffIndex = hub.calls.findIndex((call) =>
       call.name === "bucket.uploadFiles" &&
@@ -1602,7 +1622,7 @@ describe("hclaw CLI", () => {
     expect(stderr.join("\n")).toContain("bucket read failed");
     expect(hub.calls.some((call) =>
       call.name === "addSpaceVariable" &&
-      call.args[1] === "HUGGINGCLAW_GATEWAY_DISABLED"
+      call.args[1] === "MLCLAW_GATEWAY_DISABLED"
     )).toBe(false);
     expect(hub.calls.some((call) => call.name === "pauseSpace")).toBe(false);
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTelegramBot } from "../src/hclaw/telegram.js";
+import { getTelegramBot } from "../src/mlclaw/telegram.js";
 
 describe("Telegram bot discovery", () => {
   it("retries transient getMe fetch failures", async () => {
