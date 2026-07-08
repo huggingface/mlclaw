@@ -15505,6 +15505,9 @@ async function confirmBootstrapPlan(params) {
   } else {
     lines.push(`Local runtime: ${containerNameFor(params.manifest.agent)} (${params.hardware})`);
   }
+  if (params.bucketPlan.exists || params.spacePlan?.exists) {
+    lines.push(`Fresh deployment: use a different name, for example --name ${params.manifest.agent}-2`);
+  }
   lines.push(`Model: ${params.manifest.model}`);
   lines.push(`Runtime image: ${params.manifest.runtimeImage}`);
   params.runtime.prompt.note(lines.join("\n"), "Bootstrap plan");

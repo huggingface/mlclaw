@@ -860,6 +860,10 @@ describe("mlclaw CLI", () => {
       title: "Bootstrap plan",
       message: expect.stringContaining("Space: alice/mlclaw (exists; files, variables, secrets, and runtime will be updated)"),
     }));
+    expect(notes).toContainEqual(expect.objectContaining({
+      title: "Bootstrap plan",
+      message: expect.stringContaining("Fresh deployment: use a different name, for example --name mlclaw-2"),
+    }));
     expect(stdout.join("\n")).toContain("Using existing private bucket alice/mlclaw-data");
     expect(hub.calls).toContainEqual({ name: "bucketExists", args: ["alice/mlclaw-data"] });
     expect(hub.calls).toContainEqual({ name: "spaceExists", args: ["alice/mlclaw"] });
