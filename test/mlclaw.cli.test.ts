@@ -866,6 +866,14 @@ describe("mlclaw CLI", () => {
       name: "addSpaceVariable",
       args: ["alice/research", "MLCLAW_RUNTIME_ID", "space-research"],
     });
+    const allowedUsersIndex = hub.calls.findIndex((call) =>
+      call.name === "addSpaceVariable" &&
+      call.args[0] === "alice/research" &&
+      call.args[1] === "MLCLAW_ALLOWED_USERS"
+    );
+    const restartIndex = hub.calls.findIndex((call) => call.name === "restartSpace");
+    expect(allowedUsersIndex).toBeGreaterThanOrEqual(0);
+    expect(restartIndex).toBeGreaterThan(allowedUsersIndex);
   });
 
   it("honors an explicit runtime image override during update", async () => {

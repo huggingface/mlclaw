@@ -41,6 +41,17 @@ export function unauthorizedPage(username: string): string {
   `);
 }
 
+export function adminRequiredPage(username: string): string {
+  return page("ML Claw Admin", `
+    <main>
+      <h1>Admin required</h1>
+      <p>The signed-in Hugging Face account <strong>${escapeHtml(username)}</strong> can use this Space, but cannot change credentials.</p>
+      <p class="muted">Set <code>MLCLAW_ADMINS</code> to a comma-separated list of admin usernames.</p>
+      <p><a href="/">Back to gateway</a></p>
+    </main>
+  `);
+}
+
 export function openAiPage(configured: boolean, persistent: boolean): string {
   return page("OpenAI Credentials", `
     <main>

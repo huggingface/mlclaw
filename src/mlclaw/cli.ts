@@ -5,7 +5,7 @@ import process from "node:process";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { Command, CommanderError, InvalidArgumentError } from "commander";
+import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
 import { cancel, confirm, intro, isCancel, note, outro, password, text } from "@clack/prompts";
 import { findSkillsRoot, handleSkillflag } from "skillflag";
 import { readToken } from "./auth.js";
@@ -201,7 +201,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
     .option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL)
     .option("--runtime-image <image>", "ML Claw runtime image")
-    .option("--gateway-token <token>", "OpenClaw gateway token for local gateway mode")
+    .addOption(new Option("--gateway-token <token>").hideHelp())
     .option("--docker-context <name>", "Docker context for local gateway mode")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if a stale runtime lease is present", false)
@@ -370,15 +370,11 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const names = namesFor(owner, agentName);
   const model = opts.model ?? DEFAULT_MODEL;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
-  const providedGatewayToken = opts.gatewayToken;
   const sessionSecret = randomBytes(48).toString("base64url");
   const now = runtime.now().toISOString();
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const gatewayLocation = requestedGatewayLocation ?? existingManifest?.gatewayLocation ?? DEFAULT_GATEWAY_LOCATION;
-  const gatewayToken = gatewayLocation === "local"
-    ? providedGatewayToken ?? randomBytes(32).toString("base64url")
-    : providedGatewayToken;
   if (opts.dockerContext && gatewayLocation !== "local") {
     throw new Error("--docker-context only applies to local gateway mode");
   }
@@ -420,7 +416,6 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     hfToken,
     ...(telegramToken ? { telegramToken } : {}),
     ...(telegramUserId ? { telegramUserId } : {}),
-    ...(gatewayToken ? { gatewayToken } : {}),
     sessionSecret,
     bucket,
     model,
@@ -489,13 +484,6 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     runtime.stdout.log(`Docker:  ${manifest.localGateway.dockerContext}`);
   }
   runtime.stdout.log(`Runtime image: ${runtimeImage}`);
-  if (gatewayLocation === "local" && !providedGatewayToken && gatewayToken) {
-    runtime.stdout.log("");
-    runtime.stdout.log("Generated OpenClaw gateway token:");
-    runtime.stdout.log(`  ${gatewayToken}`);
-    runtime.stdout.log("");
-    runtime.stdout.log("Save this token now. The local gateway env file stores it on this machine.");
-  }
   runtime.prompt.outro(gatewayLocation === "space"
     ? "Restart requested. Build logs may take a few minutes to appear."
     : "Local gateway start requested.");
@@ -714,7 +702,6 @@ function deploymentSecrets(params: {
   hfToken: string;
   telegramToken?: string;
   telegramUserId?: string;
-  gatewayToken?: string;
   sessionSecret: string;
   bucket: string;
   model: string;
@@ -740,7 +727,6 @@ function deploymentSecrets(params: {
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     ...(params.telegramToken ? { TELEGRAM_BOT_TOKEN: params.telegramToken } : {}),
     ...(params.telegramUserId ? { TELEGRAM_ALLOWED_USERS: params.telegramUserId } : {}),
-    ...(params.gatewayToken ? { OPENCLAW_GATEWAY_TOKEN: params.gatewayToken } : {}),
     ...(params.bucketPrefix ? { OPENCLAW_HF_STATE_PREFIX: params.bucketPrefix } : {}),
     ...(params.telegramProxy ? { TELEGRAM_PROXY: params.telegramProxy } : {}),
     ...(params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}),
@@ -1431,8 +1417,8 @@ async function update(
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
-  await hub.restartSpace(repoId, true);
   await doctor(repoId, { fix: true }, hub, runtime);
+  await hub.restartSpace(repoId, true);
 }
 
 async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime: Required<CliRuntime>): Promise<void> {

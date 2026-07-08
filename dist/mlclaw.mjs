@@ -15182,7 +15182,7 @@ function createProgram(runtimeOverrides = {}) {
   program2.name("mlclaw").description("Deploy OpenClaw to a Hugging Face Space and private bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "ML Claw runtime image").option("--gateway-token <token>", "OpenClaw gateway token for local gateway mode").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
+  program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "ML Claw runtime image").addOption(new Option("--gateway-token <token>").hideHelp()).option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
   program2.command("update").description("Regenerate and upload current ML Claw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--force", "Update even if the Space does not look like ML Claw", false).action(async (repoId, opts) => {
@@ -15257,13 +15257,11 @@ async function bootstrap(opts, runtime) {
   const names = namesFor(owner, agentName);
   const model = opts.model ?? DEFAULT_MODEL;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
-  const providedGatewayToken = opts.gatewayToken;
   const sessionSecret = randomBytes(48).toString("base64url");
   const now = runtime.now().toISOString();
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const gatewayLocation = requestedGatewayLocation ?? existingManifest?.gatewayLocation ?? DEFAULT_GATEWAY_LOCATION;
-  const gatewayToken = gatewayLocation === "local" ? providedGatewayToken ?? randomBytes(32).toString("base64url") : providedGatewayToken;
   if (opts.dockerContext && gatewayLocation !== "local") {
     throw new Error("--docker-context only applies to local gateway mode");
   }
@@ -15302,7 +15300,6 @@ async function bootstrap(opts, runtime) {
     hfToken,
     ...telegramToken ? { telegramToken } : {},
     ...telegramUserId ? { telegramUserId } : {},
-    ...gatewayToken ? { gatewayToken } : {},
     sessionSecret,
     bucket,
     model,
@@ -15368,13 +15365,6 @@ async function bootstrap(opts, runtime) {
     runtime.stdout.log(`Docker:  ${manifest.localGateway.dockerContext}`);
   }
   runtime.stdout.log(`Runtime image: ${runtimeImage}`);
-  if (gatewayLocation === "local" && !providedGatewayToken && gatewayToken) {
-    runtime.stdout.log("");
-    runtime.stdout.log("Generated OpenClaw gateway token:");
-    runtime.stdout.log(`  ${gatewayToken}`);
-    runtime.stdout.log("");
-    runtime.stdout.log("Save this token now. The local gateway env file stores it on this machine.");
-  }
   runtime.prompt.outro(gatewayLocation === "space" ? "Restart requested. Build logs may take a few minutes to appear." : "Local gateway start requested.");
 }
 async function resolveBootstrapBucket(params) {
@@ -15557,7 +15547,6 @@ function deploymentSecrets(params) {
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     ...params.telegramToken ? { TELEGRAM_BOT_TOKEN: params.telegramToken } : {},
     ...params.telegramUserId ? { TELEGRAM_ALLOWED_USERS: params.telegramUserId } : {},
-    ...params.gatewayToken ? { OPENCLAW_GATEWAY_TOKEN: params.gatewayToken } : {},
     ...params.bucketPrefix ? { OPENCLAW_HF_STATE_PREFIX: params.bucketPrefix } : {},
     ...params.telegramProxy ? { TELEGRAM_PROXY: params.telegramProxy } : {},
     ...params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}
@@ -16130,8 +16119,8 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
-  await hub.restartSpace(repoId, true);
   await doctor(repoId, { fix: true }, hub, runtime);
+  await hub.restartSpace(repoId, true);
 }
 async function doctor(repoId, opts, hub, runtime) {
   if (!repoId.includes("/") && await manifestExists(runtime.configRoot, repoId)) {

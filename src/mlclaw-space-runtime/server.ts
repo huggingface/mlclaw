@@ -13,7 +13,7 @@ import {
   validateOpenAiApiKey,
   writeEphemeralOpenAiCredential,
 } from "./openai-credentials.js";
-import { loginPage, openAiPage, statusJson, templatePage, unauthorizedPage } from "./pages.js";
+import { adminRequiredPage, loginPage, openAiPage, statusJson, templatePage, unauthorizedPage } from "./pages.js";
 import { proxyHttp, proxyWebSocket, rejectWebSocket } from "./proxy.js";
 
 const SESSION_COOKIE = "mlclaw_session";
@@ -145,6 +145,10 @@ export class SpaceRuntimeServer {
       return;
     }
     if (url.pathname === "/mlclaw/openai") {
+      if (!this.isAdmin(session.username)) {
+        this.sendHtml(res, adminRequiredPage(session.username), 403);
+        return;
+      }
       if (req.method === "GET") {
         this.sendHtml(res, openAiPage(
           openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
@@ -279,6 +283,10 @@ export class SpaceRuntimeServer {
 
   private isAllowed(username: string): boolean {
     return this.config.allowAnySignedIn || this.config.allowedUsers.includes(username);
+  }
+
+  private isAdmin(username: string): boolean {
+    return this.config.adminUsers.includes(username);
   }
 
   private async sendAsset(res: http.ServerResponse, file: string): Promise<void> {

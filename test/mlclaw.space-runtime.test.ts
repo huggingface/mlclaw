@@ -107,6 +107,52 @@ describe("ML Claw Space runtime", () => {
     expect(mode).toBe(0o600);
   });
 
+  it("requires an admin session before storing OpenAI credentials", async () => {
+    const captured: unknown[] = [];
+    const hubPort = await freePort();
+    const hub = http.createServer((req, res) => {
+      req.on("data", (chunk) => {
+        captured.push(String(chunk));
+      });
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("{}");
+      });
+    });
+    await listen(hub, hubPort);
+    cleanups.push(() => closeServer(hub));
+
+    const config = await testConfig({
+      allowedUsers: ["alice", "bob"],
+      adminUsers: ["alice"],
+      hfToken: "hf_test",
+      hubUrl: `http://127.0.0.1:${hubPort}`,
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+    const cookie = createSignedCookie({
+      name: "mlclaw_session",
+      secret: config.sessionSecret,
+      maxAgeSeconds: 60,
+      secure: false,
+    }, { username: "bob" });
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/openai`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ apiKey: `sk-${"a".repeat(32)}` }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toContain("Admin required");
+    expect(captured).toEqual([]);
+    await expect(fs.access(config.openaiCredentialFile)).rejects.toThrow();
+  });
+
   it("exits the wrapper when OpenClaw exits unexpectedly", async () => {
     const exitCodes: number[] = [];
     const config = await testConfig({
