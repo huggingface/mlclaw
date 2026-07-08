@@ -23,6 +23,8 @@ describe("generated Space repository", () => {
       "Dockerfile",
       "README.md",
       "assets/mlclaw.svg",
+      "assets/hf-tooling/manifest.json",
+      "assets/hf-tooling/skills/hf-cli/SKILL.md",
     ];
 
     for (const file of required) {
@@ -55,6 +57,8 @@ describe("generated Space repository", () => {
       "Dockerfile",
       "README.md",
       "assets/mlclaw.svg",
+      "assets/hf-tooling/manifest.json",
+      "assets/hf-tooling/skills/hf-cli/SKILL.md",
       "runtime/entrypoint.sh",
       "runtime/hf-state-sync.js",
       "runtime/hf-tooling-seed.js",
