@@ -28,6 +28,39 @@ describe("ML Claw Space runtime", () => {
     expect(await response.text()).toContain("Sign in with Hugging Face");
   });
 
+  it("requires an authenticated allowed session before returning deployment status", async () => {
+    const config = await testConfig();
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const anonymous = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`);
+
+    expect(anonymous.status).toBe(200);
+    expect(anonymous.headers.get("content-type")).toContain("text/html");
+    expect(await anonymous.text()).toContain("Sign in with Hugging Face");
+
+    const cookie = createSignedCookie({
+      name: "mlclaw_session",
+      secret: config.sessionSecret,
+      maxAgeSeconds: 60,
+      secure: false,
+    }, { username: "alice" });
+    const authenticated = await fetch(`http://127.0.0.1:${config.port}/mlclaw/status`, {
+      headers: { cookie },
+    });
+
+    expect(authenticated.status).toBe(200);
+    expect(authenticated.headers.get("content-type")).toContain("application/json");
+    expect(await authenticated.json()).toMatchObject({
+      mode: "app",
+      stateBucket: "alice/research-data",
+      auth: {
+        allowedUsers: ["alice"],
+      },
+    });
+  });
+
   it("proxies browser traffic as an authenticated trusted proxy user", async () => {
     const openclawPort = await freePort();
     const upstream = http.createServer((req, res) => {

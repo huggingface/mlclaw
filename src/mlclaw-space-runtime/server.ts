@@ -126,15 +126,6 @@ export class SpaceRuntimeServer {
       res.end();
       return;
     }
-    if (url.pathname === "/mlclaw/status") {
-      this.sendJson(res, 200, statusJson({
-        config: this.config,
-        openclawRunning: Boolean(this.openclaw && !this.openclaw.killed),
-        openAiConfigured: openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
-      }));
-      return;
-    }
-
     const session = this.readSession(req);
     if (!session) {
       this.sendHtml(res, loginPage(this.config));
@@ -142,6 +133,14 @@ export class SpaceRuntimeServer {
     }
     if (!this.isAllowed(session.username)) {
       this.sendHtml(res, unauthorizedPage(session.username), 403);
+      return;
+    }
+    if (url.pathname === "/mlclaw/status") {
+      this.sendJson(res, 200, statusJson({
+        config: this.config,
+        openclawRunning: Boolean(this.openclaw && !this.openclaw.killed),
+        openAiConfigured: openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
+      }));
       return;
     }
     if (url.pathname === "/mlclaw/openai") {
