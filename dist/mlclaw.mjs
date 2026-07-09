@@ -15354,7 +15354,7 @@ function createProgram(runtimeOverrides = {}) {
   gateway.command("logs").argument("<agent>", "Agent name").option("--tail <lines>", "Number of log lines", parseInteger, 200).action(async (agent, opts) => {
     await gatewayLogs(agent, opts, runtime);
   });
-  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Create the Hugging Face Space as public instead of private", false).option("--docker-context <name>", "Docker context for local gateway startup when migrating to local").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
+  gateway.command("migrate").argument("<agent>", "Agent name").requiredOption("--to <local|space>", "Target gateway location").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Create the Hugging Face Space as public instead of private", false).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--docker-context <name>", "Docker context for local gateway startup when migrating to local").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (agent, opts) => {
     await gatewayMigrate(agent, opts, runtime);
   });
   gateway.command("rebind").argument("<agent>", "Agent name").requiredOption("--docker-context <name>", "Target Docker context").option("--no-pull", "Do not docker pull before starting the rebound local gateway").option("--takeover", "Rebind even if the old Docker context is unavailable", false).action(async (agent, opts) => {
@@ -15750,7 +15750,9 @@ async function stateAdopt(agent, opts, runtime) {
       MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
     });
     await ensureSpaceStateVolume(hub, updated.space, bucket);
-    await deleteStaleSpaceTokenSecrets(hub, updated.space);
+    if (canDeleteBroadTokenSecrets({ model: updated.model, routerTokenPresent: hasRouterTokenSecretRecord(secrets) })) {
+      await deleteStaleSpaceTokenSecrets(hub, updated.space);
+    }
     await clearSpaceGatewayDisabled(hub, updated.space);
     if (bucketChanged) {
       await hub.restartSpace(updated.space, true);
@@ -15892,7 +15894,11 @@ async function deploySpaceGateway(params) {
     ...secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {},
     ...secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}
   });
-  await deleteStaleSpaceTokenSecrets(hub, manifest.space);
+  if (canDeleteBroadTokenSecrets({ model: manifest.model, routerTokenPresent: hasRouterTokenSecretRecord(secrets) })) {
+    await deleteStaleSpaceTokenSecrets(hub, manifest.space);
+  } else {
+    runtime.stdout.log("Keeping existing broad Hub token secrets until MLCLAW_ROUTER_TOKEN is configured for Router inference");
+  }
   await hub.restartSpace(manifest.space, true);
   return { runtimeImage: spaceRuntimeRef };
 }
@@ -16046,6 +16052,18 @@ async function gatewayMigrate(agent, opts, runtime) {
     updatedAt: runtime.now().toISOString()
   };
   if (target === "space") {
+    const routerToken = await resolveRouterToken({
+      opts,
+      runtime,
+      gatewayLocation: "space",
+      model: updated.model
+    });
+    const deploymentSecrets2 = {
+      ...secrets,
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      ...routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}
+    };
     const paidHardware = await resolveHardware({
       requestedHardware: opts.hardware ?? (secrets.TELEGRAM_BOT_TOKEN ? TELEGRAM_HARDWARE : DEFAULT_HARDWARE),
       ...typeof opts.sleepTime === "number" ? { requestedSleepTime: opts.sleepTime } : secrets.TELEGRAM_BOT_TOKEN ? { requestedSleepTime: TELEGRAM_SLEEP_TIME } : {},
@@ -16068,11 +16086,7 @@ async function gatewayMigrate(agent, opts, runtime) {
       runtime,
       hfToken: token,
       manifest: updated,
-      secrets: {
-        ...secrets,
-        MLCLAW_GATEWAY_LOCATION: "space",
-        MLCLAW_RUNTIME_IMAGE: updated.runtimeImage
-      },
+      secrets: deploymentSecrets2,
       allowedUsers: me2.name,
       hardware: paidHardware.hardware,
       publicSpace: Boolean(opts.publicSpace),
@@ -16080,7 +16094,7 @@ async function gatewayMigrate(agent, opts, runtime) {
       ...templateRuntimeImage ? { templateRuntimeImage } : {}
     });
     await writeSecretEnv(runtime.configRoot, agent, {
-      ...secrets,
+      ...deploymentSecrets2,
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(agent)
@@ -16540,9 +16554,16 @@ async function doctor(repoId, opts, hub, runtime) {
   }
   const staleTokenSecrets = ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].filter((key) => secrets.has(key));
   if (staleTokenSecrets.length > 0) {
-    if (fix) {
+    const model = variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL;
+    const canDelete = canDeleteBroadTokenSecrets({
+      model,
+      routerTokenPresent: hasRouterTokenSecretMap(secrets)
+    });
+    if (fix && canDelete) {
       await deleteStaleSpaceTokenSecrets(hub, repoId);
       fixed.push(`deleted stale secret${staleTokenSecrets.length === 1 ? "" : "s"} ${staleTokenSecrets.join(", ")}`);
+    } else if (fix) {
+      issues.push(`stale broad Hub token secret${staleTokenSecrets.length === 1 ? "" : "s"} present: ${staleTokenSecrets.join(", ")}; add MLCLAW_ROUTER_TOKEN before removing`);
     } else {
       issues.push(`stale broad Hub token secret${staleTokenSecrets.length === 1 ? "" : "s"} present: ${staleTokenSecrets.join(", ")}`);
     }
@@ -16708,8 +16729,17 @@ async function deleteStaleSpaceTokenSecrets(hub, repoId) {
     hub.deleteSpaceSecret(repoId, "HUGGINGFACE_HUB_TOKEN")
   ]);
 }
+function canDeleteBroadTokenSecrets(params) {
+  return params.routerTokenPresent || !isHuggingFaceRouterModel(params.model);
+}
+function hasRouterTokenSecretRecord(secrets) {
+  return Boolean(secrets.MLCLAW_ROUTER_TOKEN || secrets.HF_ROUTER_TOKEN);
+}
+function hasRouterTokenSecretMap(secrets) {
+  return secrets.has("MLCLAW_ROUTER_TOKEN") || secrets.has("HF_ROUTER_TOKEN");
+}
 async function ensureSpaceStateVolume(hub, repoId, bucket) {
-  const runtime = await hub.getSpaceRuntime(repoId).catch(() => ({ volumes: [] }));
+  const runtime = await hub.getSpaceRuntime(repoId);
   await hub.setSpaceVolumes(repoId, mergeStateVolume(runtime.volumes ?? [], bucket));
 }
 function mergeStateVolume(existing, bucket) {

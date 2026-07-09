@@ -34,6 +34,7 @@ function createFakeHub(opts: {
   acknowledgeHandoff?: boolean;
   ackCompletedAt?: string;
   downloadFileError?: Error;
+  getSpaceRuntimeError?: Error;
   spaceRuntime?: SpaceRuntime;
   existingBuckets?: string[];
   existingSpaces?: string[];
@@ -161,6 +162,9 @@ function createFakeHub(opts: {
     },
     async getSpaceRuntime(): Promise<SpaceRuntime> {
       calls.push({ name: "getSpaceRuntime", args: [] });
+      if (opts.getSpaceRuntimeError) {
+        throw opts.getSpaceRuntimeError;
+      }
       return opts.spaceRuntime ?? { stage: "RUNNING", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1, volumes };
     },
     async setSpaceVolumes(repoId: string, nextVolumes: typeof volumes) {
@@ -881,6 +885,26 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
   });
 
+  it("does not overwrite Space volumes when runtime volume metadata cannot be read", async () => {
+    const hub = createFakeHub({
+      getSpaceRuntimeError: new Error("runtime metadata unavailable"),
+    });
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("runtime metadata unavailable");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
+  });
+
   it("shows existing bucket and Space actions before bootstrap updates resources", async () => {
     const hub = createFakeHub({
       existingBuckets: ["alice/mlclaw-data"],
@@ -1241,6 +1265,7 @@ describe("mlclaw CLI", () => {
     await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
     await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_old");
     await hub.addSpaceSecret("alice/research", "HUGGINGFACE_HUB_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router");
     await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
     hub.calls.length = 0;
 
@@ -1272,6 +1297,35 @@ describe("mlclaw CLI", () => {
         { type: "bucket", source: "alice/research-data", mountPath: "/data/mlclaw-state", readOnly: false },
       ]],
     });
+  });
+
+  it("does not delete legacy broad Hub tokens until a Router token is configured", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", DEFAULT_MODEL);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_OPENCLAW_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_GATEWAY_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ALLOWED_USERS", "alice");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
+    await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
+    hub.calls.length = 0;
+
+    const { prompt } = createPrompt([]);
+    const output: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt),
+      stdout: { log: (message: unknown) => output.push(String(message)) },
+    };
+
+    const code = await main(["doctor", "alice/research", "--fix"], runtime);
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("add MLCLAW_ROUTER_TOKEN before removing");
+    expect(hub.calls).not.toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
   });
 
   it("migrates local to Space and back without starting both gateways", async () => {
