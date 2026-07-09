@@ -226,6 +226,30 @@ The OpenAI key is stored as a Hugging Face Space Secret when possible and as a
 0600 runtime file for immediate use. The key must never be logged or returned
 to the browser.
 
+## Branding
+
+ML Claw white-labels the browser gateway at the proxy layer. App Spaces default
+the browser title, PWA manifest, favicon, assistant fallback avatar, login
+heading, and ML Claw control link to the agent name. The canonical template
+Space remains branded as ML Claw.
+
+Use Space variables for explicit branding:
+
+```bash
+MLCLAW_BRAND_NAME="Bob Lab"
+MLCLAW_BRAND_SHORT_NAME="Bob"
+MLCLAW_BRAND_THEME_COLOR="#111827"
+MLCLAW_BRAND_LOGO="mlclaw.svg"
+MLCLAW_BRAND_FAVICON="mlclaw.svg"
+MLCLAW_BRAND_FAVICON_32="mlclaw.svg"
+MLCLAW_BRAND_FAVICON_ICO="mlclaw.svg"
+MLCLAW_BRAND_APPLE_TOUCH_ICON="mlclaw.svg"
+```
+
+Brand asset paths are relative to the Space `assets/` directory. ML Claw serves
+them through `/assets/brand/logo`, `/favicon.svg`, `/favicon-32.png`,
+`/favicon.ico`, `/apple-touch-icon.png`, and `/manifest.webmanifest`.
+
 ## State Safety
 
 OpenClaw uses local disk. The bucket stores verified snapshots only. On boot,

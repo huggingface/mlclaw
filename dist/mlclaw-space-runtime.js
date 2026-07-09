@@ -12,6 +12,111 @@ import process2 from "node:process";
 // src/mlclaw-space-runtime/config.ts
 import { randomBytes } from "node:crypto";
 
+// src/mlclaw-space-runtime/branding.ts
+var DEFAULT_BRAND_NAME = "ML Claw";
+var DEFAULT_THEME_COLOR = "#111827";
+var DEFAULT_LOGO_ASSET = "mlclaw.svg";
+function resolveBranding(env, agentName) {
+  const defaultName = defaultBrandName(agentName);
+  const name = cleanText(env.MLCLAW_BRAND_NAME) ?? defaultName;
+  return {
+    name,
+    shortName: cleanText(env.MLCLAW_BRAND_SHORT_NAME) ?? name,
+    themeColor: normalizeThemeColor(env.MLCLAW_BRAND_THEME_COLOR) ?? DEFAULT_THEME_COLOR,
+    logoAsset: normalizeAssetRef(env.MLCLAW_BRAND_LOGO, DEFAULT_LOGO_ASSET),
+    faviconSvgAsset: normalizeAssetRef(
+      env.MLCLAW_BRAND_FAVICON_SVG ?? env.MLCLAW_BRAND_FAVICON,
+      DEFAULT_LOGO_ASSET
+    ),
+    favicon32Asset: normalizeAssetRef(
+      env.MLCLAW_BRAND_FAVICON_32 ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
+      DEFAULT_LOGO_ASSET
+    ),
+    faviconIcoAsset: normalizeAssetRef(
+      env.MLCLAW_BRAND_FAVICON_ICO ?? env.MLCLAW_BRAND_FAVICON,
+      DEFAULT_LOGO_ASSET
+    ),
+    appleTouchIconAsset: normalizeAssetRef(
+      env.MLCLAW_BRAND_APPLE_TOUCH_ICON ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
+      DEFAULT_LOGO_ASSET
+    )
+  };
+}
+function publicBranding(branding) {
+  return {
+    name: branding.name,
+    shortName: branding.shortName,
+    themeColor: branding.themeColor,
+    logoUrl: "/assets/brand/logo"
+  };
+}
+function brandingManifest(branding) {
+  return `${JSON.stringify({
+    name: branding.name,
+    short_name: branding.shortName,
+    description: `${branding.name} browser gateway`,
+    start_url: "./",
+    display: "standalone",
+    theme_color: branding.themeColor,
+    background_color: branding.themeColor,
+    icons: [
+      {
+        src: "./favicon.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "any"
+      },
+      {
+        src: "./favicon-32.png",
+        sizes: "32x32",
+        type: "image/png"
+      },
+      {
+        src: "./apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png"
+      }
+    ]
+  }, null, 2)}
+`;
+}
+function defaultBrandName(agentName) {
+  const cleaned = cleanText(agentName);
+  if (!cleaned) {
+    return DEFAULT_BRAND_NAME;
+  }
+  if (/^mlclaw$/i.test(cleaned)) {
+    return DEFAULT_BRAND_NAME;
+  }
+  return cleaned.split(/[-_\s]+/).filter(Boolean).map((word) => /^mlclaw$/i.test(word) ? DEFAULT_BRAND_NAME : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join(" ");
+}
+function cleanText(value) {
+  const cleaned = value?.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.slice(0, 80) : void 0;
+}
+function normalizeThemeColor(value) {
+  const cleaned = value?.trim();
+  if (!cleaned) {
+    return void 0;
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(cleaned)) {
+    return `#${cleaned.slice(1).split("").map((char) => `${char}${char}`).join("")}`.toLowerCase();
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return cleaned.toLowerCase();
+  }
+  throw new Error("MLCLAW_BRAND_THEME_COLOR must be a #rgb or #rrggbb color");
+}
+function normalizeAssetRef(value, fallback) {
+  const raw2 = value?.trim() || fallback;
+  const withoutAssetsPrefix = raw2.replace(/^\/?assets\/+/, "");
+  const normalized = withoutAssetsPrefix.split("/").filter(Boolean).join("/");
+  if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../") || normalized.startsWith("/")) {
+    throw new Error(`brand asset path must stay inside the Space assets directory: ${raw2}`);
+  }
+  return normalized;
+}
+
 // src/mlclaw-space-runtime/model-choices.ts
 var DEFAULT_ROUTER_PROVIDER = "deepinfra";
 var DEFAULT_ROUTER_MODEL_ID = "google/gemma-4-26B-A4B-it";
@@ -305,6 +410,7 @@ function loadConfig(env = process.env) {
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
   const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const agentName = trim(env.OPENCLAW_AGENT_NAME);
   return {
     port,
     openclawPort,
@@ -330,7 +436,7 @@ function loadConfig(env = process.env) {
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/tmp/openclaw-live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
-    agentName: trim(env.OPENCLAW_AGENT_NAME),
+    agentName,
     model,
     modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
@@ -340,7 +446,8 @@ function loadConfig(env = process.env) {
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
     templateRev: trim(env.MLCLAW_TEMPLATE_REV),
-    assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets"
+    assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
+    branding: resolveBranding(env, agentName)
   };
 }
 function resolveMode(params) {
@@ -2549,7 +2656,8 @@ function runtimeSettings(config2) {
     allowedUsers: config2.allowedUsers,
     adminUsers: config2.adminUsers,
     modelChoices: config2.modelChoices,
-    presetModels: PRESET_MODEL_CHOICES
+    presetModels: PRESET_MODEL_CHOICES,
+    branding: publicBranding(config2.branding)
   };
 }
 function normalizeModel(value) {
@@ -6870,10 +6978,10 @@ function loginPage(config2, message, next = "/") {
   const oauthReady = Boolean(config2.oauthClientId && config2.oauthClientSecret);
   const loginPath = next === "/" ? "/oauth/login" : `/oauth/login?next=${encodeURIComponent(next)}`;
   const loginHref = new URL(loginPath, config2.publicUrl).toString();
-  return page("ML Claw Login", `
+  return page(`${config2.branding.name} Login`, `
     <main>
-      <img src="/assets/mlclaw.svg" alt="ML Claw" class="logo">
-      <h1>ML Claw</h1>
+      <img src="/assets/brand/logo" alt="${escapeHtml(config2.branding.name)}" class="logo">
+      <h1>${escapeHtml(config2.branding.name)}</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
       ${oauthReady ? `<a class="button" href="${escapeHtml(loginHref)}" target="_blank" rel="noopener">Sign in with Hugging Face</a>` : `<p class="notice">Hugging Face OAuth is not configured for this Space. Update the Space README metadata to include <code>hf_oauth: true</code>, then rebuild.</p>`}
     </main>
@@ -6896,6 +7004,8 @@ function page(title, body) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
   <style>
     :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f5f7fb; color: #111827; }
@@ -7247,6 +7357,17 @@ function createSpaceRuntimeApp(config2, controls) {
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get("/assets/mlclaw.svg", async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
   app.get("/assets/hf-logo.svg", async () => serveFile(path3.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/brand/logo", async () => serveBrandAsset(config2, config2.branding.logoAsset));
+  app.get("/favicon.svg", async () => serveBrandAsset(config2, config2.branding.faviconSvgAsset));
+  app.get("/favicon-32.png", async () => serveBrandAsset(config2, config2.branding.favicon32Asset));
+  app.get("/favicon.ico", async () => serveBrandAsset(config2, config2.branding.faviconIcoAsset));
+  app.get("/apple-touch-icon.png", async () => serveBrandAsset(config2, config2.branding.appleTouchIconAsset));
+  app.get("/manifest.webmanifest", () => new Response(brandingManifest(config2.branding), {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "application/manifest+json; charset=utf-8"
+    }
+  }));
   app.get("/oauth/login", (c) => handleOauthLogin(c, config2));
   app.get("/oauth/callback", (c) => handleOauthCallback(c, config2));
   app.get("/login", (c) => c.html(loginPage(config2, void 0, normalizeNext(c.req.query("next") ?? "/"))));
@@ -7272,7 +7393,8 @@ function createSpaceRuntimeApp(config2, controls) {
     return c.json({
       user: auth.username,
       admin: isAdmin(config2, auth.username),
-      csrfToken: createCsrfToken({ username: auth.username, sessionSecret: config2.sessionSecret })
+      csrfToken: createCsrfToken({ username: auth.username, sessionSecret: config2.sessionSecret }),
+      branding: publicBranding(config2.branding)
     });
   });
   app.get("/mlclaw/api/status", async (c) => {
@@ -7533,7 +7655,8 @@ async function statusPayload(config2, controls) {
       configured: await controls.openAiConfigured(),
       environmentConfigured: openAiConfigured(),
       runtimeFileConfigured: Boolean(await loadOpenAiCredentialFile(config2.openaiCredentialFile))
-    }
+    },
+    branding: publicBranding(config2.branding)
   };
 }
 async function readJson(c) {
@@ -7558,6 +7681,13 @@ async function serveFile(file, contentTypeHeader, immutable = false) {
       headers: { "content-type": "text/plain; charset=utf-8" }
     });
   }
+}
+async function serveBrandAsset(config2, asset) {
+  const response = await serveFile(path3.join(config2.assetsDir, asset), contentType(asset), true);
+  if (response.status !== 404 || asset === "mlclaw.svg") {
+    return response;
+  }
+  return serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8", true);
 }
 function safeRelativePath(value) {
   let decoded;
@@ -7585,6 +7715,12 @@ function contentType(file) {
   if (file.endsWith(".svg")) {
     return "image/svg+xml; charset=utf-8";
   }
+  if (file.endsWith(".png")) {
+    return "image/png";
+  }
+  if (file.endsWith(".ico")) {
+    return "image/x-icon";
+  }
   if (file.endsWith(".html")) {
     return "text/html; charset=utf-8";
   }
@@ -7597,25 +7733,51 @@ import net from "node:net";
 
 // src/mlclaw-space-runtime/shell.ts
 var SHELL_MARKER = "data-mlclaw-shell";
+var BRANDING_MARKER = "data-mlclaw-branding";
 function shouldInjectShell(params) {
   const method = params.method ?? "GET";
   return (method === "GET" || method === "HEAD") && (params.requestAccept ?? "").includes("text/html") && (params.responseContentType ?? "").toLowerCase().includes("text/html") && !params.responseContentEncoding;
 }
-function injectMlClawShell(html) {
-  if (html.includes(SHELL_MARKER)) {
-    return html;
-  }
+function rewriteOpenClawHtml(html, branding) {
+  return injectMlClawShell(injectBranding(html, branding), branding);
+}
+function injectMlClawShell(html, branding) {
   const shell = `
 <div ${SHELL_MARKER} style="position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:2147483647;">
-  <a href="/mlclaw" aria-label="Open ML Claw overview" title="ML Claw" style="box-sizing:border-box;display:flex;width:44px;height:44px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(15,23,42,.16);text-decoration:none;">
-    <img src="/assets/hf-logo.svg" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
+  <a href="/mlclaw" aria-label="Open ${escapeHtml2(branding.name)} settings" title="${escapeHtml2(branding.name)}" style="box-sizing:border-box;display:flex;width:44px;height:44px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(15,23,42,.16);text-decoration:none;">
+    <img src="/assets/brand/logo" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
   </a>
 </div>
 `;
+  if (html.includes(SHELL_MARKER)) {
+    return html;
+  }
   if (html.includes("</body>")) {
     return html.replace("</body>", `${shell}</body>`);
   }
   return `${html}${shell}`;
+}
+function injectBranding(html, branding) {
+  const title = `${escapeHtml2(branding.name)} Control`;
+  let out = html;
+  if (/<title>[\s\S]*?<\/title>/i.test(out)) {
+    out = out.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`);
+  } else if (/<head[^>]*>/i.test(out)) {
+    out = out.replace(/<head([^>]*)>/i, `<head$1>
+<title>${title}</title>`);
+  }
+  const meta = `
+<meta ${BRANDING_MARKER} name="application-name" content="${escapeHtml2(branding.name)}">
+<meta ${BRANDING_MARKER} name="apple-mobile-web-app-title" content="${escapeHtml2(branding.shortName)}">
+<meta ${BRANDING_MARKER} name="theme-color" content="${escapeHtml2(branding.themeColor)}">
+`;
+  if (!out.includes(BRANDING_MARKER) && out.includes("</head>")) {
+    out = out.replace("</head>", `${meta}</head>`);
+  }
+  return out;
+}
+function escapeHtml2(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 // src/mlclaw-space-runtime/proxy.ts
@@ -7673,7 +7835,7 @@ async function proxyHttp(req, res, config2, identity) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
     upstreamResponse.on("end", () => {
-      const body = injectMlClawShell(Buffer.concat(chunks).toString("utf8"));
+      const body = rewriteOpenClawHtml(Buffer.concat(chunks).toString("utf8"), config2.branding);
       delete responseHeaders["content-length"];
       delete responseHeaders["Content-Length"];
       res.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
@@ -7891,7 +8053,7 @@ var SpaceRuntimeServer = class {
     await proxyHttp(req, res, this.config, { username: session.username });
   }
   shouldRouteToMlClaw(pathname) {
-    return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
+    return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/brand/logo" || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
   }
   async startOpenClaw(extraEnv = {}) {
     if (this.openclawStarting || this.openclaw && !this.openclaw.killed) {
@@ -8018,7 +8180,7 @@ function isApiPath(pathname) {
   return pathname.startsWith("/mlclaw/api/");
 }
 function isTemplateRuntimePath(pathname) {
-  return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg";
+  return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/brand/logo";
 }
 function formatError2(err) {
   return err instanceof Error ? err.stack ?? err.message : String(err);

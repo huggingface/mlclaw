@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { resolveBranding, type RuntimeBranding } from "./branding.js";
 import { DEFAULT_MODEL, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
 
 export type RuntimeMode = "template" | "app";
@@ -39,6 +40,7 @@ export type SpaceRuntimeConfig = {
   runtimeId: string | undefined;
   templateRev: string | undefined;
   assetsDir: string;
+  branding: RuntimeBranding;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeConfig {
@@ -71,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
   const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const agentName = trim(env.OPENCLAW_AGENT_NAME);
 
   return {
     port,
@@ -97,7 +100,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/tmp/openclaw-live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
-    agentName: trim(env.OPENCLAW_AGENT_NAME),
+    agentName,
     model,
     modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
@@ -108,6 +111,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
     templateRev: trim(env.MLCLAW_TEMPLATE_REV),
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
+    branding: resolveBranding(env, agentName),
   };
 }
 

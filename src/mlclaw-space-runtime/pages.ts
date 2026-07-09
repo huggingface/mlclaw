@@ -30,10 +30,10 @@ export function loginPage(config: SpaceRuntimeConfig, message?: string, next = "
     ? "/oauth/login"
     : `/oauth/login?next=${encodeURIComponent(next)}`;
   const loginHref = new URL(loginPath, config.publicUrl).toString();
-  return page("ML Claw Login", `
+  return page(`${config.branding.name} Login`, `
     <main>
-      <img src="/assets/mlclaw.svg" alt="ML Claw" class="logo">
-      <h1>ML Claw</h1>
+      <img src="/assets/brand/logo" alt="${escapeHtml(config.branding.name)}" class="logo">
+      <h1>${escapeHtml(config.branding.name)}</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
       ${oauthReady
         ? `<a class="button" href="${escapeHtml(loginHref)}" target="_blank" rel="noopener">Sign in with Hugging Face</a>`
@@ -116,6 +116,8 @@ function page(title: string, body: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
   <style>
     :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f5f7fb; color: #111827; }

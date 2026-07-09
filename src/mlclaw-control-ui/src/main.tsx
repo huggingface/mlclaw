@@ -6,6 +6,14 @@ type Session = {
   user: string;
   admin: boolean;
   csrfToken: string;
+  branding?: Branding;
+};
+
+type Branding = {
+  name: string;
+  shortName: string;
+  themeColor: string;
+  logoUrl: string;
 };
 
 type ModelPricing = {
@@ -43,6 +51,7 @@ type Settings = {
   adminUsers: string[];
   modelChoices: ModelChoice[];
   presetModels: ModelChoice[];
+  branding: Branding;
 };
 
 type RouterModelsResult = {
@@ -80,6 +89,7 @@ type Status = {
     environmentConfigured: boolean;
     runtimeFileConfigured: boolean;
   };
+  branding: Branding;
 };
 
 type View = "overview" | "settings" | "credentials" | "status";
@@ -120,6 +130,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (state.kind === "ready") {
+      document.title = state.settings.branding.name;
+    }
+  }, [state]);
+
+  useEffect(() => {
     const onPop = () => setView(viewFromPath(window.location.pathname));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -138,7 +154,7 @@ function App() {
   }
 
   return (
-    <Frame view={view} onNavigate={navigate} session={state.session}>
+    <Frame view={view} onNavigate={navigate} session={state.session} branding={state.settings.branding}>
       {notice ? <Banner>{notice}</Banner> : null}
       {view === "overview" ? <Overview settings={state.settings} status={state.status} onNavigate={navigate} /> : null}
       {view === "settings" ? (
@@ -167,6 +183,7 @@ function Frame(props: {
   view: View;
   onNavigate: (view: View) => void;
   session?: Session;
+  branding?: Branding;
 }) {
   const logout = async () => {
     try {
@@ -178,12 +195,19 @@ function Frame(props: {
     }
   };
 
+  const branding = props.branding ?? props.session?.branding ?? {
+    name: "ML Claw",
+    shortName: "ML Claw",
+    themeColor: "#111827",
+    logoUrl: "/assets/mlclaw.svg",
+  };
+
   return (
     <div className="app">
       <aside className="sidebar">
         <a className="brand" href="/">
-          <img src="/assets/mlclaw.svg" alt="" />
-          <span>ML Claw</span>
+          <img src={branding.logoUrl} alt="" />
+          <span>{branding.name}</span>
         </a>
         <nav>
           <NavButton label="Overview" active={props.view === "overview"} onClick={() => props.onNavigate("overview")} />
@@ -213,7 +237,7 @@ function NavButton(props: { label: string; active: boolean; onClick: () => void 
 function Overview(props: { settings: Settings; status: Status; onNavigate: (view: View) => void }) {
   return (
     <>
-      <Header title={props.settings.agentName ?? "ML Claw"} subtitle="Deployment overview" />
+      <Header title={props.settings.branding.name} subtitle="Deployment overview" />
       <div className="grid">
         <Metric label="Gateway" value={props.status.openclaw.running ? "Running" : "Not ready"} tone={props.status.openclaw.running ? "good" : "warn"} />
         <Metric label="Model" value={props.settings.model} />
