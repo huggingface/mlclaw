@@ -32,4 +32,11 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain("COPY package.json package-lock.json tsconfig.json vite.control-ui.config.ts ./");
     expect(dockerfile).not.toContain("18789/healthz");
   });
+
+  it("pins OpenClaw's default workspace to the ML Claw live workspace", async () => {
+    const config = JSON.parse(await fs.readFile("openclaw.default.json", "utf8")) as {
+      agents?: { defaults?: { workspace?: string } };
+    };
+    expect(config.agents?.defaults?.workspace).toBe("${OPENCLAW_WORKSPACE_DIR}");
+  });
 });

@@ -24,12 +24,20 @@ An ML Claw deployment has:
 - Hugging Face OAuth enabled on the Space;
 - a local deployment manifest under `~/.config/mlclaw/deployments/`;
 - local secrets under `~/.config/mlclaw/secrets/`;
+- preinstalled Hugging Face tooling in the OpenClaw workspace, including
+  `hf`, `hf-discover`, `uv`, HF Python libraries, and baseline Hugging Face
+  Agent Skills mirrored into both `.agents/skills` and `skills`;
 - optional local Docker gateway mode for users who want the gateway on their
   own machine;
 - Hugging Face Router model configuration for OpenClaw inference.
 
 The bucket is the durable state source. The live gateway is disposable. Do not
 mount a bucket as the live OpenClaw database filesystem.
+
+ML Claw seeds a managed Hugging Face tooling note into workspace `AGENTS.md` so
+new OpenClaw sessions see the available Hugging Face skills directly in
+context. If a long-running session predates the seed, start a new OpenClaw
+session so its skill snapshot is rebuilt.
 
 ## Required Inputs
 

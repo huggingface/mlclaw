@@ -1,6 +1,7 @@
 {
   "agents": {
     "defaults": {
+      "workspace": "${OPENCLAW_WORKSPACE_DIR}",
       "model": {
         "primary": "${OPENCLAW_MODEL}"
       }

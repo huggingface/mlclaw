@@ -36,13 +36,19 @@ export type SeedHuggingFaceToolingResult = {
   workspaceDir: string;
   copiedSkills: string[];
   skippedSkills: string[];
+  copiedWorkspaceSkills: string[];
+  skippedWorkspaceSkills: string[];
   copiedTemplateFiles: string[];
+  wroteContextFile: boolean;
   wroteManifest: boolean;
 };
 
 type WorkspaceManifest = HfToolingManifest & {
   installedAt: string;
 };
+
+const MLCLAW_CONTEXT_START = "<!-- MLCLAW:HUGGINGFACE_TOOLING:START -->";
+const MLCLAW_CONTEXT_END = "<!-- MLCLAW:HUGGINGFACE_TOOLING:END -->";
 
 export async function seedHuggingFaceTooling(
   options: SeedHuggingFaceToolingOptions = {},
@@ -53,25 +59,20 @@ export async function seedHuggingFaceTooling(
   const now = options.now ?? (() => new Date());
   const manifest = await readToolingManifest(assetRoot);
 
-  const skillsRoot = path.join(workspaceDir, ".agents", "skills");
-  const copiedSkills: string[] = [];
-  const skippedSkills: string[] = [];
-  await fs.mkdir(skillsRoot, { recursive: true });
-
-  for (const skill of manifest.skills.installed) {
-    const source = path.join(assetRoot, "skills", skill);
-    const target = path.join(skillsRoot, skill);
-    if (await pathExists(target)) {
-      skippedSkills.push(skill);
-      continue;
-    }
-    await assertDirectory(source, `baseline skill ${skill}`);
-    await fs.cp(source, target, { recursive: true, preserveTimestamps: true });
-    copiedSkills.push(skill);
-  }
+  const agentSkills = await copyBaselineSkills({
+    assetRoot,
+    manifest,
+    targetRoot: path.join(workspaceDir, ".agents", "skills"),
+  });
+  const workspaceSkills = await copyBaselineSkills({
+    assetRoot,
+    manifest,
+    targetRoot: path.join(workspaceDir, "skills"),
+  });
 
   const templateRoot = path.join(assetRoot, "templates");
   const copiedTemplateFiles = await copyMissingTree(templateRoot, workspaceDir);
+  const wroteContextFile = await ensureWorkspaceContextFile({ manifest, workspaceDir });
   const wroteManifest = await writeWorkspaceManifest({
     manifest,
     workspaceDir,
@@ -80,11 +81,105 @@ export async function seedHuggingFaceTooling(
 
   return {
     workspaceDir,
-    copiedSkills,
-    skippedSkills,
+    copiedSkills: agentSkills.copied,
+    skippedSkills: agentSkills.skipped,
+    copiedWorkspaceSkills: workspaceSkills.copied,
+    skippedWorkspaceSkills: workspaceSkills.skipped,
     copiedTemplateFiles,
+    wroteContextFile,
     wroteManifest,
   };
+}
+
+async function copyBaselineSkills(params: {
+  assetRoot: string;
+  manifest: HfToolingManifest;
+  targetRoot: string;
+}): Promise<{ copied: string[]; skipped: string[] }> {
+  const copied: string[] = [];
+  const skipped: string[] = [];
+  await fs.mkdir(params.targetRoot, { recursive: true });
+
+  for (const skill of params.manifest.skills.installed) {
+    const source = path.join(params.assetRoot, "skills", skill);
+    const target = path.join(params.targetRoot, skill);
+    if (await pathExists(target)) {
+      skipped.push(skill);
+      continue;
+    }
+    await assertDirectory(source, `baseline skill ${skill}`);
+    await fs.cp(source, target, { recursive: true, preserveTimestamps: true });
+    copied.push(skill);
+  }
+
+  return { copied, skipped };
+}
+
+async function ensureWorkspaceContextFile(params: {
+  manifest: HfToolingManifest;
+  workspaceDir: string;
+}): Promise<boolean> {
+  const contextPath = path.join(params.workspaceDir, "AGENTS.md");
+  const block = buildWorkspaceContextBlock(params.manifest);
+  const existing = await readTextFileIfExists(contextPath);
+  const next = mergeManagedBlock(existing, block);
+
+  if (existing === next) {
+    return false;
+  }
+
+  await fs.mkdir(path.dirname(contextPath), { recursive: true });
+  await fs.writeFile(contextPath, next, "utf8");
+  return true;
+}
+
+function buildWorkspaceContextBlock(manifest: HfToolingManifest): string {
+  const skills = manifest.skills.installed.map((skill) => `- \`${skill}\``).join("\n");
+  return `${MLCLAW_CONTEXT_START}
+## ML Claw Hugging Face Tooling
+
+This workspace has Hugging Face tooling preinstalled. Use the Hugging Face CLI
+\`hf\`, \`hf-discover\`, and \`uv\` for Hub, dataset, model, Space, and bucket
+work.
+
+Hugging Face agent skills are available in both \`.agents/skills\` and
+\`skills\`. Prefer these skills when the task involves Hugging Face:
+
+${skills}
+
+The pinned tooling manifest is \`.agents/.mlclaw-hf-tooling.json\`.
+${MLCLAW_CONTEXT_END}
+`;
+}
+
+function mergeManagedBlock(existing: string | null, block: string): string {
+  const normalizedBlock = block.endsWith("\n") ? block : `${block}\n`;
+  if (!existing) {
+    return `# ML Claw Workspace\n\n${normalizedBlock}`;
+  }
+
+  const start = existing.indexOf(MLCLAW_CONTEXT_START);
+  const end = existing.indexOf(MLCLAW_CONTEXT_END);
+  if (start >= 0 && end >= start) {
+    const afterEnd = end + MLCLAW_CONTEXT_END.length;
+    const suffix = existing.slice(afterEnd).replace(/^\r?\n/u, "");
+    const next = `${existing.slice(0, start)}${normalizedBlock}${suffix}`;
+    return next.replace(/\n{4,}/g, "\n\n\n");
+  }
+
+  const trimmed = existing.replace(/\s+$/u, "");
+  return `${trimmed}\n\n${normalizedBlock}`;
+}
+
+async function readTextFileIfExists(filePath: string): Promise<string | null> {
+  try {
+    return await fs.readFile(filePath, "utf8");
+  } catch (err) {
+    if (isMissingFileError(err)) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 function resolveWorkspaceDir(env: NodeJS.ProcessEnv): string {

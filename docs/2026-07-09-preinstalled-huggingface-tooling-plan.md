@@ -1,6 +1,6 @@
 # Preinstalled Hugging Face Tooling Plan
 
-Status: proposed
+Status: implemented
 
 ## Goal
 
@@ -236,6 +236,43 @@ workspace/.agents/skills/<skill-name>/SKILL.md
 workspace/.agents/skills/<skill-name>/...
 ```
 
+Also mirror the same baseline skills into OpenClaw's canonical workspace skill
+directory:
+
+```text
+workspace/skills/<skill-name>/SKILL.md
+workspace/skills/<skill-name>/...
+```
+
+This is intentional duplication. `.agents/skills` preserves the Agent Skills
+layout used by Codex/Claude-style agents. `skills` is OpenClaw's most direct
+workspace skill root and makes the skills show up in OpenClaw's skill snapshot
+without relying on an agent knowing the `.agents` convention.
+
+The runtime config must pin OpenClaw's default workspace to the live ML Claw
+workspace:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "${OPENCLAW_WORKSPACE_DIR}"
+    }
+  }
+}
+```
+
+Seed a managed context block into:
+
+```text
+workspace/AGENTS.md
+```
+
+The managed block tells the agent that Hugging Face tooling is already
+available, names the preinstalled skills, and points to the skill roots. The
+block is bracketed by ML Claw HTML comments and may be replaced on future
+runtime starts, but user-authored content outside the block is preserved.
+
 Record the pinned source revision and installed tooling:
 
 ```text
@@ -470,11 +507,14 @@ For a new deployment:
 3. ensure default Python packages are importable;
 4. seed the baseline Hugging Face Agent Skills into the OpenClaw workspace
    before the first gateway start;
-5. seed the HF MCP config stub and workspace examples;
-6. write `.agents/.mlclaw-hf-tooling.json`;
-7. start the local or Space gateway;
-8. let the first state snapshot persist `.agents/skills`, templates, examples,
-   and the tooling manifest to the bucket.
+5. mirror the baseline Hugging Face Agent Skills into both `.agents/skills`
+   and `skills`;
+6. seed the HF MCP config stub, workspace examples, and managed `AGENTS.md`
+   context block;
+7. write `.agents/.mlclaw-hf-tooling.json`;
+8. start the local or Space gateway;
+9. let the first state snapshot persist `.agents/skills`, `skills`,
+   `AGENTS.md`, templates, examples, and the tooling manifest to the bucket.
 
 For local gateway mode, seed into the local live workspace before Docker start.
 
@@ -545,13 +585,17 @@ Unit tests:
 - baseline bundle excludes optional pack-only skills;
 - every bundled skill has `SKILL.md`;
 - seed function creates `.agents/skills/<skill-name>`;
+- seed function creates `skills/<skill-name>`;
+- seed function creates or updates the managed ML Claw block in `AGENTS.md`;
 - seed function creates `.agents/mcp/huggingface.json`;
 - seed function creates `examples/huggingface/`;
 - seed function writes `.agents/.mlclaw-hf-tooling.json`;
 - seed function does not overwrite an existing skill folder;
+- seed function does not delete user-authored `AGENTS.md` content;
 - local bootstrap calls the seed function before gateway start;
 - Space runtime seeds before launching OpenClaw;
-- archive/snapshot tests preserve `.agents/skills` and the tooling manifest.
+- archive/snapshot tests preserve `.agents/skills`, `skills`, `AGENTS.md`,
+  and the tooling manifest.
 
 Runtime tests:
 
@@ -579,14 +623,16 @@ Live test:
 1. create `mlclaw-test`;
 2. wait for the Space gateway to boot;
 3. verify the OpenClaw workspace contains `.agents/skills/hf-cli/SKILL.md`;
-4. verify `.agents/.mlclaw-hf-tooling.json` records the installed baseline;
-5. run `hf auth whoami` inside the runtime;
-6. run `hf-discover --version` inside the runtime;
-7. run `python -c "import datasets, safetensors; from huggingface_hub import HfApi"`;
-8. verify `.agents/mcp/huggingface.json` and `examples/huggingface/` exist;
-9. restart the Space;
-10. verify skills, templates, examples, and tooling manifest are restored from
-    the bucket snapshot.
+4. verify the OpenClaw workspace contains `skills/hf-cli/SKILL.md`;
+5. verify `AGENTS.md` names the Hugging Face skills and their locations;
+6. verify `.agents/.mlclaw-hf-tooling.json` records the installed baseline;
+7. run `hf auth whoami` inside the runtime;
+8. run `hf-discover --version` inside the runtime;
+9. run `python -c "import datasets, safetensors; from huggingface_hub import HfApi"`;
+10. verify `.agents/mcp/huggingface.json` and `examples/huggingface/` exist;
+11. restart the Space;
+12. verify skills, templates, examples, `AGENTS.md`, and tooling manifest are
+    restored from the bucket snapshot.
 
 ## Acceptance Criteria
 

@@ -56,8 +56,11 @@ describe("Hugging Face tooling baseline", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-tooling-"));
     const workspaceDir = path.join(root, "workspace");
     const existingSkill = path.join(workspaceDir, ".agents/skills/hf-cli");
+    const existingWorkspaceSkill = path.join(workspaceDir, "skills/hf-cli");
     await fs.mkdir(existingSkill, { recursive: true });
     await fs.writeFile(path.join(existingSkill, "SKILL.md"), "# User customized hf-cli\n", "utf8");
+    await fs.mkdir(existingWorkspaceSkill, { recursive: true });
+    await fs.writeFile(path.join(existingWorkspaceSkill, "SKILL.md"), "# User workspace hf-cli\n", "utf8");
 
     const first = await seedHuggingFaceTooling({
       assetRoot: path.resolve("assets/hf-tooling"),
@@ -67,11 +70,22 @@ describe("Hugging Face tooling baseline", () => {
 
     expect(first.skippedSkills).toContain("hf-cli");
     expect(first.copiedSkills).toEqual(BASELINE_SKILLS.filter((skill) => skill !== "hf-cli"));
+    expect(first.skippedWorkspaceSkills).toContain("hf-cli");
+    expect(first.copiedWorkspaceSkills).toEqual(BASELINE_SKILLS.filter((skill) => skill !== "hf-cli"));
+    expect(first.wroteContextFile).toBe(true);
     expect(first.wroteManifest).toBe(true);
     await expect(fs.readFile(path.join(existingSkill, "SKILL.md"), "utf8")).resolves.toBe("# User customized hf-cli\n");
+    await expect(fs.readFile(path.join(existingWorkspaceSkill, "SKILL.md"), "utf8")).resolves.toBe("# User workspace hf-cli\n");
+    await expect(fs.access(path.join(workspaceDir, "skills/huggingface-spaces/SKILL.md"))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(workspaceDir, ".agents/skills/huggingface-spaces/SKILL.md"))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workspaceDir, ".agents/mcp/huggingface.json"))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workspaceDir, "examples/huggingface/README.md"))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workspaceDir, ".env.example"))).resolves.toBeUndefined();
+    const agentsMd = await fs.readFile(path.join(workspaceDir, "AGENTS.md"), "utf8");
+    expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
+    expect(agentsMd).toContain("`hf-cli`");
+    expect(agentsMd).toContain("`.agents/skills`");
+    expect(agentsMd).toContain("`skills`");
 
     const rawManifest = await fs.readFile(path.join(workspaceDir, ".agents/.mlclaw-hf-tooling.json"), "utf8");
     expect(rawManifest).toContain("\"installedAt\": \"2026-07-09T00:00:00.000Z\"");
@@ -85,7 +99,42 @@ describe("Hugging Face tooling baseline", () => {
     });
 
     expect(second.copiedSkills).toEqual([]);
+    expect(second.copiedWorkspaceSkills).toEqual([]);
+    expect(second.wroteContextFile).toBe(false);
     expect(second.wroteManifest).toBe(false);
     await expect(fs.readFile(path.join(workspaceDir, ".agents/.mlclaw-hf-tooling.json"), "utf8")).resolves.toBe(rawManifest);
+  });
+
+  it("updates the managed AGENTS.md block without deleting user instructions", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-tooling-"));
+    const workspaceDir = path.join(root, "workspace");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceDir, "AGENTS.md"),
+      [
+        "# Project Instructions",
+        "",
+        "Keep this user instruction.",
+        "",
+        "<!-- MLCLAW:HUGGINGFACE_TOOLING:START -->",
+        "old block",
+        "<!-- MLCLAW:HUGGINGFACE_TOOLING:END -->",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await seedHuggingFaceTooling({
+      assetRoot: path.resolve("assets/hf-tooling"),
+      workspaceDir,
+      now: () => new Date("2026-07-09T00:00:00.000Z"),
+    });
+
+    expect(result.wroteContextFile).toBe(true);
+    const agentsMd = await fs.readFile(path.join(workspaceDir, "AGENTS.md"), "utf8");
+    expect(agentsMd).toContain("Keep this user instruction.");
+    expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
+    expect(agentsMd).toContain("`huggingface-datasets`");
+    expect(agentsMd).not.toContain("old block");
   });
 });
