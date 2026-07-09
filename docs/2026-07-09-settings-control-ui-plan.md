@@ -208,7 +208,7 @@ Initial recommended choices:
 
 ```text
 huggingface/google/gemma-4-26B-A4B-it
-huggingface/Qwen/Qwen3.6-35B-A3B
+huggingface/Qwen/Qwen3.6-27B
 huggingface/Qwen/Qwen3-8B
 ```
 

@@ -132,6 +132,13 @@ and direct chat-completions probes returned 200 for the default route,
 $0.15/M input tokens and $0.95/M output tokens, with tool and structured-output
 support.
 
+2026-07-09 follow-up: the shared router catalog no longer listed
+`Qwen/Qwen3.6-35B-A3B`. The nearest live DeepInfra Qwen 3.6 row found during
+ML Claw validation was `Qwen/Qwen3.6-27B`, with $0.32/M input tokens,
+$3.20/M output tokens, 262,144 context, tool support, and structured-output
+support. ML Claw presets should use that current live row until the 35B A3B
+route returns.
+
 Provider suffixes did not unlock models that were absent from the router
 catalog:
 

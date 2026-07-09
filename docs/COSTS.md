@@ -122,13 +122,13 @@ Cost formula:
 
 Practical guidance:
 
-Prices below are per 1M tokens from the Hugging Face Router catalog checked on
-2026-06-17. They are provider-specific and can change.
+Prices below are per 1M tokens from the Hugging Face Router catalog checked for
+the current presets on 2026-07-09. They are provider-specific and can change.
 
 | Choice | Fixed cost | Variable cost | Notes |
 | --- | ---: | ---: | --- |
 | `huggingface/google/gemma-4-26B-A4B-it:deepinfra` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Default quality target; supports tools |
-| `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra` | None beyond Space | DeepInfra: $0.15 input / $0.95 output | Stronger Qwen option; supports tools and structured output |
+| `huggingface/Qwen/Qwen3.6-27B:deepinfra` | None beyond Space | DeepInfra: $0.32 input / $3.20 output | Live Qwen 3.6 option; supports tools and structured output |
 | `huggingface/Qwen/Qwen3-8B:nscale` | None beyond Space | nscale: $0.07 input / $0.18 output | Cheaper small-model option when quality tradeoffs are acceptable |
 | `:cheapest` provider suffix | None beyond Space | Lowest available provider price for that model | Use when cost matters more than latency |
 | `:fastest` provider suffix | None beyond Space | May cost more | Use when latency matters more than cost |
@@ -253,7 +253,7 @@ Configurable model examples:
 
 ```text
 OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it:deepinfra
-OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-27B:deepinfra
 OPENCLAW_MODEL=huggingface/Qwen/Qwen3-8B:nscale
 ```
 

@@ -73,7 +73,7 @@ npx mlclaw bootstrap \
 Recommended router-compatible options:
 
 - `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
-- `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`: stronger Qwen option with tool and structured-output support.
+- `huggingface/Qwen/Qwen3.6-27B:deepinfra`: live Qwen 3.6 option with tool and structured-output support.
 - `huggingface/Qwen/Qwen3-8B:nscale`: cheaper small-model option.
 
 ## Optional Telegram
