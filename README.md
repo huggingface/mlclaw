@@ -49,7 +49,8 @@ This creates:
 - a private Docker Space for the browser gateway;
 - a Docker Space that starts from the prebuilt `ghcr.io/osolmaz/mlclaw` image;
 - Hugging Face OAuth metadata in the Space README;
-- Space variables and write-only secrets for state sync and session signing;
+- Space variables, a bucket volume mount for state sync, and a write-only
+  secret for session signing;
 - a local deployment manifest under `~/.config/mlclaw`.
 
 Open the Space, sign in with your Hugging Face account, and use the OpenClaw
@@ -215,21 +216,24 @@ After signing into the Space, open:
 ```
 
 Submit an OpenAI API key there if you want OpenClaw to use OpenAI-compatible
-models. ML Claw stores the key as a Hugging Face Space Secret when possible,
-writes a 0600 runtime file for immediate use, and restarts the internal
-OpenClaw gateway with `OPENAI_API_KEY` set. The key is never returned to the
-browser.
+models. ML Claw writes a 0600 runtime file for immediate use and restarts the
+internal OpenClaw gateway with `OPENAI_API_KEY` set. The key is never returned
+to the browser. For restart-durable credentials, use the local `mlclaw` CLI to
+set Space secrets; app Spaces do not keep your broad Hugging Face token inside
+the runtime.
 
 ## How State Works
 
-OpenClaw runs against local disk inside the active runtime. The Storage Bucket
-is not mounted as a live filesystem. Instead, `hf-state-sync` restores the
-newest verified snapshot on boot and uploads verified snapshots during runtime
-and shutdown.
+OpenClaw runs against local disk inside the active runtime. In Space gateway
+mode, ML Claw mounts the private Storage Bucket at `/data/mlclaw-state` and
+uses that mounted directory only for verified snapshots. The live OpenClaw
+state stays on local container disk at
+`/home/node/.local/share/mlclaw/live`.
 
-That keeps SQLite off network-mounted storage while preserving the agent's
-memory across Space rebuilds, local container replacement, and gateway
-migration.
+That keeps SQLite off bucket-backed storage while preserving the agent's memory
+across Space rebuilds, local container replacement, and gateway migration. The
+Space does not need `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN` secrets for state
+sync.
 
 ## Costs
 

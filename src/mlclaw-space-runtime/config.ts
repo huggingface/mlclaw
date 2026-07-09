@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { resolveBranding, type RuntimeBranding } from "./branding.js";
-import { DEFAULT_MODEL, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
+import { DEFAULT_MODEL, normalizeModelChoices, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
 
 export type RuntimeMode = "template" | "app";
 
@@ -26,6 +27,7 @@ export type SpaceRuntimeConfig = {
   hfToken: string | undefined;
   hubUrl: string;
   openaiCredentialFile: string;
+  runtimeSettingsFile: string;
   openclawConfigPath: string;
   openclawCommand: string;
   openclawArgs: string[];
@@ -34,6 +36,7 @@ export type SpaceRuntimeConfig = {
   modelChoices: ModelChoice[];
   routerModelsUrl: string;
   stateBucket: string | undefined;
+  stateMountDir: string | undefined;
   statePrefix: string | undefined;
   gatewayLocation: string | undefined;
   runtimeImage: string | undefined;
@@ -72,7 +75,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
-  const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
+  const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
+  const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
 
   return {
@@ -97,14 +102,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     hfToken: trim(env.HF_TOKEN ?? env.HUGGINGFACE_HUB_TOKEN),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
-    openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/tmp/openclaw-live/.openclaw/openclaw.json",
+    runtimeSettingsFile,
+    openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
     agentName,
     model,
-    modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    modelChoices: runtimeSettings.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
+    stateMountDir: trim(env.MLCLAW_STATE_MOUNT_DIR),
     statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
@@ -178,4 +185,21 @@ function splitArgs(value: string | undefined): string[] | undefined {
 function trim(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function readRuntimeSettings(file: string): { model?: string; modelChoices?: ModelChoice[] } {
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    const model = typeof parsed.model === "string" ? parsed.model.trim() : undefined;
+    if (!model) {
+      return {};
+    }
+    const modelChoices = normalizeModelChoices(parsed.modelChoices, model);
+    return {
+      model,
+      ...(modelChoices ? { modelChoices } : {}),
+    };
+  } catch {
+    return {};
+  }
 }

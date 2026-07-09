@@ -42,6 +42,7 @@ type Settings = {
   agentName: string | null;
   model: string;
   stateBucket: string | null;
+  stateMountDir: string | null;
   statePrefix: string | null;
   gatewayLocation: string | null;
   runtimeImage: string | null;
@@ -68,6 +69,7 @@ type Status = {
   model: string;
   space: string | null;
   stateBucket: string | null;
+  stateMountDir: string | null;
   statePrefix: string | null;
   gatewayLocation: string | null;
   runtimeImage: string | null;
@@ -357,12 +359,14 @@ function SettingsPage(props: {
     }
     setSaving(true);
     try {
-      const result = await apiPost<{ ok: boolean; model: string; modelChoices: ModelChoice[]; restartPending: boolean }>(
+      const result = await apiPost<{ ok: boolean; model: string; modelChoices: ModelChoice[]; persistent: boolean; restartPending: boolean }>(
         "/mlclaw/api/settings/model",
         { model: activeModel, modelChoices: selectedChoices },
         props.session.csrfToken,
       );
-      props.onNotice(result.restartPending
+      props.onNotice(!result.persistent
+        ? `Saved ${result.modelChoices.length} model option(s) to runtime state. OpenClaw restarted.`
+        : result.restartPending
         ? `Saved ${result.modelChoices.length} model option(s). Space restart requested.`
         : `Saved ${result.modelChoices.length} model option(s). Restart could not be requested from this runtime.`);
       await props.onRefresh();
@@ -522,6 +526,7 @@ function StatusPage(props: { status: Status; settings: Settings; onRefresh: () =
           <Row label="Gateway" value={props.status.openclaw.running ? "Running" : "Not ready"} />
           <Row label="Model" value={props.status.model} />
           <Row label="State bucket" value={props.status.stateBucket ?? props.settings.stateBucket ?? "Not set"} />
+          <Row label="State mount" value={props.status.stateMountDir ?? props.settings.stateMountDir ?? "Not set"} />
           <Row label="State prefix" value={props.status.statePrefix ?? "Default"} />
           <Row label="Gateway location" value={props.status.gatewayLocation ?? "Space"} />
           <Row label="Runtime image" value={props.status.runtimeImage ?? "Bundled"} />

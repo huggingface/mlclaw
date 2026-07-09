@@ -10,6 +10,8 @@ export type SyncConfig = {
   liveDir: string;
   /** Bucket repo id (`owner/name`), or null when no bucket is configured. */
   bucket: string | null;
+  /** Mounted bucket directory for Space runtimes, or null to use the Hub API. */
+  stateMountDir: string | null;
   /** Path prefix inside the bucket for all sync objects. */
   bucketPrefix: string;
   intervalSeconds: number;
@@ -24,7 +26,7 @@ export type SyncConfig = {
   runtimeImage: string;
 };
 
-const DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
+const DEFAULT_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
 export const DEFAULT_BUCKET_PREFIX = "openclaw-state";
 const DEFAULT_INTERVAL_SECONDS = 60;
 const DEFAULT_HANDOFF_POLL_SECONDS = 5;
@@ -40,6 +42,7 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
+    stateMountDir: env.MLCLAW_STATE_MOUNT_DIR?.trim() || null,
     bucketPrefix: normalizeBucketPrefix(env.OPENCLAW_HF_STATE_PREFIX),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),

@@ -13,7 +13,21 @@ export class HubApiError extends Error {
 
 type SpaceSecret = { key: string; updatedAt?: string };
 type SpaceVariable = { key: string; value?: string; updatedAt?: string };
-export type SpaceRuntime = { stage?: string; hardware?: unknown; requested_hardware?: unknown; sleep_time?: number };
+export type SpaceVolume = {
+  type: "bucket" | "model" | "dataset" | "space";
+  source: string;
+  mountPath: string;
+  readOnly?: boolean;
+  revision?: string;
+  path?: string;
+};
+export type SpaceRuntime = {
+  stage?: string;
+  hardware?: unknown;
+  requested_hardware?: unknown;
+  sleep_time?: number;
+  volumes?: SpaceVolume[] | null;
+};
 export type HubCommitFile = { path: string; content: Uint8Array | Buffer };
 
 export class HubApi {
@@ -142,6 +156,21 @@ export class HubApi {
     return new Map(Object.entries(raw));
   }
 
+  async deleteSpaceSecret(repoId: string, key: string): Promise<void> {
+    try {
+      await this.requestJson(`/api/spaces/${repoId}/secrets`, {
+        method: "DELETE",
+        body: JSON.stringify({ key }),
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      if (err instanceof HubApiError && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
+  }
+
   async restartSpace(repoId: string, factoryReboot = false): Promise<void> {
     await this.requestJson(`/api/spaces/${repoId}/restart`, {
       method: "POST",
@@ -178,6 +207,14 @@ export class HubApi {
 
   async getSpaceRuntime(repoId: string): Promise<SpaceRuntime> {
     return await this.requestJson<SpaceRuntime>(`/api/spaces/${repoId}/runtime`);
+  }
+
+  async setSpaceVolumes(repoId: string, volumes: SpaceVolume[]): Promise<void> {
+    await this.requestJson(`/api/spaces/${repoId}/volumes`, {
+      method: "PUT",
+      body: JSON.stringify({ volumes }),
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   async fetchSpaceLogs(repoId: string, kind: "run" | "build" = "run"): Promise<string> {

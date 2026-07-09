@@ -33,6 +33,7 @@ export type RuntimeControls = {
   openclawRunning(): boolean;
   openAiConfigured(): Promise<boolean>;
   restartOpenClawWithOpenAi(apiKey: string): Promise<void>;
+  restartOpenClaw(): Promise<void>;
   setModelSettings(model: string, choices: ModelChoice[]): void;
 };
 
@@ -140,17 +141,26 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
     }
-    await setCurrentSpaceVariable(config, "OPENCLAW_MODEL", model);
-    await setCurrentSpaceVariable(config, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+    let persistent = false;
+    if (config.spaceId && config.hfToken) {
+      await setCurrentSpaceVariable(config, "OPENCLAW_MODEL", model);
+      await setCurrentSpaceVariable(config, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+      persistent = true;
+    }
+    await writeRuntimeSettingsFile(config, model, choices);
     controls.setModelSettings(model, choices);
     await configureOpenClawGateway(config);
     let restartPending = false;
-    try {
-      restartPending = await restartCurrentSpace(config);
-    } catch (err) {
-      process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}\n`);
+    if (persistent) {
+      try {
+        restartPending = await restartCurrentSpace(config);
+      } catch (err) {
+        process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}\n`);
+      }
+    } else {
+      await controls.restartOpenClaw();
     }
-    return c.json({ ok: true, model, modelChoices: choices, restartPending });
+    return c.json({ ok: true, model, modelChoices: choices, persistent, restartPending });
   });
 
   app.post("/mlclaw/api/credentials/openai", async (c) => {
@@ -349,6 +359,7 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     model: config.model,
     space: config.spaceId ?? null,
     stateBucket: config.stateBucket ?? null,
+    stateMountDir: config.stateMountDir ?? null,
     statePrefix: config.statePrefix ?? null,
     gatewayLocation: config.gatewayLocation ?? null,
     runtimeImage: config.runtimeImage ?? null,
@@ -393,6 +404,21 @@ async function readJson(c: Context): Promise<Record<string, unknown> | undefined
   } catch {
     return undefined;
   }
+}
+
+async function writeRuntimeSettingsFile(
+  config: SpaceRuntimeConfig,
+  model: string,
+  choices: ModelChoice[],
+): Promise<void> {
+  await fs.mkdir(path.dirname(config.runtimeSettingsFile), { recursive: true });
+  await fs.writeFile(config.runtimeSettingsFile, `${JSON.stringify({
+    version: 1,
+    model,
+    modelChoices: choices,
+    updatedAt: new Date().toISOString(),
+  }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await fs.chmod(config.runtimeSettingsFile, 0o600);
 }
 
 async function serveFile(file: string, contentTypeHeader: string, immutable = false): Promise<Response> {

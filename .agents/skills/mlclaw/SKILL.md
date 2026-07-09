@@ -24,6 +24,9 @@ An ML Claw deployment has:
 - Hugging Face OAuth enabled on the Space;
 - a local deployment manifest under `~/.config/mlclaw/deployments/`;
 - local secrets under `~/.config/mlclaw/secrets/`;
+- app Spaces mount the private Storage Bucket read-write at
+  `/data/mlclaw-state` for snapshot storage without storing the user's broad
+  Hub token in the Space;
 - preinstalled Hugging Face tooling in the OpenClaw workspace, including
   `hf`, `hf-discover`, `uv`, HF Python libraries, and baseline Hugging Face
   Agent Skills mirrored into both `.agents/skills` and `skills`;
@@ -32,7 +35,10 @@ An ML Claw deployment has:
 - Hugging Face Router model configuration for OpenClaw inference.
 
 The bucket is the durable state source. The live gateway is disposable. Do not
-mount a bucket as the live OpenClaw database filesystem.
+mount a bucket as the live OpenClaw database filesystem. Space gateway mode
+uses the mounted bucket only for verified snapshots; live SQLite and workspace
+state stay on local container disk under
+`/home/node/.local/share/mlclaw/live`.
 
 ML Claw seeds a managed Hugging Face tooling note into workspace `AGENTS.md` so
 new OpenClaw sessions see the available Hugging Face skills directly in
@@ -224,14 +230,17 @@ mlclaw gateway start <agent>
 
 After signing into the Space, use the ML Claw control UI:
 
-- `/mlclaw/settings` chooses Router model/provider rows and changes the Space
-  `OPENCLAW_MODEL` and `MLCLAW_MODEL_CHOICES`.
+- `/mlclaw/settings` chooses Router model/provider rows. App Spaces without a
+  Hub token save the selection into snapshotted runtime state and restart only
+  OpenClaw; the CLI remains responsible for privileged Space variable changes.
 - `/mlclaw/status` shows runtime, bucket, model, and OAuth status.
 - `/mlclaw/credentials` stores an OpenAI API key.
 
-The OpenAI key is stored as a Hugging Face Space Secret when possible and as a
-0600 runtime file for immediate use. The key must never be logged or returned
-to the browser.
+The OpenAI key is stored as a 0600 runtime file for immediate use. For
+restart-durable OpenAI credentials, use the local `mlclaw` CLI or Space
+settings to set a Space Secret; do not put the user's broad Hub token into the
+Space just so the browser app can mutate secrets. The key must never be logged
+or returned to the browser.
 
 ## Branding
 
@@ -262,7 +271,9 @@ them through `/assets/brand/logo`, `/favicon.svg`, `/favicon-32.png`,
 
 ## State Safety
 
-OpenClaw uses local disk. The bucket stores verified snapshots only. On boot,
-the runtime restores the newest valid snapshot. During runtime and shutdown,
-`hf-state-sync` uploads new snapshots. Secrets are kept outside the snapshot
-path.
+OpenClaw uses local disk. In Space gateway mode, the private bucket is mounted
+at `/data/mlclaw-state`, but it stores verified snapshots only. On boot, the
+runtime restores the newest valid snapshot into
+`/home/node/.local/share/mlclaw/live`. During runtime and shutdown,
+`hf-state-sync` writes new snapshots back to the mounted bucket. Secrets are
+kept outside the snapshot path.

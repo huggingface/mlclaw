@@ -14629,6 +14629,20 @@ var HubApi = class {
     const raw = await this.requestJson(`/api/spaces/${repoId}/secrets`);
     return new Map(Object.entries(raw));
   }
+  async deleteSpaceSecret(repoId, key) {
+    try {
+      await this.requestJson(`/api/spaces/${repoId}/secrets`, {
+        method: "DELETE",
+        body: JSON.stringify({ key }),
+        headers: { "Content-Type": "application/json" }
+      });
+    } catch (err) {
+      if (err instanceof HubApiError2 && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
+  }
   async restartSpace(repoId, factoryReboot = false) {
     await this.requestJson(`/api/spaces/${repoId}/restart`, {
       method: "POST",
@@ -14661,6 +14675,13 @@ var HubApi = class {
   }
   async getSpaceRuntime(repoId) {
     return await this.requestJson(`/api/spaces/${repoId}/runtime`);
+  }
+  async setSpaceVolumes(repoId, volumes) {
+    await this.requestJson(`/api/spaces/${repoId}/volumes`, {
+      method: "PUT",
+      body: JSON.stringify({ volumes }),
+      headers: { "Content-Type": "application/json" }
+    });
   }
   async fetchSpaceLogs(repoId, kind = "run") {
     const url = `${this.hubUrl}/api/spaces/${repoId}/logs/${kind}`;
@@ -15259,6 +15280,8 @@ var DEFAULT_LOCAL_PORT = 7860;
 var DEFAULT_SPACE_OPENCLAW_PORT = 7861;
 var LOCAL_VOLUME_MOUNT_PATH = "/tmp/mlclaw-local";
 var LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
+var SPACE_STATE_MOUNT_DIR = "/data/mlclaw-state";
+var SPACE_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
 var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
 var SPACE_HANDOFF_POLL_MS = 5e3;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
@@ -15611,6 +15634,8 @@ async function confirmBootstrapPlan(params) {
   if (params.spacePlan) {
     lines.push(`Space: ${params.spacePlan.space} (${params.spacePlan.exists ? "exists; files, variables, secrets, and runtime will be updated" : `will be created as ${params.spacePlan.visibility}`})`);
     lines.push(`Hardware: ${params.hardware}`);
+    lines.push(`Bucket mount: ${SPACE_STATE_MOUNT_DIR}`);
+    lines.push(`Live state: ${SPACE_LIVE_DIR}`);
     if (typeof params.sleepTime === "number") {
       lines.push(`Sleep time: ${params.sleepTime}`);
     }
@@ -15711,9 +15736,14 @@ async function stateAdopt(agent, opts, runtime) {
   } else {
     await setDeploymentVariables(hub, updated.space, {
       OPENCLAW_HF_STATE_BUCKET: bucket,
+      MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+      OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+      MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
     });
+    await ensureSpaceStateVolume(hub, updated.space, bucket);
+    await deleteStaleSpaceTokenSecrets(hub, updated.space);
     await clearSpaceGatewayDisabled(hub, updated.space);
     if (bucketChanged) {
       await hub.restartSpace(updated.space, true);
@@ -15828,6 +15858,9 @@ async function deploySpaceGateway(params) {
   const spaceRuntimeRef = params.templateRuntimeImage ?? bundledSpaceRuntimeRef(templateRev);
   await setDeploymentVariables(hub, manifest.space, {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
+    MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+    OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+    MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
     ...secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {},
     MLCLAW_TEMPLATE_REV: templateRev,
     OPENCLAW_MODEL: manifest.model,
@@ -15841,16 +15874,16 @@ async function deploySpaceGateway(params) {
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
   });
+  await ensureSpaceStateVolume(hub, manifest.space, manifest.bucket);
   await clearSpaceGatewayDisabled(hub, manifest.space);
   await setDeploymentSecrets(hub, manifest.space, {
-    HF_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
-    HUGGINGFACE_HUB_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
     MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
     ...secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {},
     ...secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {},
     ...secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {},
     ...secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}
   });
+  await deleteStaleSpaceTokenSecrets(hub, manifest.space);
   await hub.restartSpace(manifest.space, true);
   return { runtimeImage: spaceRuntimeRef };
 }
@@ -16393,6 +16426,13 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
+  const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value;
+  if (bucket) {
+    await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
+    await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
+    await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", `${SPACE_LIVE_DIR}/.mlclaw/settings.json`);
+    await ensureSpaceStateVolume(hub, repoId, bucket);
+  }
   await doctor(repoId, { fix: true }, hub, runtime);
   await hub.restartSpace(repoId, true);
 }
@@ -16454,6 +16494,31 @@ async function doctor(repoId, opts, hub, runtime) {
     await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
     fixed.push("set OPENCLAW_HF_STATE_BUCKET");
   }
+  if ((variables.get("MLCLAW_STATE_MOUNT_DIR")?.value ?? "") !== SPACE_STATE_MOUNT_DIR) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
+      fixed.push("set MLCLAW_STATE_MOUNT_DIR");
+    } else {
+      issues.push(`MLCLAW_STATE_MOUNT_DIR is not ${SPACE_STATE_MOUNT_DIR}`);
+    }
+  }
+  if ((variables.get("OPENCLAW_LIVE_DIR")?.value ?? "") !== SPACE_LIVE_DIR) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
+      fixed.push("set OPENCLAW_LIVE_DIR");
+    } else {
+      issues.push(`OPENCLAW_LIVE_DIR is not ${SPACE_LIVE_DIR}`);
+    }
+  }
+  const expectedRuntimeSettingsFile = `${SPACE_LIVE_DIR}/.mlclaw/settings.json`;
+  if ((variables.get("MLCLAW_RUNTIME_SETTINGS_FILE")?.value ?? "") !== expectedRuntimeSettingsFile) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", expectedRuntimeSettingsFile);
+      fixed.push("set MLCLAW_RUNTIME_SETTINGS_FILE");
+    } else {
+      issues.push(`MLCLAW_RUNTIME_SETTINGS_FILE is not ${expectedRuntimeSettingsFile}`);
+    }
+  }
   for (const key of STALE_PATH_VARS) {
     if (variables.has(key)) {
       if (fix) {
@@ -16464,8 +16529,14 @@ async function doctor(repoId, opts, hub, runtime) {
       }
     }
   }
-  if (!secrets.has("HF_TOKEN")) {
-    issues.push("secret HF_TOKEN is missing");
+  const staleTokenSecrets = ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].filter((key) => secrets.has(key));
+  if (staleTokenSecrets.length > 0) {
+    if (fix) {
+      await deleteStaleSpaceTokenSecrets(hub, repoId);
+      fixed.push(`deleted stale secret${staleTokenSecrets.length === 1 ? "" : "s"} ${staleTokenSecrets.join(", ")}`);
+    } else {
+      issues.push(`stale broad Hub token secret${staleTokenSecrets.length === 1 ? "" : "s"} present: ${staleTokenSecrets.join(", ")}`);
+    }
   }
   if (!secrets.has("MLCLAW_SESSION_SECRET")) {
     if (fix) {
@@ -16514,6 +16585,14 @@ async function doctor(repoId, opts, hub, runtime) {
     await hub.assertBucketAccessible(bucket);
   }
   const runtimeInfo = await hub.getSpaceRuntime(repoId);
+  if (bucket && !hasStateVolume(runtimeInfo.volumes, bucket)) {
+    if (fix) {
+      await hub.setSpaceVolumes(repoId, mergeStateVolume(runtimeInfo.volumes ?? [], bucket));
+      fixed.push(`mounted bucket ${bucket} at ${SPACE_STATE_MOUNT_DIR}`);
+    } else {
+      issues.push(`bucket ${bucket} is not mounted read-write at ${SPACE_STATE_MOUNT_DIR}`);
+    }
+  }
   let logs = "";
   try {
     logs = await hub.fetchSpaceLogs(repoId, "run");
@@ -16613,6 +16692,32 @@ async function setDeploymentSecrets(hub, repoId, secrets) {
   for (const [key, value] of Object.entries(secrets)) {
     await hub.addSpaceSecret(repoId, key, value);
   }
+}
+async function deleteStaleSpaceTokenSecrets(hub, repoId) {
+  await Promise.all([
+    hub.deleteSpaceSecret(repoId, "HF_TOKEN"),
+    hub.deleteSpaceSecret(repoId, "HUGGINGFACE_HUB_TOKEN")
+  ]);
+}
+async function ensureSpaceStateVolume(hub, repoId, bucket) {
+  const runtime = await hub.getSpaceRuntime(repoId).catch(() => ({ volumes: [] }));
+  await hub.setSpaceVolumes(repoId, mergeStateVolume(runtime.volumes ?? [], bucket));
+}
+function mergeStateVolume(existing, bucket) {
+  return [
+    ...existing.filter((volume) => volume.mountPath !== SPACE_STATE_MOUNT_DIR),
+    {
+      type: "bucket",
+      source: bucket,
+      mountPath: SPACE_STATE_MOUNT_DIR,
+      readOnly: false
+    }
+  ];
+}
+function hasStateVolume(volumes, bucket) {
+  return Boolean(volumes?.some(
+    (volume) => volume.type === "bucket" && volume.source === bucket && volume.mountPath === SPACE_STATE_MOUNT_DIR && volume.readOnly !== true
+  ));
 }
 async function clearSpaceGatewayDisabled(hub, repoId) {
   try {
@@ -16746,8 +16851,11 @@ export {
   LOCAL_VOLUME_MOUNT_PATH,
   SPACE_HANDOFF_POLL_MS,
   SPACE_HANDOFF_TIMEOUT_MS,
+  SPACE_LIVE_DIR,
+  SPACE_STATE_MOUNT_DIR,
   TELEGRAM_HARDWARE,
   TELEGRAM_SLEEP_TIME,
   createProgram,
-  main
+  main,
+  mergeStateVolume
 };
