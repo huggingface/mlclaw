@@ -1,22 +1,5 @@
 import type { SpaceRuntimeConfig } from "./config.js";
-
-export const RECOMMENDED_MODELS = [
-  {
-    id: "huggingface/google/gemma-4-26B-A4B-it",
-    label: "Gemma 4 26B A4B",
-    note: "Default quality target",
-  },
-  {
-    id: "huggingface/Qwen/Qwen3.6-35B-A3B",
-    label: "Qwen 3.6 35B A3B",
-    note: "Stronger Qwen option",
-  },
-  {
-    id: "huggingface/Qwen/Qwen3-8B",
-    label: "Qwen 3 8B",
-    note: "Lower cost option",
-  },
-] as const;
+import { normalizeModelRef, PRESET_MODEL_CHOICES, type ModelChoice } from "./model-choices.js";
 
 export type RuntimeSettings = {
   agentName: string | null;
@@ -29,7 +12,8 @@ export type RuntimeSettings = {
   templateRev: string | null;
   allowedUsers: string[];
   adminUsers: string[];
-  recommendedModels: typeof RECOMMENDED_MODELS;
+  modelChoices: ModelChoice[];
+  presetModels: ModelChoice[];
 };
 
 export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
@@ -44,19 +28,13 @@ export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
     templateRev: config.templateRev ?? null,
     allowedUsers: config.allowedUsers,
     adminUsers: config.adminUsers,
-    recommendedModels: RECOMMENDED_MODELS,
+    modelChoices: config.modelChoices,
+    presetModels: PRESET_MODEL_CHOICES,
   };
 }
 
 export function normalizeModel(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 240 || /[\r\n\t]/.test(trimmed) || /\s/.test(trimmed)) {
-    return undefined;
-  }
-  return trimmed;
+  return normalizeModelRef(value);
 }
 
 export async function setCurrentSpaceVariable(

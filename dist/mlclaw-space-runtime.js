@@ -11,6 +11,272 @@ import process2 from "node:process";
 
 // src/mlclaw-space-runtime/config.ts
 import { randomBytes } from "node:crypto";
+
+// src/mlclaw-space-runtime/model-choices.ts
+var DEFAULT_ROUTER_PROVIDER = "deepinfra";
+var DEFAULT_ROUTER_MODEL_ID = "google/gemma-4-26B-A4B-it";
+var DEFAULT_MODEL = formatOpenClawModelRef(DEFAULT_ROUTER_MODEL_ID, DEFAULT_ROUTER_PROVIDER);
+var PRESET_MODEL_CHOICES = [
+  freezeChoice({
+    modelId: "google/gemma-4-26B-A4B-it",
+    provider: "deepinfra",
+    label: "Gemma 4 26B A4B",
+    note: "Default quality target on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.07, output: 0.34 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 414.2,
+    throughput: 34.79003450519141,
+    status: "live",
+    inputModalities: ["text", "image"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "Qwen/Qwen3.6-35B-A3B",
+    provider: "deepinfra",
+    label: "Qwen 3.6 35B A3B",
+    note: "Stronger Qwen preset on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.15, output: 0.95 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 2101.6,
+    throughput: 46.14033459271881,
+    status: "live",
+    inputModalities: ["text", "image"],
+    outputModalities: ["text"],
+    preset: true
+  })
+];
+function parseModelChoicesEnv(value, activeModel) {
+  const parsed = parseJsonArray(value);
+  const choices = parsed ? parsed.flatMap((item) => {
+    const choice = normalizeModelChoice(item);
+    return choice ? [choice] : [];
+  }) : PRESET_MODEL_CHOICES;
+  return ensureActiveModelChoice(dedupeModelChoices(choices), activeModel);
+}
+function normalizeModelChoice(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const item = value;
+  const parsed = parseOpenClawModelRef(stringValue(item.openclawModel));
+  const modelId = normalizeModelId(stringValue(item.modelId) ?? parsed?.modelId);
+  const provider = normalizeProvider(stringValue(item.provider) ?? parsed?.provider);
+  if (!modelId || !provider) {
+    return void 0;
+  }
+  return freezeChoice({
+    modelId,
+    provider,
+    label: cleanLabel(stringValue(item.label)) ?? displayNameFromModelId(modelId),
+    ...optional("note", cleanNote(stringValue(item.note))),
+    ...optional("contextLength", positiveInteger(item.contextLength)),
+    ...optional("pricing", normalizePricing(item.pricing)),
+    ...optional("supportsTools", optionalBoolean(item.supportsTools)),
+    ...optional("supportsStructuredOutput", optionalBoolean(item.supportsStructuredOutput)),
+    ...optional("firstTokenLatencyMs", positiveNumber(item.firstTokenLatencyMs)),
+    ...optional("throughput", positiveNumber(item.throughput)),
+    ...optional("status", cleanStatus(stringValue(item.status))),
+    ...optional("inputModalities", normalizeModalities(item.inputModalities)),
+    ...optional("outputModalities", normalizeModalities(item.outputModalities)),
+    ...optionalBoolean(item.preset) === true ? { preset: true } : {}
+  });
+}
+function normalizeModelChoices(value, activeModel) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const choices = value.flatMap((item) => {
+    const choice = normalizeModelChoice(item);
+    return choice ? [choice] : [];
+  });
+  if (choices.length === 0 || choices.length > 80) {
+    return void 0;
+  }
+  return ensureActiveModelChoice(dedupeModelChoices(choices), activeModel);
+}
+function serializeModelChoices(choices) {
+  return JSON.stringify(choices.map(serializableChoice));
+}
+function ensureActiveModelChoice(choices, activeModel) {
+  const parsed = parseOpenClawModelRef(activeModel);
+  if (!parsed) {
+    return [...choices];
+  }
+  const active = freezeChoice({
+    ...PRESET_MODEL_CHOICES.find(
+      (choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider
+    ),
+    modelId: parsed.modelId,
+    provider: parsed.provider,
+    label: displayNameFromModelId(parsed.modelId)
+  });
+  return dedupeModelChoices([active, ...choices]);
+}
+function dedupeModelChoices(choices) {
+  const seen = /* @__PURE__ */ new Set();
+  const deduped = [];
+  for (const choice of choices) {
+    if (seen.has(choice.key)) {
+      continue;
+    }
+    seen.add(choice.key);
+    deduped.push(choice);
+  }
+  return deduped;
+}
+function formatOpenClawModelRef(modelId, provider) {
+  return `huggingface/${modelId}:${provider}`;
+}
+function parseOpenClawModelRef(value) {
+  const normalized = normalizeModelRef(value);
+  if (!normalized?.startsWith("huggingface/")) {
+    return void 0;
+  }
+  const rest = normalized.slice("huggingface/".length);
+  const split = rest.lastIndexOf(":");
+  const modelId = normalizeModelId(split >= 0 ? rest.slice(0, split) : rest);
+  const provider = normalizeProvider(split >= 0 ? rest.slice(split + 1) : DEFAULT_ROUTER_PROVIDER);
+  return modelId && provider ? { modelId, provider } : void 0;
+}
+function normalizeModelRef(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 260 || /[\r\n\t]/.test(trimmed) || /\s/.test(trimmed)) {
+    return void 0;
+  }
+  return trimmed;
+}
+function choiceKey(modelId, provider) {
+  return `${provider}::${modelId}`;
+}
+function displayNameFromModelId(id) {
+  const base = id.split("/").pop() || id;
+  return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+function freezeChoice(params) {
+  const modelId = normalizeModelId(params.modelId) ?? params.modelId;
+  const provider = normalizeProvider(params.provider) ?? params.provider;
+  return {
+    ...params,
+    modelId,
+    provider,
+    key: choiceKey(modelId, provider),
+    openclawModel: formatOpenClawModelRef(modelId, provider)
+  };
+}
+function serializableChoice(choice) {
+  return {
+    key: choice.key,
+    modelId: choice.modelId,
+    provider: choice.provider,
+    openclawModel: choice.openclawModel,
+    label: choice.label,
+    ...choice.note ? { note: choice.note } : {},
+    ...choice.contextLength ? { contextLength: choice.contextLength } : {},
+    ...choice.pricing ? { pricing: choice.pricing } : {},
+    ...choice.supportsTools !== void 0 ? { supportsTools: choice.supportsTools } : {},
+    ...choice.supportsStructuredOutput !== void 0 ? { supportsStructuredOutput: choice.supportsStructuredOutput } : {},
+    ...choice.firstTokenLatencyMs ? { firstTokenLatencyMs: choice.firstTokenLatencyMs } : {},
+    ...choice.throughput ? { throughput: choice.throughput } : {},
+    ...choice.status ? { status: choice.status } : {},
+    ...choice.inputModalities ? { inputModalities: choice.inputModalities } : {},
+    ...choice.outputModalities ? { outputModalities: choice.outputModalities } : {},
+    ...choice.preset ? { preset: true } : {}
+  };
+}
+function normalizeModelId(value) {
+  if (!value) {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 220 || /[\r\n\t:]/.test(trimmed) || /\s/.test(trimmed) || !trimmed.includes("/")) {
+    return void 0;
+  }
+  return trimmed;
+}
+function normalizeProvider(value) {
+  if (!value) {
+    return void 0;
+  }
+  const trimmed = value.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(trimmed)) {
+    return void 0;
+  }
+  return trimmed;
+}
+function normalizePricing(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const raw2 = value;
+  const input = positiveNumber(raw2.input);
+  const output = positiveNumber(raw2.output);
+  if (input === void 0 && output === void 0) {
+    return void 0;
+  }
+  return {
+    ...input !== void 0 ? { input } : {},
+    ...output !== void 0 ? { output } : {}
+  };
+}
+function normalizeModalities(value) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const modalities = [...new Set(value.flatMap((item) => {
+    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+    return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
+  }))];
+  return modalities.length > 0 ? modalities : void 0;
+}
+function parseJsonArray(value) {
+  if (!value?.trim()) {
+    return void 0;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function stringValue(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function cleanLabel(value) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 80 ? trimmed : void 0;
+}
+function cleanNote(value) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 160 ? trimmed : void 0;
+}
+function cleanStatus(value) {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed && /^[a-z][a-z0-9_-]{0,31}$/.test(trimmed) ? trimmed : void 0;
+}
+function optionalBoolean(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+function optional(key, value) {
+  return value === void 0 ? {} : { [key]: value };
+}
+function positiveInteger(value) {
+  const parsed = positiveNumber(value);
+  return parsed === void 0 ? void 0 : Math.trunc(parsed);
+}
+function positiveNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
+}
+
+// src/mlclaw-space-runtime/config.ts
 function loadConfig(env = process.env) {
   const port = integer(env.PORT ?? env.MLCLAW_SPACE_PORT, 7860);
   const openclawPort = integer(env.MLCLAW_OPENCLAW_PORT ?? env.OPENCLAW_GATEWAY_PORT, 7861);
@@ -38,6 +304,7 @@ function loadConfig(env = process.env) {
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
+  const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   return {
     port,
     openclawPort,
@@ -64,7 +331,9 @@ function loadConfig(env = process.env) {
     openclawCommand,
     openclawArgs,
     agentName: trim(env.OPENCLAW_AGENT_NAME),
-    model: trim(env.OPENCLAW_MODEL) ?? "huggingface/google/gemma-4-26B-A4B-it",
+    model,
+    modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
     statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),
@@ -129,8 +398,8 @@ import http2 from "node:http";
 import { Readable } from "node:stream";
 
 // src/mlclaw-space-runtime/app.ts
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
 
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -2267,23 +2536,6 @@ function signatureMatches(a, b) {
 }
 
 // src/mlclaw-space-runtime/hub-settings.ts
-var RECOMMENDED_MODELS = [
-  {
-    id: "huggingface/google/gemma-4-26B-A4B-it",
-    label: "Gemma 4 26B A4B",
-    note: "Default quality target"
-  },
-  {
-    id: "huggingface/Qwen/Qwen3.6-35B-A3B",
-    label: "Qwen 3.6 35B A3B",
-    note: "Stronger Qwen option"
-  },
-  {
-    id: "huggingface/Qwen/Qwen3-8B",
-    label: "Qwen 3 8B",
-    note: "Lower cost option"
-  }
-];
 function runtimeSettings(config2) {
   return {
     agentName: config2.agentName ?? null,
@@ -2296,18 +2548,12 @@ function runtimeSettings(config2) {
     templateRev: config2.templateRev ?? null,
     allowedUsers: config2.allowedUsers,
     adminUsers: config2.adminUsers,
-    recommendedModels: RECOMMENDED_MODELS
+    modelChoices: config2.modelChoices,
+    presetModels: PRESET_MODEL_CHOICES
   };
 }
 function normalizeModel(value) {
-  if (typeof value !== "string") {
-    return void 0;
-  }
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 240 || /[\r\n\t]/.test(trimmed) || /\s/.test(trimmed)) {
-    return void 0;
-  }
-  return trimmed;
+  return normalizeModelRef(value);
 }
 async function setCurrentSpaceVariable(config2, key, value) {
   if (!config2.spaceId || !config2.hfToken) {
@@ -6448,15 +6694,131 @@ async function exchangeCodeForIdentity(settings, code) {
   return { username: userBody.data.preferred_username };
 }
 
-// src/mlclaw-space-runtime/openai-credentials.ts
+// src/mlclaw-space-runtime/openclaw-config.ts
 import fs from "node:fs/promises";
 import path from "node:path";
+async function configureOpenClawGateway(config2) {
+  const raw2 = await fs.readFile(config2.openclawConfigPath, "utf8");
+  const openclawConfig = JSON.parse(raw2);
+  const gateway = object(openclawConfig, "gateway");
+  gateway.mode = "local";
+  gateway.bind = "loopback";
+  gateway.port = config2.openclawPort;
+  gateway.auth = {
+    mode: "trusted-proxy",
+    trustedProxy: {
+      userHeader: "x-forwarded-user",
+      requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
+      allowLoopback: true
+    }
+  };
+  gateway.trustedProxies = ["127.0.0.1", "::1"];
+  gateway.controlUi = {
+    ...typeof gateway.controlUi === "object" && gateway.controlUi ? gateway.controlUi : {},
+    dangerouslyDisableDeviceAuth: true,
+    allowedOrigins: [config2.publicUrl]
+  };
+  configureOpenClawModels(openclawConfig, config2);
+  await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+`, { mode: 384 });
+  await fs.chmod(config2.openclawConfigPath, 384);
+}
+function configureOpenClawModels(openclawConfig, config2) {
+  const agents = object(openclawConfig, "agents");
+  const defaults = object(agents, "defaults");
+  const existingModel = defaults.model && typeof defaults.model === "object" && !Array.isArray(defaults.model) ? defaults.model : {};
+  defaults.model = {
+    ...existingModel,
+    primary: config2.model
+  };
+  defaults.models = Object.fromEntries(
+    config2.modelChoices.map((choice) => [
+      choice.openclawModel,
+      {
+        alias: aliasForChoice(choice)
+      }
+    ])
+  );
+  const models = object(openclawConfig, "models");
+  const providers = object(models, "providers");
+  const huggingface = object(providers, "huggingface");
+  huggingface.baseUrl = "https://router.huggingface.co/v1";
+  huggingface.api = "openai-completions";
+  huggingface.models = config2.modelChoices.map(modelDefinitionFromChoice);
+}
+function modelDefinitionFromChoice(choice) {
+  const providerModelId = providerModelIdFromChoice(choice);
+  return {
+    id: providerModelId,
+    name: `${choice.label} (${choice.provider})`,
+    input: inputModalitiesForChoice(choice),
+    contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
+    maxTokens: 8192,
+    reasoning: isReasoningModel(choice.modelId),
+    cost: {
+      input: choice.pricing?.input ?? 0,
+      output: choice.pricing?.output ?? 0,
+      cacheRead: 0,
+      cacheWrite: 0
+    },
+    api: "openai-completions",
+    compat: {
+      supportsTools: choice.supportsTools ?? true,
+      supportsStrictMode: choice.supportsStructuredOutput ?? false
+    }
+  };
+}
+function providerModelIdFromChoice(choice) {
+  const parsed = parseOpenClawModelRef(choice.openclawModel);
+  return parsed ? `${parsed.modelId}:${parsed.provider}` : `${choice.modelId}:${choice.provider}`;
+}
+function inputModalitiesForChoice(choice) {
+  if (choice.inputModalities?.length) {
+    return choice.inputModalities.filter((item) => item === "text" || item === "image");
+  }
+  return isLikelyImageModel(choice.modelId) ? ["text", "image"] : ["text"];
+}
+function aliasForChoice(choice) {
+  const base = displayNameFromModelId(choice.modelId).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "model";
+  return `${base}-${choice.provider}`.slice(0, 64);
+}
+function isLikelyImageModel(id) {
+  const lower = id.toLowerCase();
+  return lower.includes("-vl") || lower.includes("vision") || lower.includes("multimodal") || lower.includes("gemma-3") || lower.includes("gemma-4") || lower.includes("llama-4") || lower.includes("qwen3.6");
+}
+function contextWindowForModel(id) {
+  const lower = id.toLowerCase();
+  if (lower.includes("gemma-4") || lower.includes("qwen3.6")) {
+    return 262144;
+  }
+  if (lower.includes("qwen3-8b") || lower.includes("qwen3-14b")) {
+    return 40960;
+  }
+  return 131072;
+}
+function isReasoningModel(id) {
+  return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
+}
+function object(parent, key) {
+  const value = parent[key];
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  const created = {};
+  parent[key] = created;
+  return created;
+}
+
+// src/mlclaw-space-runtime/openai-credentials.ts
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
 function openAiConfigured(env = process.env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
 }
 async function loadOpenAiCredentialFile(file) {
   try {
-    const raw2 = await fs.readFile(file, "utf8");
+    const raw2 = await fs2.readFile(file, "utf8");
     const match2 = raw2.match(/(?:^|\n)OPENAI_API_KEY=([^\n]+)/);
     return match2?.[1]?.trim() || void 0;
   } catch {
@@ -6464,10 +6826,10 @@ async function loadOpenAiCredentialFile(file) {
   }
 }
 async function writeEphemeralOpenAiCredential(file, apiKey) {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 448 });
-  await fs.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
+  await fs2.mkdir(path2.dirname(file), { recursive: true, mode: 448 });
+  await fs2.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
 `, { encoding: "utf8", mode: 384 });
-  await fs.chmod(file, 384);
+  await fs2.chmod(file, 384);
 }
 function validateOpenAiApiKey(value) {
   if (typeof value !== "string") {
@@ -6569,6 +6931,174 @@ function page(title, body) {
 }
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+// src/mlclaw-space-runtime/router-models.ts
+var DEFAULT_ROUTER_MODELS_URL = "https://router.huggingface.co/v1/models";
+var CACHE_TTL_MS = 10 * 60 * 1e3;
+var cache;
+async function loadRouterModelChoices(params = {}) {
+  const now = params.now ?? Date.now();
+  if (!params.force && cache && cache.expiresAt > now) {
+    return { ok: true, models: cache.models, fetchedAt: new Date(now).toISOString() };
+  }
+  try {
+    const response = await (params.fetchImpl ?? fetch)(params.url ?? DEFAULT_ROUTER_MODELS_URL, {
+      headers: { accept: "application/json" }
+    });
+    if (!response.ok) {
+      throw new Error(`Router model catalog failed with HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    const models = mergePresets(normalizeRouterModelsPayload(payload));
+    cache = {
+      models,
+      expiresAt: now + CACHE_TTL_MS
+    };
+    return { ok: true, models, fetchedAt: new Date(now).toISOString() };
+  } catch (err) {
+    return {
+      ok: false,
+      models: PRESET_MODEL_CHOICES,
+      fetchedAt: null,
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
+}
+function normalizeRouterModelsPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return [];
+  }
+  const data = payload.data;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  const choices = [];
+  for (const model of data) {
+    if (!model || typeof model !== "object" || Array.isArray(model)) {
+      continue;
+    }
+    const record = model;
+    const modelId = stringValue2(record.id);
+    if (!modelId || !modelId.includes("/")) {
+      continue;
+    }
+    const architecture = record.architecture && typeof record.architecture === "object" ? record.architecture : {};
+    const inputModalities = normalizeModalities2(architecture.input_modalities);
+    const outputModalities = normalizeModalities2(architecture.output_modalities);
+    if (outputModalities && !outputModalities.includes("text")) {
+      continue;
+    }
+    const providers = Array.isArray(record.providers) ? record.providers : [];
+    for (const provider of providers) {
+      const normalized = normalizeProviderChoice({
+        modelId,
+        provider,
+        ...inputModalities ? { inputModalities } : {},
+        ...outputModalities ? { outputModalities } : {}
+      });
+      if (normalized) {
+        choices.push(normalized);
+      }
+    }
+  }
+  return choices.sort(compareChoices);
+}
+function normalizeProviderChoice(params) {
+  if (!params.provider || typeof params.provider !== "object" || Array.isArray(params.provider)) {
+    return void 0;
+  }
+  const provider = params.provider;
+  const providerId = stringValue2(provider.provider);
+  if (!providerId || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(providerId)) {
+    return void 0;
+  }
+  const status = stringValue2(provider.status) ?? "live";
+  if (status !== "live") {
+    return void 0;
+  }
+  const pricing = provider.pricing && typeof provider.pricing === "object" && !Array.isArray(provider.pricing) ? provider.pricing : void 0;
+  const normalizedProvider = providerId.toLowerCase();
+  const modelId = params.modelId.trim();
+  const pricingValue = pricingForProvider(pricing);
+  return {
+    key: choiceKey(modelId, normalizedProvider),
+    modelId,
+    provider: normalizedProvider,
+    openclawModel: formatOpenClawModelRef(modelId, normalizedProvider),
+    label: displayNameFromModelId(modelId),
+    ...optional2("contextLength", positiveInteger2(provider.context_length)),
+    ...optional2("pricing", pricingValue),
+    ...optional2("supportsTools", optionalBoolean2(provider.supports_tools)),
+    ...optional2("supportsStructuredOutput", optionalBoolean2(provider.supports_structured_output)),
+    ...optional2("firstTokenLatencyMs", positiveNumber2(provider.first_token_latency_ms)),
+    ...optional2("throughput", positiveNumber2(provider.throughput)),
+    status,
+    ...params.inputModalities ? { inputModalities: params.inputModalities } : {},
+    ...params.outputModalities ? { outputModalities: params.outputModalities } : {}
+  };
+}
+function mergePresets(dynamicChoices) {
+  const dynamicByKey = new Map(dynamicChoices.map((choice) => [choice.key, choice]));
+  const presets = PRESET_MODEL_CHOICES.map((preset) => ({
+    ...preset,
+    ...dynamicByKey.get(preset.key) ?? {},
+    preset: true,
+    label: preset.label,
+    ...preset.note ? { note: preset.note } : {}
+  }));
+  return dedupeModelChoices([...presets, ...dynamicChoices]).sort(compareChoices);
+}
+function compareChoices(left, right) {
+  if (left.preset !== right.preset) {
+    return left.preset ? -1 : 1;
+  }
+  const leftPrice = left.pricing?.input ?? Number.POSITIVE_INFINITY;
+  const rightPrice = right.pricing?.input ?? Number.POSITIVE_INFINITY;
+  if (leftPrice !== rightPrice) {
+    return leftPrice - rightPrice;
+  }
+  return left.openclawModel.localeCompare(right.openclawModel);
+}
+function stringValue2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function normalizeModalities2(value) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const modalities = [...new Set(value.flatMap((item) => {
+    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+    return normalized ? [normalized] : [];
+  }))];
+  return modalities.length > 0 ? modalities : void 0;
+}
+function optionalBoolean2(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+function pricingForProvider(pricing) {
+  if (!pricing) {
+    return void 0;
+  }
+  const input = positiveNumber2(pricing.input);
+  const output = positiveNumber2(pricing.output);
+  if (input === void 0 && output === void 0) {
+    return void 0;
+  }
+  return {
+    ...input !== void 0 ? { input } : {},
+    ...output !== void 0 ? { output } : {}
+  };
+}
+function optional2(key, value) {
+  return value === void 0 ? {} : { [key]: value };
+}
+function positiveInteger2(value) {
+  const parsed = positiveNumber2(value);
+  return parsed === void 0 ? void 0 : Math.trunc(parsed);
+}
+function positiveNumber2(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
 }
 
 // src/mlclaw-space-runtime/cookies.ts
@@ -6715,8 +7245,8 @@ function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
-  app.get("/assets/mlclaw.svg", async () => serveFile(path2.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
-  app.get("/assets/hf-logo.svg", async () => serveFile(path2.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/mlclaw.svg", async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/hf-logo.svg", async () => serveFile(path3.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
   app.get("/oauth/login", (c) => handleOauthLogin(c, config2));
   app.get("/oauth/callback", (c) => handleOauthCallback(c, config2));
   app.get("/login", (c) => c.html(loginPage(config2, void 0, normalizeNext(c.req.query("next") ?? "/"))));
@@ -6729,7 +7259,7 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!safe) {
       return c.text("not found\n", 404);
     }
-    const file = path2.join(config2.assetsDir, "mlclaw-control-ui", safe);
+    const file = path3.join(config2.assetsDir, "mlclaw-control-ui", safe);
     return serveFile(file, contentType(file), true);
   });
   app.get("/mlclaw/openai", (c) => c.redirect("/mlclaw/credentials", 302));
@@ -6759,6 +7289,13 @@ function createSpaceRuntimeApp(config2, controls) {
     }
     return c.json(runtimeSettings(config2));
   });
+  app.get("/mlclaw/api/router-models", async (c) => {
+    const auth = requireAllowed(c, config2);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    return c.json(await loadRouterModelChoices({ url: config2.routerModelsUrl }));
+  });
   app.post("/mlclaw/api/settings/model", async (c) => {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) {
@@ -6776,8 +7313,18 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!model) {
       return c.json({ ok: false, error: "model is required" }, 400);
     }
+    const choices = normalizeModelChoices(body?.modelChoices, model);
+    if (!choices) {
+      return c.json({ ok: false, error: "at least one valid model choice is required" }, 400);
+    }
+    const selected = choices.find((choice) => choice.openclawModel === model);
+    if (!selected) {
+      return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
+    }
     await setCurrentSpaceVariable(config2, "OPENCLAW_MODEL", model);
-    controls.setModel(model);
+    await setCurrentSpaceVariable(config2, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+    controls.setModelSettings(model, choices);
+    await configureOpenClawGateway(config2);
     let restartPending = false;
     try {
       restartPending = await restartCurrentSpace(config2);
@@ -6785,7 +7332,7 @@ function createSpaceRuntimeApp(config2, controls) {
       process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}
 `);
     }
-    return c.json({ ok: true, model, restartPending });
+    return c.json({ ok: true, model, modelChoices: choices, restartPending });
   });
   app.post("/mlclaw/api/credentials/openai", async (c) => {
     const auth = requireAdmin(c, config2);
@@ -6895,7 +7442,7 @@ async function controlUi(c, config2) {
   if (auth instanceof Response) {
     return auth;
   }
-  return serveFile(path2.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
+  return serveFile(path3.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 function logoutResponse(config2, json) {
   const headers = new Headers();
@@ -6999,7 +7546,7 @@ async function readJson(c) {
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
-    const body = await fs2.readFile(file);
+    const body = await fs3.readFile(file);
     const headers = new Headers({ "content-type": contentTypeHeader });
     if (immutable) {
       headers.set("cache-control", "public, max-age=31536000, immutable");
@@ -7019,7 +7566,7 @@ function safeRelativePath(value) {
   } catch {
     return void 0;
   }
-  const normalized = path2.posix.normalize(decoded).replace(/^\/+/, "");
+  const normalized = path3.posix.normalize(decoded).replace(/^\/+/, "");
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
     return void 0;
   }
@@ -7042,45 +7589,6 @@ function contentType(file) {
     return "text/html; charset=utf-8";
   }
   return "application/octet-stream";
-}
-
-// src/mlclaw-space-runtime/openclaw-config.ts
-import fs3 from "node:fs/promises";
-import path3 from "node:path";
-async function configureOpenClawGateway(config2) {
-  const raw2 = await fs3.readFile(config2.openclawConfigPath, "utf8");
-  const openclawConfig = JSON.parse(raw2);
-  const gateway = object(openclawConfig, "gateway");
-  gateway.mode = "local";
-  gateway.bind = "loopback";
-  gateway.port = config2.openclawPort;
-  gateway.auth = {
-    mode: "trusted-proxy",
-    trustedProxy: {
-      userHeader: "x-forwarded-user",
-      requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
-      allowLoopback: true
-    }
-  };
-  gateway.trustedProxies = ["127.0.0.1", "::1"];
-  gateway.controlUi = {
-    ...typeof gateway.controlUi === "object" && gateway.controlUi ? gateway.controlUi : {},
-    dangerouslyDisableDeviceAuth: true,
-    allowedOrigins: [config2.publicUrl]
-  };
-  await fs3.mkdir(path3.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs3.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
-`, { mode: 384 });
-  await fs3.chmod(config2.openclawConfigPath, 384);
-}
-function object(parent, key) {
-  const value = parent[key];
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value;
-  }
-  const created = {};
-  parent[key] = created;
-  return created;
 }
 
 // src/mlclaw-space-runtime/proxy.ts
@@ -7277,8 +7785,9 @@ var SpaceRuntimeServer = class {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
       openAiConfigured: async () => openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
-      setModel: (model) => {
+      setModelSettings: (model, choices) => {
         this.config.model = model;
+        this.config.modelChoices = choices;
       }
     });
   }

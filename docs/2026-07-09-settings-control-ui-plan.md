@@ -2,6 +2,11 @@
 
 Status: implemented
 
+Superseded for model selection by
+[`2026-07-09-router-model-settings-plan.md`](2026-07-09-router-model-settings-plan.md).
+The newer plan replaces fixed recommended model choices with a dynamic
+Hugging Face Router catalog and provider-pinned model selections.
+
 ## Goal
 
 Add a first-class ML Claw control UI inside every Space deployment so users can

@@ -29,8 +29,9 @@ export class SpaceRuntimeServer {
       openAiConfigured: async () =>
         openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
-      setModel: (model) => {
+      setModelSettings: (model, choices) => {
         this.config.model = model;
+        this.config.modelChoices = choices;
       },
     });
   }

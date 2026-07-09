@@ -67,14 +67,14 @@ Choose a Hugging Face Router model with `--model`:
 ```bash
 npx mlclaw bootstrap \
   --name mlclaw \
-  --model huggingface/google/gemma-4-26B-A4B-it
+  --model huggingface/google/gemma-4-26B-A4B-it:deepinfra
 ```
 
 Recommended router-compatible options:
 
-- `huggingface/google/gemma-4-26B-A4B-it`: default quality target.
-- `huggingface/Qwen/Qwen3.6-35B-A3B`: stronger Qwen option with tool support.
-- `huggingface/Qwen/Qwen3-8B`: cheaper small-model option.
+- `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
+- `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`: stronger Qwen option with tool and structured-output support.
+- `huggingface/Qwen/Qwen3-8B:nscale`: cheaper small-model option.
 
 ## Optional Telegram
 
@@ -163,7 +163,8 @@ After signing into the Space, open:
 
 Use the browser control UI for:
 
-- `/mlclaw/settings`: change `OPENCLAW_MODEL` and request a Space restart.
+- `/mlclaw/settings`: choose Router model/provider rows, update `OPENCLAW_MODEL`
+  and `MLCLAW_MODEL_CHOICES`, and request a Space restart.
 - `/mlclaw/status`: inspect runtime, bucket, model, and OAuth status.
 - `/mlclaw/credentials`: submit an OpenAI API key.
 - `/mlclaw/logout`: clear the ML Claw session cookie.
