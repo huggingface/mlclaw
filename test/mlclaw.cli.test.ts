@@ -905,6 +905,26 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
   });
 
+  it("does not overwrite Space volumes when runtime volume metadata is omitted", async () => {
+    const hub = createFakeHub({
+      spaceRuntime: { stage: "RUNNING", hardware: "cpu-basic", requested_hardware: "cpu-basic", sleep_time: -1 },
+    });
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("did not include volumes");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
+  });
+
   it("shows existing bucket and Space actions before bootstrap updates resources", async () => {
     const hub = createFakeHub({
       existingBuckets: ["alice/mlclaw-data"],
@@ -1326,6 +1346,33 @@ describe("mlclaw CLI", () => {
     expect(code).toBe(0);
     expect(output.join("\n")).toContain("add MLCLAW_ROUTER_TOKEN before removing");
     expect(hub.calls).not.toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
+  });
+
+  it("does not overwrite Space volumes during doctor --fix when runtime volume metadata is omitted", async () => {
+    const hub = createFakeHub({
+      spaceRuntime: { stage: "RUNNING", hardware: "cpu-basic", requested_hardware: "cpu-basic", sleep_time: -1 },
+    });
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", "openai/gpt-4.1-mini");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_OPENCLAW_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_GATEWAY_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ALLOWED_USERS", "alice");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
+    hub.calls.length = 0;
+
+    const { prompt } = createPrompt([]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main(["doctor", "alice/research", "--fix"], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("did not include volumes");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
   });
 
   it("migrates local to Space and back without starting both gateways", async () => {

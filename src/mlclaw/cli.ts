@@ -12,7 +12,7 @@ import { readToken } from "./auth.js";
 import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } from "./docker.js";
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
 import { pushTemplateToSpace } from "./git.js";
-import { HubApi, HubApiError, type SpaceVolume } from "./hub-api.js";
+import { HubApi, HubApiError, type SpaceRuntime, type SpaceVolume } from "./hub-api.js";
 import {
   assertNoLiveForeignLease,
   clearRuntimeHandoffRequest,
@@ -1884,7 +1884,7 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
   const runtimeInfo = await hub.getSpaceRuntime(repoId);
   if (bucket && !hasStateVolume(runtimeInfo.volumes, bucket)) {
     if (fix) {
-      await hub.setSpaceVolumes(repoId, mergeStateVolume(runtimeInfo.volumes ?? [], bucket));
+      await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtimeInfo, repoId), bucket));
       fixed.push(`mounted bucket ${bucket} at ${SPACE_STATE_MOUNT_DIR}`);
     } else {
       issues.push(`bucket ${bucket} is not mounted read-write at ${SPACE_STATE_MOUNT_DIR}`);
@@ -2030,7 +2030,14 @@ function hasRouterTokenSecretMap(secrets: Map<string, { key: string }>): boolean
 
 async function ensureSpaceStateVolume(hub: HubApi, repoId: string, bucket: string): Promise<void> {
   const runtime = await hub.getSpaceRuntime(repoId);
-  await hub.setSpaceVolumes(repoId, mergeStateVolume(runtime.volumes ?? [], bucket));
+  await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtime, repoId), bucket));
+}
+
+function requireRuntimeVolumes(runtime: SpaceRuntime, repoId: string): SpaceVolume[] {
+  if (!Array.isArray(runtime.volumes)) {
+    throw new Error(`Space runtime metadata for ${repoId} did not include volumes; refusing to replace mounts`);
+  }
+  return runtime.volumes;
 }
 
 export function mergeStateVolume(existing: SpaceVolume[], bucket: string): SpaceVolume[] {

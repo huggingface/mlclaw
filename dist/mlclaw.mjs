@@ -16617,7 +16617,7 @@ async function doctor(repoId, opts, hub, runtime) {
   const runtimeInfo = await hub.getSpaceRuntime(repoId);
   if (bucket && !hasStateVolume(runtimeInfo.volumes, bucket)) {
     if (fix) {
-      await hub.setSpaceVolumes(repoId, mergeStateVolume(runtimeInfo.volumes ?? [], bucket));
+      await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtimeInfo, repoId), bucket));
       fixed.push(`mounted bucket ${bucket} at ${SPACE_STATE_MOUNT_DIR}`);
     } else {
       issues.push(`bucket ${bucket} is not mounted read-write at ${SPACE_STATE_MOUNT_DIR}`);
@@ -16740,7 +16740,13 @@ function hasRouterTokenSecretMap(secrets) {
 }
 async function ensureSpaceStateVolume(hub, repoId, bucket) {
   const runtime = await hub.getSpaceRuntime(repoId);
-  await hub.setSpaceVolumes(repoId, mergeStateVolume(runtime.volumes ?? [], bucket));
+  await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtime, repoId), bucket));
+}
+function requireRuntimeVolumes(runtime, repoId) {
+  if (!Array.isArray(runtime.volumes)) {
+    throw new Error(`Space runtime metadata for ${repoId} did not include volumes; refusing to replace mounts`);
+  }
+  return runtime.volumes;
 }
 function mergeStateVolume(existing, bucket) {
   return [
