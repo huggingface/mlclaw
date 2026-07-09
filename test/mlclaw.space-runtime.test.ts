@@ -20,6 +20,23 @@ afterEach(async () => {
 });
 
 describe("ML Claw Space runtime", () => {
+  it("includes the curated Router model presets", () => {
+    expect(PRESET_MODEL_CHOICES.map((choice) => choice.openclawModel)).toEqual(
+      expect.arrayContaining([
+        "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
+        "huggingface/Qwen/Qwen3.6-27B:deepinfra",
+        "huggingface/zai-org/GLM-5.2:fireworks-ai",
+        "huggingface/moonshotai/Kimi-K2.7-Code:deepinfra",
+        "huggingface/openai/gpt-oss-120b:deepinfra",
+        "huggingface/openai/gpt-oss-20b:deepinfra",
+        "huggingface/deepseek-ai/DeepSeek-V4-Flash:deepinfra",
+        "huggingface/deepseek-ai/DeepSeek-V4-Pro:deepinfra",
+        "huggingface/MiniMaxAI/MiniMax-M3:together",
+      ]),
+    );
+    expect(new Set(PRESET_MODEL_CHOICES.map((choice) => choice.key)).size).toBe(PRESET_MODEL_CHOICES.length);
+  });
+
   it("serves the Hugging Face login page before a session exists", async () => {
     const config = await testConfig();
     const runtime = new SpaceRuntimeServer(config);
@@ -115,24 +132,25 @@ describe("ML Claw Space runtime", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      ok: true,
-      models: [
-        {
+    const body = await response.json();
+    expect(body).toMatchObject({ ok: true });
+    expect(body.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           modelId: "google/gemma-4-26B-A4B-it",
           provider: "deepinfra",
           preset: true,
-        },
-        {
+        }),
+        expect.objectContaining({
           modelId: "Qwen/Qwen3.6-27B",
           provider: "deepinfra",
           openclawModel: "huggingface/Qwen/Qwen3.6-27B:deepinfra",
-          pricing: { input: 0.32, output: 3.2 },
+          pricing: expect.objectContaining({ input: 0.32, output: 3.2 }),
           supportsTools: true,
           supportsStructuredOutput: true,
-        },
-      ],
-    });
+        }),
+      ]),
+    );
   });
 
   it("keeps the requested browser path as OAuth next while APIs return 401", async () => {
@@ -805,29 +823,31 @@ describe("ML Claw Space runtime", () => {
     expect(rewritten.models.providers.huggingface).toMatchObject({
       baseUrl: "https://router.huggingface.co/v1",
       api: "openai-completions",
-      models: [
-        {
+    });
+    expect(rewritten.models.providers.huggingface.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           id: "google/gemma-4-26B-A4B-it:deepinfra",
           contextWindow: 262144,
-          cost: {
+          cost: expect.objectContaining({
             input: 0.07,
             output: 0.34,
-          },
-          compat: {
+          }),
+          compat: expect.objectContaining({
             supportsTools: true,
             supportsStrictMode: true,
-          },
-        },
-        {
+          }),
+        }),
+        expect.objectContaining({
           id: "Qwen/Qwen3.6-27B:deepinfra",
           contextWindow: 262144,
-          cost: {
+          cost: expect.objectContaining({
             input: 0.32,
             output: 3.2,
-          },
-        },
-      ],
-    });
+          }),
+        }),
+      ]),
+    );
   });
 
   it("makes the duplicated Space owner the default admin", () => {
