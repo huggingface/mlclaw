@@ -7757,6 +7757,9 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
     }
+    if (parseOpenClawModelRef(model) && !config2.routerToken && !config2.hfToken) {
+      return c.json({ ok: false, error: "Hugging Face Router token is required before selecting a Hugging Face Router model" }, 400);
+    }
     let persistent = false;
     if (config2.spaceId && config2.hfToken) {
       await setCurrentSpaceVariable(config2, "OPENCLAW_MODEL", model);

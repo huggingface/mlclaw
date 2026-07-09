@@ -457,6 +457,38 @@ describe("ML Claw Space runtime", () => {
     expect(await response.json()).toMatchObject({ ok: false, error: "csrf token is invalid or missing" });
   });
 
+  it("rejects Hugging Face Router model changes without an inference token", async () => {
+    const config = await testConfig({
+      hfToken: undefined,
+      routerToken: undefined,
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+    const cookie = sessionCookie(config, "alice");
+    const csrf = await csrfToken(config, cookie);
+    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-27B");
+    if (!qwenChoice) {
+      throw new Error("Qwen preset is missing");
+    }
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/settings/model`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        "x-mlclaw-csrf": csrf,
+      },
+      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "Hugging Face Router token is required before selecting a Hugging Face Router model",
+    });
+  });
+
   it("writes model choices to the current Space, updates OpenClaw config, and requests restart", async () => {
     const captured: Array<{ path: string; body: unknown; authorization: string | undefined }> = [];
     const hubPort = await freePort();

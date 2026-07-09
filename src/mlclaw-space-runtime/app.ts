@@ -6,7 +6,7 @@ import { brandingManifest, publicBranding } from "./branding.js";
 import type { SpaceRuntimeConfig } from "./config.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
-import { normalizeModelChoices, serializeModelChoices, type ModelChoice } from "./model-choices.js";
+import { normalizeModelChoices, parseOpenClawModelRef, serializeModelChoices, type ModelChoice } from "./model-choices.js";
 import { authorizeUrl, exchangeCodeForIdentity } from "./oauth.js";
 import { configureOpenClawGateway } from "./openclaw-config.js";
 import {
@@ -140,6 +140,9 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     const selected = choices.find((choice) => choice.openclawModel === model);
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
+    }
+    if (parseOpenClawModelRef(model) && !config.routerToken && !config.hfToken) {
+      return c.json({ ok: false, error: "Hugging Face Router token is required before selecting a Hugging Face Router model" }, 400);
     }
     let persistent = false;
     if (config.spaceId && config.hfToken) {
