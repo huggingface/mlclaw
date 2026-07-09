@@ -19,7 +19,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   letter-spacing: 0;
 }
@@ -249,10 +250,21 @@ nav {
   margin-top: 3px;
 }
 
-.modelOption span {
+.modelOption input[type="checkbox"] {
+  margin-top: 4px;
+}
+
+.modelOptionBody {
   min-width: 0;
   display: grid;
   gap: 5px;
+}
+
+.modelOptionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
 }
 
 .modelOption small {
@@ -279,6 +291,100 @@ nav {
   padding: 0 11px;
   color: #172033;
   background: #fff;
+}
+
+.modelToolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.catalogMeta {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.selectedSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.selectedSummary span {
+  color: #64748b;
+}
+
+.selectedSummary code {
+  margin-left: auto;
+  overflow-wrap: anywhere;
+}
+
+.routerModelList {
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.pill,
+.providerPill {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pill {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.providerPill {
+  background: #eef2f7;
+  color: #334155;
+}
+
+.modelFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.modelFacts span {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid #dbe4ef;
+  border-radius: 7px;
+  color: #475569;
+  font-size: 12px;
+  background: #fff;
+}
+
+.activeModelControl {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  margin-top: 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.statusWarn {
+  margin: 12px 0 0;
+  color: #9a3412;
 }
 
 .statusRows {
@@ -332,6 +438,14 @@ nav {
 
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .modelToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .selectedSummary code {
+    margin-left: 0;
   }
 
   .row {

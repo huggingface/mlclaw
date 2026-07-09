@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
+import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import { configureOpenClawGateway } from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 
@@ -58,12 +59,76 @@ describe("ML Claw Space runtime", () => {
     expect(authenticated.headers.get("content-type")).toContain("application/json");
     expect(await authenticated.json()).toMatchObject({
       mode: "app",
-      model: "huggingface/google/gemma-4-26B-A4B-it",
+      model: "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
       stateBucket: "alice/research-data",
       auth: {
         allowedUsers: ["alice"],
         adminUsers: ["alice"],
       },
+    });
+  });
+
+  it("returns dynamic Hugging Face Router model/provider options", async () => {
+    const routerPort = await freePort();
+    const router = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        object: "list",
+        data: [
+          {
+            id: "Qwen/Qwen3.6-35B-A3B",
+            architecture: {
+              input_modalities: ["text", "image"],
+              output_modalities: ["text"],
+            },
+            providers: [
+              {
+                provider: "deepinfra",
+                status: "live",
+                context_length: 262144,
+                pricing: { input: 0.15, output: 0.95 },
+                supports_tools: true,
+                supports_structured_output: true,
+                first_token_latency_ms: 2101.6,
+                throughput: 46.14033459271881,
+              },
+            ],
+          },
+        ],
+      }));
+    });
+    await listen(router, routerPort);
+    cleanups.push(() => closeServer(router));
+
+    const config = await testConfig({
+      routerModelsUrl: `http://127.0.0.1:${routerPort}/v1/models`,
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/router-models`, {
+      headers: { cookie: sessionCookie(config, "alice") },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      models: [
+        {
+          modelId: "google/gemma-4-26B-A4B-it",
+          provider: "deepinfra",
+          preset: true,
+        },
+        {
+          modelId: "Qwen/Qwen3.6-35B-A3B",
+          provider: "deepinfra",
+          openclawModel: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
+          pricing: { input: 0.15, output: 0.95 },
+          supportsTools: true,
+          supportsStructuredOutput: true,
+        },
+      ],
     });
   });
 
@@ -361,14 +426,14 @@ describe("ML Claw Space runtime", () => {
         cookie: sessionCookie(config, "alice"),
         "content-type": "application/json",
       },
-      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3-8B" }),
+      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra" }),
     });
 
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ ok: false, error: "csrf token is invalid or missing" });
   });
 
-  it("writes the model only to the current Space and requests restart", async () => {
+  it("writes model choices to the current Space, updates OpenClaw config, and requests restart", async () => {
     const captured: Array<{ path: string; body: unknown; authorization: string | undefined }> = [];
     const hubPort = await freePort();
     const hub = http.createServer((req, res) => {
@@ -400,6 +465,11 @@ describe("ML Claw Space runtime", () => {
     const cookie = sessionCookie(config, "alice");
     const csrf = await csrfToken(config, cookie);
 
+    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-35B-A3B");
+    if (!qwenChoice) {
+      throw new Error("Qwen preset is missing");
+    }
+
     const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/settings/model`, {
       method: "POST",
       headers: {
@@ -407,25 +477,55 @@ describe("ML Claw Space runtime", () => {
         "content-type": "application/json",
         "x-mlclaw-csrf": csrf,
       },
-      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3-8B" }),
+      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
     });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       ok: true,
-      model: "huggingface/Qwen/Qwen3-8B",
+      model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
+      modelChoices: [
+        {
+          modelId: "Qwen/Qwen3.6-35B-A3B",
+          provider: "deepinfra",
+        },
+      ],
       restartPending: true,
     });
-    expect(captured).toEqual([
+    expect(captured[0]).toEqual(
       {
         path: "/api/spaces/alice/research/variables",
-        body: { key: "OPENCLAW_MODEL", value: "huggingface/Qwen/Qwen3-8B" },
+        body: { key: "OPENCLAW_MODEL", value: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra" },
         authorization: "Bearer hf_test",
       },
+    );
+    expect(captured[1]).toMatchObject({
+      path: "/api/spaces/alice/research/variables",
+      body: { key: "MLCLAW_MODEL_CHOICES" },
+      authorization: "Bearer hf_test",
+    });
+    const storedChoices = JSON.parse((captured[1]?.body as { value: string }).value);
+    expect(storedChoices).toMatchObject([
       {
-        path: "/api/spaces/alice/research/restart",
-        body: { factoryReboot: false },
-        authorization: "Bearer hf_test",
+        modelId: "Qwen/Qwen3.6-35B-A3B",
+        provider: "deepinfra",
+      },
+    ]);
+    expect(captured[2]).toEqual({
+      path: "/api/spaces/alice/research/restart",
+      body: { factoryReboot: false },
+      authorization: "Bearer hf_test",
+    });
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.agents.defaults.model.primary).toBe("huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra");
+    expect(rewritten.models.providers.huggingface.models).toMatchObject([
+      {
+        id: "Qwen/Qwen3.6-35B-A3B:deepinfra",
+        contextWindow: 262144,
+        cost: {
+          input: 0.15,
+          output: 0.95,
+        },
       },
     ]);
   });
@@ -466,6 +566,11 @@ describe("ML Claw Space runtime", () => {
     const cookie = sessionCookie(config, "alice");
     const csrf = await csrfToken(config, cookie);
 
+    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-35B-A3B");
+    if (!qwenChoice) {
+      throw new Error("Qwen preset is missing");
+    }
+
     const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/settings/model`, {
       method: "POST",
       headers: {
@@ -473,16 +578,17 @@ describe("ML Claw Space runtime", () => {
         "content-type": "application/json",
         "x-mlclaw-csrf": csrf,
       },
-      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3-8B" }),
+      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
     });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       ok: true,
-      model: "huggingface/Qwen/Qwen3-8B",
+      model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
       restartPending: false,
     });
     expect(captured.map((item) => item.path)).toEqual([
+      "/api/spaces/alice/research/variables",
       "/api/spaces/alice/research/variables",
       "/api/spaces/alice/research/restart",
     ]);
@@ -628,6 +734,35 @@ describe("ML Claw Space runtime", () => {
         allowedOrigins: ["https://alice-research.hf.space"],
       },
     });
+    expect(rewritten.agents.defaults.model.primary).toBe("huggingface/google/gemma-4-26B-A4B-it:deepinfra");
+    expect(rewritten.agents.defaults.models).toHaveProperty("huggingface/google/gemma-4-26B-A4B-it:deepinfra");
+    expect(rewritten.agents.defaults.models).toHaveProperty("huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra");
+    expect(rewritten.models.providers.huggingface).toMatchObject({
+      baseUrl: "https://router.huggingface.co/v1",
+      api: "openai-completions",
+      models: [
+        {
+          id: "google/gemma-4-26B-A4B-it:deepinfra",
+          contextWindow: 262144,
+          cost: {
+            input: 0.07,
+            output: 0.34,
+          },
+          compat: {
+            supportsTools: true,
+            supportsStrictMode: true,
+          },
+        },
+        {
+          id: "Qwen/Qwen3.6-35B-A3B:deepinfra",
+          contextWindow: 262144,
+          cost: {
+            input: 0.15,
+            output: 0.95,
+          },
+        },
+      ],
+    });
   });
 
   it("makes the duplicated Space owner the default admin", () => {
@@ -735,7 +870,9 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     openclawCommand: process.execPath,
     openclawArgs: ["-e", "setInterval(() => undefined, 100000)"],
     agentName: "research",
-    model: "huggingface/google/gemma-4-26B-A4B-it",
+    model: "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
+    modelChoices: PRESET_MODEL_CHOICES,
+    routerModelsUrl: "https://router.huggingface.co/v1/models",
     stateBucket: "alice/research-data",
     statePrefix: undefined,
     gatewayLocation: "space",

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SpaceRuntimeConfig } from "./config.js";
+import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
 export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Promise<void> {
   const raw = await fs.readFile(config.openclawConfigPath, "utf8");
@@ -23,10 +24,108 @@ export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Prom
     dangerouslyDisableDeviceAuth: true,
     allowedOrigins: [config.publicUrl],
   };
+  configureOpenClawModels(openclawConfig, config);
 
   await fs.mkdir(path.dirname(config.openclawConfigPath), { recursive: true });
   await fs.writeFile(config.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}\n`, { mode: 0o600 });
   await fs.chmod(config.openclawConfigPath, 0o600);
+}
+
+function configureOpenClawModels(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
+  const agents = object(openclawConfig, "agents");
+  const defaults = object(agents, "defaults");
+  const existingModel = defaults.model && typeof defaults.model === "object" && !Array.isArray(defaults.model)
+    ? defaults.model as Record<string, unknown>
+    : {};
+  defaults.model = {
+    ...existingModel,
+    primary: config.model,
+  };
+  defaults.models = Object.fromEntries(
+    config.modelChoices.map((choice) => [
+      choice.openclawModel,
+      {
+        alias: aliasForChoice(choice),
+      },
+    ]),
+  );
+
+  const models = object(openclawConfig, "models");
+  const providers = object(models, "providers");
+  const huggingface = object(providers, "huggingface");
+  huggingface.baseUrl = "https://router.huggingface.co/v1";
+  huggingface.api = "openai-completions";
+  huggingface.models = config.modelChoices.map(modelDefinitionFromChoice);
+}
+
+function modelDefinitionFromChoice(choice: ModelChoice): Record<string, unknown> {
+  const providerModelId = providerModelIdFromChoice(choice);
+  return {
+    id: providerModelId,
+    name: `${choice.label} (${choice.provider})`,
+    input: inputModalitiesForChoice(choice),
+    contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
+    maxTokens: 8192,
+    reasoning: isReasoningModel(choice.modelId),
+    cost: {
+      input: choice.pricing?.input ?? 0,
+      output: choice.pricing?.output ?? 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    api: "openai-completions",
+    compat: {
+      supportsTools: choice.supportsTools ?? true,
+      supportsStrictMode: choice.supportsStructuredOutput ?? false,
+    },
+  };
+}
+
+function providerModelIdFromChoice(choice: ModelChoice): string {
+  const parsed = parseOpenClawModelRef(choice.openclawModel);
+  return parsed ? `${parsed.modelId}:${parsed.provider}` : `${choice.modelId}:${choice.provider}`;
+}
+
+function inputModalitiesForChoice(choice: ModelChoice): string[] {
+  if (choice.inputModalities?.length) {
+    return choice.inputModalities.filter((item) => item === "text" || item === "image");
+  }
+  return isLikelyImageModel(choice.modelId) ? ["text", "image"] : ["text"];
+}
+
+function aliasForChoice(choice: ModelChoice): string {
+  const base = displayNameFromModelId(choice.modelId)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "model";
+  return `${base}-${choice.provider}`.slice(0, 64);
+}
+
+function isLikelyImageModel(id: string): boolean {
+  const lower = id.toLowerCase();
+  return lower.includes("-vl") ||
+    lower.includes("vision") ||
+    lower.includes("multimodal") ||
+    lower.includes("gemma-3") ||
+    lower.includes("gemma-4") ||
+    lower.includes("llama-4") ||
+    lower.includes("qwen3.6");
+}
+
+function contextWindowForModel(id: string): number {
+  const lower = id.toLowerCase();
+  if (lower.includes("gemma-4") || lower.includes("qwen3.6")) {
+    return 262144;
+  }
+  if (lower.includes("qwen3-8b") || lower.includes("qwen3-14b")) {
+    return 40960;
+  }
+  return 131072;
+}
+
+function isReasoningModel(id: string): boolean {
+  return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
 }
 
 function object(parent: Record<string, unknown>, key: string): Record<string, unknown> {

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { DEFAULT_MODEL, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
 
 export type RuntimeMode = "template" | "app";
 
@@ -29,6 +30,8 @@ export type SpaceRuntimeConfig = {
   openclawArgs: string[];
   agentName: string | undefined;
   model: string;
+  modelChoices: ModelChoice[];
+  routerModelsUrl: string;
   stateBucket: string | undefined;
   statePrefix: string | undefined;
   gatewayLocation: string | undefined;
@@ -67,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
+  const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
 
   return {
     port,
@@ -94,7 +98,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     openclawCommand,
     openclawArgs,
     agentName: trim(env.OPENCLAW_AGENT_NAME),
-    model: trim(env.OPENCLAW_MODEL) ?? "huggingface/google/gemma-4-26B-A4B-it",
+    model,
+    modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
     statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),

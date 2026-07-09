@@ -92,7 +92,7 @@ Automation:
 ```bash
 npx mlclaw bootstrap \
   --name mlclaw \
-  --model huggingface/google/gemma-4-26B-A4B-it \
+  --model huggingface/google/gemma-4-26B-A4B-it:deepinfra \
   --yes
 ```
 
@@ -161,14 +161,14 @@ Default/recommended:
 ```bash
 npx mlclaw bootstrap \
   --name mlclaw \
-  --model huggingface/google/gemma-4-26B-A4B-it
+  --model huggingface/google/gemma-4-26B-A4B-it:deepinfra
 ```
 
 Known useful router-compatible choices:
 
-- `huggingface/google/gemma-4-26B-A4B-it`: default quality target.
-- `huggingface/Qwen/Qwen3.6-35B-A3B`: stronger Qwen option with tool support.
-- `huggingface/Qwen/Qwen3-8B`: cheaper small-model option.
+- `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
+- `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`: stronger Qwen option with tool and structured-output support.
+- `huggingface/Qwen/Qwen3-8B:nscale`: cheaper small-model option.
 
 Do not assume every Hub model is a Router chat model. If exact current model
 availability matters, check the Hugging Face Router catalog or run a direct
@@ -209,7 +209,8 @@ mlclaw gateway start <agent>
 
 After signing into the Space, use the ML Claw control UI:
 
-- `/mlclaw/settings` changes the Space `OPENCLAW_MODEL`.
+- `/mlclaw/settings` chooses Router model/provider rows and changes the Space
+  `OPENCLAW_MODEL` and `MLCLAW_MODEL_CHOICES`.
 - `/mlclaw/status` shows runtime, bucket, model, and OAuth status.
 - `/mlclaw/credentials` stores an OpenAI API key.
 

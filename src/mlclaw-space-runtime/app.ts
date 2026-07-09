@@ -5,7 +5,9 @@ import type { Context } from "hono";
 import type { SpaceRuntimeConfig } from "./config.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
+import { normalizeModelChoices, serializeModelChoices, type ModelChoice } from "./model-choices.js";
 import { authorizeUrl, exchangeCodeForIdentity } from "./oauth.js";
+import { configureOpenClawGateway } from "./openclaw-config.js";
 import {
   loadOpenAiCredentialFile,
   openAiConfigured,
@@ -13,6 +15,7 @@ import {
   writeEphemeralOpenAiCredential,
 } from "./openai-credentials.js";
 import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
+import { loadRouterModelChoices } from "./router-models.js";
 import {
   clearOauthStateCookie,
   clearSessionCookie,
@@ -28,7 +31,7 @@ export type RuntimeControls = {
   openclawRunning(): boolean;
   openAiConfigured(): Promise<boolean>;
   restartOpenClawWithOpenAi(apiKey: string): Promise<void>;
-  setModel(model: string): void;
+  setModelSettings(model: string, choices: ModelChoice[]): void;
 };
 
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
@@ -87,6 +90,14 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     return c.json(runtimeSettings(config));
   });
 
+  app.get("/mlclaw/api/router-models", async (c) => {
+    const auth = requireAllowed(c, config);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    return c.json(await loadRouterModelChoices({ url: config.routerModelsUrl }));
+  });
+
   app.post("/mlclaw/api/settings/model", async (c) => {
     const auth = requireAdmin(c, config);
     if (auth instanceof Response) {
@@ -104,15 +115,25 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (!model) {
       return c.json({ ok: false, error: "model is required" }, 400);
     }
+    const choices = normalizeModelChoices(body?.modelChoices, model);
+    if (!choices) {
+      return c.json({ ok: false, error: "at least one valid model choice is required" }, 400);
+    }
+    const selected = choices.find((choice) => choice.openclawModel === model);
+    if (!selected) {
+      return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
+    }
     await setCurrentSpaceVariable(config, "OPENCLAW_MODEL", model);
-    controls.setModel(model);
+    await setCurrentSpaceVariable(config, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+    controls.setModelSettings(model, choices);
+    await configureOpenClawGateway(config);
     let restartPending = false;
     try {
       restartPending = await restartCurrentSpace(config);
     } catch (err) {
       process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}\n`);
     }
-    return c.json({ ok: true, model, restartPending });
+    return c.json({ ok: true, model, modelChoices: choices, restartPending });
   });
 
   app.post("/mlclaw/api/credentials/openai", async (c) => {

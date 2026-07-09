@@ -15249,7 +15249,7 @@ function delay(ms) {
 }
 
 // src/mlclaw/cli.ts
-var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it";
+var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it:deepinfra";
 var DEFAULT_HARDWARE = "cpu-basic";
 var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;

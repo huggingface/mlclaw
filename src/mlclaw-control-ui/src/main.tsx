@@ -8,10 +8,26 @@ type Session = {
   csrfToken: string;
 };
 
-type RecommendedModel = {
-  id: string;
+type ModelPricing = {
+  input?: number;
+  output?: number;
+};
+
+type ModelChoice = {
+  key: string;
+  modelId: string;
+  provider: string;
+  openclawModel: string;
   label: string;
-  note: string;
+  note?: string;
+  contextLength?: number;
+  pricing?: ModelPricing;
+  supportsTools?: boolean;
+  supportsStructuredOutput?: boolean;
+  firstTokenLatencyMs?: number;
+  throughput?: number;
+  status?: string;
+  preset?: boolean;
 };
 
 type Settings = {
@@ -25,7 +41,15 @@ type Settings = {
   templateRev: string | null;
   allowedUsers: string[];
   adminUsers: string[];
-  recommendedModels: RecommendedModel[];
+  modelChoices: ModelChoice[];
+  presetModels: ModelChoice[];
+};
+
+type RouterModelsResult = {
+  ok: boolean;
+  models: ModelChoice[];
+  fetchedAt: string | null;
+  error?: string;
 };
 
 type Status = {
@@ -214,10 +238,85 @@ function SettingsPage(props: {
   onNotice: (notice: string | undefined) => void;
   onRefresh: () => Promise<void>;
 }) {
-  const [selected, setSelected] = useState(props.settings.model);
-  const [custom, setCustom] = useState(props.settings.model);
+  const [catalog, setCatalog] = useState<RouterModelsResult | undefined>();
+  const [catalogError, setCatalogError] = useState<string | undefined>();
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set(props.settings.modelChoices.map((choice) => choice.key)));
+  const [activeModel, setActiveModel] = useState(props.settings.model);
+  const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
-  const model = useMemo(() => selected === "custom" ? custom.trim() : selected, [custom, selected]);
+
+  useEffect(() => {
+    setSelectedKeys(new Set(props.settings.modelChoices.map((choice) => choice.key)));
+    setActiveModel(props.settings.model);
+  }, [props.settings.model, props.settings.modelChoices]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<RouterModelsResult>("/mlclaw/api/router-models")
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setCatalog(result);
+        setCatalogError(result.ok ? undefined : result.error ?? "Router catalog is unavailable.");
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setCatalogError(errorMessage(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const availableChoices = useMemo(
+    () => mergeChoices([
+      ...props.settings.presetModels,
+      ...props.settings.modelChoices,
+      ...(catalog?.models ?? []),
+    ]),
+    [catalog, props.settings.modelChoices, props.settings.presetModels],
+  );
+  const filteredChoices = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return availableChoices;
+    }
+    return availableChoices.filter((choice) =>
+      [
+        choice.label,
+        choice.modelId,
+        choice.provider,
+        choice.openclawModel,
+        choice.note ?? "",
+      ].some((value) => value.toLowerCase().includes(normalized)),
+    );
+  }, [availableChoices, query]);
+  const selectedChoices = useMemo(
+    () => availableChoices.filter((choice) => selectedKeys.has(choice.key)),
+    [availableChoices, selectedKeys],
+  );
+  const activeChoice = selectedChoices.find((choice) => choice.openclawModel === activeModel);
+
+  useEffect(() => {
+    if (selectedChoices.length > 0 && !activeChoice) {
+      setActiveModel(selectedChoices[0]?.openclawModel ?? props.settings.model);
+    }
+  }, [activeChoice, props.settings.model, selectedChoices]);
+
+  const toggleChoice = (choice: ModelChoice) => {
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(choice.key)) {
+        next.delete(choice.key);
+      } else {
+        next.add(choice.key);
+        setActiveModel(choice.openclawModel);
+      }
+      return next;
+    });
+  };
 
   const save = async () => {
     props.onNotice(undefined);
@@ -225,23 +324,23 @@ function SettingsPage(props: {
       props.onNotice("Only ML Claw admins can change the model.");
       return;
     }
-    if (!model) {
-      props.onNotice("Enter a model identifier.");
+    if (!activeModel || selectedChoices.length === 0) {
+      props.onNotice("Select at least one model/provider and choose the active model.");
       return;
     }
-    if (!window.confirm(`Save OPENCLAW_MODEL as ${model} and restart the Space?`)) {
+    if (!window.confirm(`Save ${selectedChoices.length} model/provider option(s), set ${activeModel} active, and restart the Space?`)) {
       return;
     }
     setSaving(true);
     try {
-      const result = await apiPost<{ ok: boolean; model: string; restartPending: boolean }>(
+      const result = await apiPost<{ ok: boolean; model: string; modelChoices: ModelChoice[]; restartPending: boolean }>(
         "/mlclaw/api/settings/model",
-        { model },
+        { model: activeModel, modelChoices: selectedChoices },
         props.session.csrfToken,
       );
       props.onNotice(result.restartPending
-        ? `Model saved as ${result.model}. Space restart requested.`
-        : `Model saved as ${result.model}. Restart could not be requested from this runtime.`);
+        ? `Saved ${result.modelChoices.length} model option(s). Space restart requested.`
+        : `Saved ${result.modelChoices.length} model option(s). Restart could not be requested from this runtime.`);
       await props.onRefresh();
     } catch (err) {
       props.onNotice(errorMessage(err));
@@ -254,42 +353,66 @@ function SettingsPage(props: {
     <>
       <Header title="Settings" subtitle="Runtime configuration for this Space" />
       <section className="panel">
-        <h2>Model</h2>
+        <h2>Models</h2>
         <p className="muted">Current value: <code>{props.settings.model}</code></p>
-        <div className="modelList">
-          {props.settings.recommendedModels.map((item) => (
-            <label className={selected === item.id ? "modelOption selected" : "modelOption"} key={item.id}>
+        <div className="modelToolbar">
+          <input
+            className="textInput"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search Router models or providers"
+            spellCheck={false}
+          />
+          <div className="catalogMeta">
+            {catalog ? `${availableChoices.length} model/provider options` : "Loading Router catalog"}
+            {catalog?.fetchedAt ? ` loaded ${relativeTime(catalog.fetchedAt)}` : ""}
+          </div>
+        </div>
+        {catalogError ? <p className="statusWarn">{catalogError}</p> : null}
+        <div className="selectedSummary">
+          <strong>{selectedChoices.length}</strong>
+          <span>selected</span>
+          <code>{activeModel}</code>
+        </div>
+        <div className="modelList routerModelList">
+          {filteredChoices.map((choice) => (
+            <div className={selectedKeys.has(choice.key) ? "modelOption selected" : "modelOption"} key={choice.key}>
               <input
-                type="radio"
-                name="model"
-                value={item.id}
-                checked={selected === item.id}
-                onChange={() => {
-                  setSelected(item.id);
-                  setCustom(item.id);
-                }}
+                type="checkbox"
+                checked={selectedKeys.has(choice.key)}
+                onChange={() => toggleChoice(choice)}
+                aria-label={`Add ${choice.openclawModel}`}
               />
-              <span>
-                <strong>{item.label}</strong>
-                <small>{item.note}</small>
-                <code>{item.id}</code>
-              </span>
-            </label>
+              <div className="modelOptionBody">
+                <div className="modelOptionHeader">
+                  <strong>{choice.label}</strong>
+                  {choice.preset ? <span className="pill">Preset</span> : null}
+                  <span className="providerPill">{choice.provider}</span>
+                </div>
+                <small>{choice.note ?? choice.openclawModel}</small>
+                <code>{choice.openclawModel}</code>
+                <div className="modelFacts">
+                  <span>{formatPrice(choice.pricing?.input)}</span>
+                  <span>{formatPrice(choice.pricing?.output)}</span>
+                  <span>{formatContext(choice.contextLength)}</span>
+                  <span>{formatLatency(choice.firstTokenLatencyMs)}</span>
+                  <span>{formatThroughput(choice.throughput)}</span>
+                  <span>{choice.supportsTools ? "Tools" : "No tools"}</span>
+                  <span>{choice.supportsStructuredOutput ? "Structured" : "No structured"}</span>
+                </div>
+                <label className="activeModelControl">
+                  <input
+                    type="radio"
+                    name="activeModel"
+                    checked={activeModel === choice.openclawModel}
+                    disabled={!selectedKeys.has(choice.key)}
+                    onChange={() => setActiveModel(choice.openclawModel)}
+                  />
+                  <span>Active model</span>
+                </label>
+              </div>
+            </div>
           ))}
-          <label className={selected === "custom" ? "modelOption selected" : "modelOption"}>
-            <input type="radio" name="model" value="custom" checked={selected === "custom"} onChange={() => setSelected("custom")} />
-            <span>
-              <strong>Custom</strong>
-              <small>Advanced model identifier</small>
-              <input
-                className="textInput"
-                value={custom}
-                onChange={(event) => setCustom(event.target.value)}
-                onFocus={() => setSelected("custom")}
-                spellCheck={false}
-              />
-            </span>
-          </label>
         </div>
         <div className="buttonRow">
           <button className="primaryButton" type="button" disabled={saving || !props.session.admin} onClick={save}>
@@ -427,6 +550,52 @@ function ScreenMessage(props: { title: string; body: string }) {
       <p>{props.body}</p>
     </section>
   );
+}
+
+function mergeChoices(choices: ModelChoice[]): ModelChoice[] {
+  const seen = new Set<string>();
+  const merged: ModelChoice[] = [];
+  for (const choice of choices) {
+    if (seen.has(choice.key)) {
+      continue;
+    }
+    seen.add(choice.key);
+    merged.push(choice);
+  }
+  return merged;
+}
+
+function formatPrice(value: number | undefined): string {
+  return value === undefined ? "-" : `$${value.toFixed(value < 0.1 ? 2 : 2)}`;
+}
+
+function formatContext(value: number | undefined): string {
+  return value === undefined ? "ctx -" : `ctx ${value.toLocaleString()}`;
+}
+
+function formatLatency(value: number | undefined): string {
+  return value === undefined ? "ttft -" : `ttft ${(value / 1000).toFixed(2)}s`;
+}
+
+function formatThroughput(value: number | undefined): string {
+  return value === undefined ? "tok/s -" : `${Math.round(value)} tok/s`;
+}
+
+function relativeTime(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
 }
 
 async function apiGet<T>(path: string): Promise<T> {
