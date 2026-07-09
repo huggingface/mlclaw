@@ -76,7 +76,7 @@ describe("ML Claw Space runtime", () => {
         object: "list",
         data: [
           {
-            id: "Qwen/Qwen3.6-35B-A3B",
+            id: "Qwen/Qwen3.6-27B",
             architecture: {
               input_modalities: ["text", "image"],
               output_modalities: ["text"],
@@ -86,11 +86,11 @@ describe("ML Claw Space runtime", () => {
                 provider: "deepinfra",
                 status: "live",
                 context_length: 262144,
-                pricing: { input: 0.15, output: 0.95 },
+                pricing: { input: 0.32, output: 3.2 },
                 supports_tools: true,
                 supports_structured_output: true,
-                first_token_latency_ms: 2101.6,
-                throughput: 46.14033459271881,
+                first_token_latency_ms: 347.8,
+                throughput: 39.47002845464158,
               },
             ],
           },
@@ -121,10 +121,10 @@ describe("ML Claw Space runtime", () => {
           preset: true,
         },
         {
-          modelId: "Qwen/Qwen3.6-35B-A3B",
+          modelId: "Qwen/Qwen3.6-27B",
           provider: "deepinfra",
-          openclawModel: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
-          pricing: { input: 0.15, output: 0.95 },
+          openclawModel: "huggingface/Qwen/Qwen3.6-27B:deepinfra",
+          pricing: { input: 0.32, output: 3.2 },
           supportsTools: true,
           supportsStructuredOutput: true,
         },
@@ -426,7 +426,7 @@ describe("ML Claw Space runtime", () => {
         cookie: sessionCookie(config, "alice"),
         "content-type": "application/json",
       },
-      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra" }),
+      body: JSON.stringify({ model: "huggingface/Qwen/Qwen3.6-27B:deepinfra" }),
     });
 
     expect(response.status).toBe(403);
@@ -465,7 +465,7 @@ describe("ML Claw Space runtime", () => {
     const cookie = sessionCookie(config, "alice");
     const csrf = await csrfToken(config, cookie);
 
-    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-35B-A3B");
+    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-27B");
     if (!qwenChoice) {
       throw new Error("Qwen preset is missing");
     }
@@ -483,10 +483,10 @@ describe("ML Claw Space runtime", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       ok: true,
-      model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
+      model: "huggingface/Qwen/Qwen3.6-27B:deepinfra",
       modelChoices: [
         {
-          modelId: "Qwen/Qwen3.6-35B-A3B",
+          modelId: "Qwen/Qwen3.6-27B",
           provider: "deepinfra",
         },
       ],
@@ -495,7 +495,7 @@ describe("ML Claw Space runtime", () => {
     expect(captured[0]).toEqual(
       {
         path: "/api/spaces/alice/research/variables",
-        body: { key: "OPENCLAW_MODEL", value: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra" },
+        body: { key: "OPENCLAW_MODEL", value: "huggingface/Qwen/Qwen3.6-27B:deepinfra" },
         authorization: "Bearer hf_test",
       },
     );
@@ -507,7 +507,7 @@ describe("ML Claw Space runtime", () => {
     const storedChoices = JSON.parse((captured[1]?.body as { value: string }).value);
     expect(storedChoices).toMatchObject([
       {
-        modelId: "Qwen/Qwen3.6-35B-A3B",
+        modelId: "Qwen/Qwen3.6-27B",
         provider: "deepinfra",
       },
     ]);
@@ -517,14 +517,14 @@ describe("ML Claw Space runtime", () => {
       authorization: "Bearer hf_test",
     });
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    expect(rewritten.agents.defaults.model.primary).toBe("huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra");
+    expect(rewritten.agents.defaults.model.primary).toBe("huggingface/Qwen/Qwen3.6-27B:deepinfra");
     expect(rewritten.models.providers.huggingface.models).toMatchObject([
       {
-        id: "Qwen/Qwen3.6-35B-A3B:deepinfra",
+        id: "Qwen/Qwen3.6-27B:deepinfra",
         contextWindow: 262144,
         cost: {
-          input: 0.15,
-          output: 0.95,
+          input: 0.32,
+          output: 3.2,
         },
       },
     ]);
@@ -566,7 +566,7 @@ describe("ML Claw Space runtime", () => {
     const cookie = sessionCookie(config, "alice");
     const csrf = await csrfToken(config, cookie);
 
-    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-35B-A3B");
+    const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-27B");
     if (!qwenChoice) {
       throw new Error("Qwen preset is missing");
     }
@@ -584,7 +584,7 @@ describe("ML Claw Space runtime", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       ok: true,
-      model: "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
+      model: "huggingface/Qwen/Qwen3.6-27B:deepinfra",
       restartPending: false,
     });
     expect(captured.map((item) => item.path)).toEqual([
@@ -736,7 +736,7 @@ describe("ML Claw Space runtime", () => {
     });
     expect(rewritten.agents.defaults.model.primary).toBe("huggingface/google/gemma-4-26B-A4B-it:deepinfra");
     expect(rewritten.agents.defaults.models).toHaveProperty("huggingface/google/gemma-4-26B-A4B-it:deepinfra");
-    expect(rewritten.agents.defaults.models).toHaveProperty("huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra");
+    expect(rewritten.agents.defaults.models).toHaveProperty("huggingface/Qwen/Qwen3.6-27B:deepinfra");
     expect(rewritten.models.providers.huggingface).toMatchObject({
       baseUrl: "https://router.huggingface.co/v1",
       api: "openai-completions",
@@ -754,11 +754,11 @@ describe("ML Claw Space runtime", () => {
           },
         },
         {
-          id: "Qwen/Qwen3.6-35B-A3B:deepinfra",
+          id: "Qwen/Qwen3.6-27B:deepinfra",
           contextWindow: 262144,
           cost: {
-            input: 0.15,
-            output: 0.95,
+            input: 0.32,
+            output: 3.2,
           },
         },
       ],

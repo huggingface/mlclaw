@@ -41,7 +41,7 @@ MLCLAW_MODEL_CHOICES
 `OPENCLAW_MODEL` stores the active provider-pinned model reference:
 
 ```text
-huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra
+huggingface/Qwen/Qwen3.6-27B:deepinfra
 ```
 
 `MLCLAW_MODEL_CHOICES` stores JSON for the checked model/provider rows,
@@ -53,17 +53,21 @@ latency, and throughput when available.
 Presets are always available even if the Router catalog cannot be fetched:
 
 - `huggingface/google/gemma-4-26B-A4B-it:deepinfra`
-- `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`
+- `huggingface/Qwen/Qwen3.6-27B:deepinfra`
+
+Post-merge validation on 2026-07-09 found that the earlier planned
+`Qwen/Qwen3.6-35B-A3B:deepinfra` route was no longer present in the live Router
+catalog. The Qwen preset was corrected to the live DeepInfra Qwen 3.6 27B row.
 
 The Qwen preset should show:
 
 ```text
-Qwen/Qwen3.6-35B-A3B
+Qwen/Qwen3.6-27B
 deepinfra
-$0.15 input / $0.95 output
+$0.32 input / $3.20 output
 262,144 context
-2.10s first-token latency
-46 tokens/sec throughput
+0.35s first-token latency
+39 tokens/sec throughput
 tools: yes
 structured output: yes
 ```
@@ -89,7 +93,7 @@ Each selected model/provider row becomes an explicit
 model id such as:
 
 ```text
-Qwen/Qwen3.6-35B-A3B:deepinfra
+Qwen/Qwen3.6-27B:deepinfra
 ```
 
 This is what makes selected rows visible in OpenClaw's model selector.
