@@ -128,6 +128,7 @@ the current presets on 2026-07-09. They are provider-specific and can change.
 | Choice | Fixed cost | Variable cost | Notes |
 | --- | ---: | ---: | --- |
 | `huggingface/google/gemma-4-26B-A4B-it:deepinfra` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Default quality target; supports tools |
+| `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra` | None beyond Space | DeepInfra: $0.15 input / $0.95 output | Strong Qwen 3.6 option; supports tools and structured output |
 | `huggingface/Qwen/Qwen3.6-27B:deepinfra` | None beyond Space | DeepInfra: $0.32 input / $3.20 output | Live Qwen 3.6 option; supports tools and structured output |
 | `huggingface/zai-org/GLM-5.2:deepinfra` | None beyond Space | DeepInfra: $0.93 input / $3.00 output | Long-context GLM option; supports tools and structured output |
 | `huggingface/moonshotai/Kimi-K2.7-Code:deepinfra` | None beyond Space | DeepInfra: $0.74 input / $3.50 output | Coding-focused Kimi option; supports tools and structured output |
@@ -136,7 +137,6 @@ the current presets on 2026-07-09. They are provider-specific and can change.
 | `huggingface/deepseek-ai/DeepSeek-V4-Flash:deepinfra` | None beyond Space | DeepInfra: $0.09 input / $0.18 output | Low-cost long-context DeepSeek V4 option; supports tools and structured output |
 | `huggingface/deepseek-ai/DeepSeek-V4-Pro:deepinfra` | None beyond Space | DeepInfra: $1.30 input / $2.60 output | Higher-quality long-context DeepSeek V4 option; supports tools and structured output |
 | `huggingface/MiniMaxAI/MiniMax-M3:together` | None beyond Space | Together: $0.30 input / $1.20 output | Long-context MiniMax option; supports tools and structured output |
-| `huggingface/Qwen/Qwen3-8B:nscale` | None beyond Space | nscale: $0.07 input / $0.18 output | Cheaper small-model option when quality tradeoffs are acceptable |
 | `:cheapest` provider suffix | None beyond Space | Lowest available provider price for that model | Use when cost matters more than latency |
 | `:fastest` provider suffix | None beyond Space | May cost more | Use when latency matters more than cost |
 | Explicit provider suffix, e.g. `:deepinfra` | None beyond Space | Provider-specific | Use for predictable provider behavior |
@@ -260,8 +260,8 @@ Configurable model examples:
 
 ```text
 OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it:deepinfra
+OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra
 OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-27B:deepinfra
-OPENCLAW_MODEL=huggingface/Qwen/Qwen3-8B:nscale
 ```
 
 Space gateway override:

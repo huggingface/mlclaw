@@ -175,6 +175,7 @@ npx mlclaw bootstrap \
 Known useful router-compatible choices:
 
 - `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
+- `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`: strong Qwen 3.6 option with tool and structured-output support.
 - `huggingface/Qwen/Qwen3.6-27B:deepinfra`: live Qwen 3.6 option with tool and structured-output support.
 - `huggingface/zai-org/GLM-5.2:deepinfra`: long-context GLM option with tool and structured-output support.
 - `huggingface/moonshotai/Kimi-K2.7-Code:deepinfra`: coding-focused Kimi option with tool and structured-output support.
@@ -183,7 +184,6 @@ Known useful router-compatible choices:
 - `huggingface/deepseek-ai/DeepSeek-V4-Flash:deepinfra`: low-cost long-context DeepSeek V4 option.
 - `huggingface/deepseek-ai/DeepSeek-V4-Pro:deepinfra`: higher-quality long-context DeepSeek V4 option.
 - `huggingface/MiniMaxAI/MiniMax-M3:together`: long-context MiniMax option with tool and structured-output support.
-- `huggingface/Qwen/Qwen3-8B:nscale`: cheaper small-model option.
 
 Do not assume every Hub model is a Router chat model. If exact current model
 availability matters, check the Hugging Face Router catalog or run a direct

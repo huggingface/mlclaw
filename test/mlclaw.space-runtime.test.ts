@@ -24,6 +24,7 @@ describe("ML Claw Space runtime", () => {
     expect(PRESET_MODEL_CHOICES.map((choice) => choice.openclawModel)).toEqual(
       expect.arrayContaining([
         "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
+        "huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra",
         "huggingface/Qwen/Qwen3.6-27B:deepinfra",
         "huggingface/zai-org/GLM-5.2:deepinfra",
         "huggingface/moonshotai/Kimi-K2.7-Code:deepinfra",
