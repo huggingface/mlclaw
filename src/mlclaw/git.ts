@@ -67,6 +67,7 @@ export async function generateSpaceRepo(
 ): Promise<void> {
   const copies: Array<[string, string]> = [
     [".gitattributes", ".gitattributes"],
+    ["assets/hf-logo.svg", "assets/hf-logo.svg"],
     ["assets/mlclaw.svg", "assets/mlclaw.svg"],
     ["assets/mlclaw-control-ui", "assets/mlclaw-control-ui"],
     ["assets/hf-tooling", "assets/hf-tooling"],

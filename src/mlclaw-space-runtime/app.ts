@@ -37,6 +37,7 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
   app.get("/health", (c) => health(c, config, controls));
   app.get("/healthz", (c) => health(c, config, controls));
   app.get("/assets/mlclaw.svg", async () => serveFile(path.join(config.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/hf-logo.svg", async () => serveFile(path.join(config.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
 
   app.get("/oauth/login", (c) => handleOauthLogin(c, config));
   app.get("/oauth/callback", (c) => handleOauthCallback(c, config));

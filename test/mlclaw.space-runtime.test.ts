@@ -515,7 +515,11 @@ describe("ML Claw Space runtime", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toContain("data-mlclaw-shell");
-    expect(body).toContain("/mlclaw/settings");
+    expect(body).toContain("href=\"/mlclaw\"");
+    expect(body).toContain("src=\"/assets/hf-logo.svg\"");
+    expect(body).toContain("left:max(16px,env(safe-area-inset-left))");
+    expect(body).not.toContain(">Settings</a>");
+    expect(body).not.toContain(">Sign out</a>");
     expect(capturedHeaders?.["accept-encoding"]).toBeUndefined();
   });
 
@@ -692,6 +696,10 @@ describe("ML Claw Space runtime", () => {
 
     const health = await fetch(`http://127.0.0.1:${config.port}/health`);
     expect(health.status).toBe(200);
+
+    const logo = await fetch(`http://127.0.0.1:${config.port}/assets/hf-logo.svg`);
+    expect(logo.status).toBe(200);
+    expect(logo.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
   });
 });
 

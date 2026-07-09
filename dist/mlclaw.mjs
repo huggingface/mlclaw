@@ -14845,6 +14845,7 @@ async function currentTemplateRev(sourceDir) {
 async function generateSpaceRepo(sourceDir, outDir, options = {}) {
   const copies = [
     [".gitattributes", ".gitattributes"],
+    ["assets/hf-logo.svg", "assets/hf-logo.svg"],
     ["assets/mlclaw.svg", "assets/mlclaw.svg"],
     ["assets/mlclaw-control-ui", "assets/mlclaw-control-ui"],
     ["assets/hf-tooling", "assets/hf-tooling"],

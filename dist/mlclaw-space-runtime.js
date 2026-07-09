@@ -6716,6 +6716,7 @@ function createSpaceRuntimeApp(config2, controls) {
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get("/assets/mlclaw.svg", async () => serveFile(path2.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/hf-logo.svg", async () => serveFile(path2.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
   app.get("/oauth/login", (c) => handleOauthLogin(c, config2));
   app.get("/oauth/callback", (c) => handleOauthCallback(c, config2));
   app.get("/login", (c) => c.html(loginPage(config2, void 0, normalizeNext(c.req.query("next") ?? "/"))));
@@ -7097,13 +7098,10 @@ function injectMlClawShell(html) {
     return html;
   }
   const shell = `
-<div ${SHELL_MARKER} style="position:fixed;right:16px;bottom:16px;z-index:2147483647;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <nav style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 12px 30px rgba(15,23,42,.16);color:#111827;">
-    <a href="/mlclaw" style="font-weight:700;color:#111827;text-decoration:none;">ML Claw</a>
-    <a href="/mlclaw/settings" style="color:#374151;text-decoration:none;">Settings</a>
-    <a href="/mlclaw/status" style="color:#374151;text-decoration:none;">Status</a>
-    <a href="/mlclaw/logout" style="color:#374151;text-decoration:none;">Sign out</a>
-  </nav>
+<div ${SHELL_MARKER} style="position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:2147483647;">
+  <a href="/mlclaw" aria-label="Open ML Claw overview" title="ML Claw" style="box-sizing:border-box;display:flex;width:44px;height:44px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(15,23,42,.16);text-decoration:none;">
+    <img src="/assets/hf-logo.svg" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
+  </a>
 </div>
 `;
   if (html.includes("</body>")) {
@@ -7384,7 +7382,7 @@ var SpaceRuntimeServer = class {
     await proxyHttp(req, res, this.config, { username: session.username });
   }
   shouldRouteToMlClaw(pathname) {
-    return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/mlclaw.svg" || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
+    return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
   }
   async startOpenClaw(extraEnv = {}) {
     if (this.openclawStarting || this.openclaw && !this.openclaw.killed) {
@@ -7511,7 +7509,7 @@ function isApiPath(pathname) {
   return pathname.startsWith("/mlclaw/api/");
 }
 function isTemplateRuntimePath(pathname) {
-  return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/mlclaw.svg";
+  return pathname === "/health" || pathname === "/healthz" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg";
 }
 function formatError2(err) {
   return err instanceof Error ? err.stack ?? err.message : String(err);

@@ -135,6 +135,7 @@ export class SpaceRuntimeServer {
   private shouldRouteToMlClaw(pathname: string): boolean {
     return pathname === "/health" ||
       pathname === "/healthz" ||
+      pathname === "/assets/hf-logo.svg" ||
       pathname === "/assets/mlclaw.svg" ||
       pathname === "/login" ||
       pathname === "/logout" ||
@@ -279,6 +280,7 @@ function isApiPath(pathname: string): boolean {
 function isTemplateRuntimePath(pathname: string): boolean {
   return pathname === "/health" ||
     pathname === "/healthz" ||
+    pathname === "/assets/hf-logo.svg" ||
     pathname === "/assets/mlclaw.svg";
 }
 
