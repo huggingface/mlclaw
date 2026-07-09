@@ -1,7 +1,7 @@
 import http from "node:http";
 import net from "node:net";
 import type { SpaceRuntimeConfig } from "./config.js";
-import { injectMlClawShell, shouldInjectShell } from "./shell.js";
+import { rewriteOpenClawHtml, shouldInjectShell } from "./shell.js";
 
 export type ProxyIdentity = {
   username: string;
@@ -71,7 +71,7 @@ export async function proxyHttp(
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     });
     upstreamResponse.on("end", () => {
-      const body = injectMlClawShell(Buffer.concat(chunks).toString("utf8"));
+      const body = rewriteOpenClawHtml(Buffer.concat(chunks).toString("utf8"), config.branding);
       delete responseHeaders["content-length"];
       delete responseHeaders["Content-Length"];
       res.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);

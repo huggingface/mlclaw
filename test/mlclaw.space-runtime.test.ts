@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
+import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import { configureOpenClawGateway } from "../src/mlclaw-space-runtime/openclaw-config.js";
@@ -600,7 +601,7 @@ describe("ML Claw Space runtime", () => {
     const upstream = http.createServer((req, res) => {
       capturedHeaders = req.headers;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end("<!doctype html><html><body><main>OpenClaw</main></body></html>");
+      res.end("<!doctype html><html><head><title>OpenClaw Control</title></head><body><main>OpenClaw</main></body></html>");
     });
     await listen(upstream, openclawPort);
     cleanups.push(() => closeServer(upstream));
@@ -620,9 +621,12 @@ describe("ML Claw Space runtime", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
+    expect(body).toContain("<title>Research Control</title>");
+    expect(body).toContain('name="application-name" content="Research"');
     expect(body).toContain("data-mlclaw-shell");
     expect(body).toContain("href=\"/mlclaw\"");
-    expect(body).toContain("src=\"/assets/hf-logo.svg\"");
+    expect(body).toContain("src=\"/assets/brand/logo\"");
+    expect(body).toContain("title=\"Research\"");
     expect(body).toContain("left:max(16px,env(safe-area-inset-left))");
     expect(body).not.toContain(">Settings</a>");
     expect(body).not.toContain(">Sign out</a>");
@@ -652,6 +656,40 @@ describe("ML Claw Space runtime", () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(JSON.stringify({ ok: true }));
+  });
+
+  it("serves branded browser assets and a branded web manifest", async () => {
+    const config = await testConfig({
+      branding: resolveBranding({
+        MLCLAW_BRAND_NAME: "Bob Lab",
+        MLCLAW_BRAND_SHORT_NAME: "Bob",
+        MLCLAW_BRAND_THEME_COLOR: "#0f0",
+      }, "research"),
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const manifest = await fetch(`http://127.0.0.1:${config.port}/manifest.webmanifest`);
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type")).toContain("application/manifest+json");
+    await expect(manifest.json()).resolves.toMatchObject({
+      name: "Bob Lab",
+      short_name: "Bob",
+      theme_color: "#00ff00",
+      icons: [
+        { src: "./favicon.svg" },
+        { src: "./favicon-32.png" },
+        { src: "./apple-touch-icon.png" },
+      ],
+    });
+
+    for (const pathname of ["/assets/brand/logo", "/favicon.svg", "/favicon-32.png", "/favicon.ico", "/apple-touch-icon.png"]) {
+      const response = await fetch(`http://127.0.0.1:${config.port}${pathname}`);
+      expect(response.status, pathname).toBe(200);
+      expect(response.headers.get("cache-control"), pathname).toContain("immutable");
+      expect(await response.text(), pathname).toContain("<svg");
+    }
   });
 
   it("exits the wrapper when OpenClaw exits unexpectedly", async () => {
@@ -810,6 +848,36 @@ describe("ML Claw Space runtime", () => {
     expect(config.mode).toBe("app");
   });
 
+  it("derives browser branding from the agent name and accepts explicit branding", () => {
+    const derived = loadConfig({
+      SPACE_ID: "osolmaz/bob-lab",
+      OPENCLAW_AGENT_NAME: "bob-lab",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+    expect(derived.branding).toMatchObject({
+      name: "Bob Lab",
+      shortName: "Bob Lab",
+      themeColor: "#111827",
+      logoAsset: "mlclaw.svg",
+    });
+
+    const explicit = loadConfig({
+      SPACE_ID: "osolmaz/bob-lab",
+      OPENCLAW_AGENT_NAME: "bob-lab",
+      MLCLAW_BRAND_NAME: "Bob Research",
+      MLCLAW_BRAND_SHORT_NAME: "Bob",
+      MLCLAW_BRAND_THEME_COLOR: "#abc",
+      MLCLAW_BRAND_LOGO: "/assets/custom/logo.svg",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    });
+    expect(explicit.branding).toMatchObject({
+      name: "Bob Research",
+      shortName: "Bob",
+      themeColor: "#aabbcc",
+      logoAsset: "custom/logo.svg",
+    });
+  });
+
   it("serves the template landing page on template-mode app paths", async () => {
     const config = await testConfig({
       mode: "template",
@@ -880,6 +948,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     runtimeId: "test-runtime",
     templateRev: "test-rev",
     assetsDir: path.resolve("assets"),
+    branding: resolveBranding({}, "research"),
     ...overrides,
   };
 }

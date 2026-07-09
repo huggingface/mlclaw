@@ -1,4 +1,6 @@
 import type { SpaceRuntimeConfig } from "./config.js";
+import type { PublicBranding } from "./branding.js";
+import { publicBranding } from "./branding.js";
 import { normalizeModelRef, PRESET_MODEL_CHOICES, type ModelChoice } from "./model-choices.js";
 
 export type RuntimeSettings = {
@@ -14,6 +16,7 @@ export type RuntimeSettings = {
   adminUsers: string[];
   modelChoices: ModelChoice[];
   presetModels: ModelChoice[];
+  branding: PublicBranding;
 };
 
 export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
@@ -30,6 +33,7 @@ export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
     adminUsers: config.adminUsers,
     modelChoices: config.modelChoices,
     presetModels: PRESET_MODEL_CHOICES,
+    branding: publicBranding(config.branding),
   };
 }
 

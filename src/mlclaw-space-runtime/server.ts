@@ -136,8 +136,14 @@ export class SpaceRuntimeServer {
   private shouldRouteToMlClaw(pathname: string): boolean {
     return pathname === "/health" ||
       pathname === "/healthz" ||
+      pathname === "/favicon.svg" ||
+      pathname === "/favicon-32.png" ||
+      pathname === "/favicon.ico" ||
+      pathname === "/apple-touch-icon.png" ||
+      pathname === "/manifest.webmanifest" ||
       pathname === "/assets/hf-logo.svg" ||
       pathname === "/assets/mlclaw.svg" ||
+      pathname === "/assets/brand/logo" ||
       pathname === "/login" ||
       pathname === "/logout" ||
       pathname.startsWith("/oauth/") ||
@@ -281,8 +287,14 @@ function isApiPath(pathname: string): boolean {
 function isTemplateRuntimePath(pathname: string): boolean {
   return pathname === "/health" ||
     pathname === "/healthz" ||
+    pathname === "/favicon.svg" ||
+    pathname === "/favicon-32.png" ||
+    pathname === "/favicon.ico" ||
+    pathname === "/apple-touch-icon.png" ||
+    pathname === "/manifest.webmanifest" ||
     pathname === "/assets/hf-logo.svg" ||
-    pathname === "/assets/mlclaw.svg";
+    pathname === "/assets/mlclaw.svg" ||
+    pathname === "/assets/brand/logo";
 }
 
 function formatError(err: unknown): string {

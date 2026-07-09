@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { brandingManifest, publicBranding } from "./branding.js";
 import type { SpaceRuntimeConfig } from "./config.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
@@ -41,6 +42,17 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
   app.get("/healthz", (c) => health(c, config, controls));
   app.get("/assets/mlclaw.svg", async () => serveFile(path.join(config.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
   app.get("/assets/hf-logo.svg", async () => serveFile(path.join(config.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/brand/logo", async () => serveBrandAsset(config, config.branding.logoAsset));
+  app.get("/favicon.svg", async () => serveBrandAsset(config, config.branding.faviconSvgAsset));
+  app.get("/favicon-32.png", async () => serveBrandAsset(config, config.branding.favicon32Asset));
+  app.get("/favicon.ico", async () => serveBrandAsset(config, config.branding.faviconIcoAsset));
+  app.get("/apple-touch-icon.png", async () => serveBrandAsset(config, config.branding.appleTouchIconAsset));
+  app.get("/manifest.webmanifest", () => new Response(brandingManifest(config.branding), {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "application/manifest+json; charset=utf-8",
+    },
+  }));
 
   app.get("/oauth/login", (c) => handleOauthLogin(c, config));
   app.get("/oauth/callback", (c) => handleOauthCallback(c, config));
@@ -71,6 +83,7 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       user: auth.username,
       admin: isAdmin(config, auth.username),
       csrfToken: createCsrfToken({ username: auth.username, sessionSecret: config.sessionSecret }),
+      branding: publicBranding(config.branding),
     });
   });
 
@@ -353,6 +366,7 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
       environmentConfigured: openAiConfigured(),
       runtimeFileConfigured: Boolean(await loadOpenAiCredentialFile(config.openaiCredentialFile)),
     },
+    branding: publicBranding(config.branding),
   };
 }
 
@@ -383,6 +397,14 @@ async function serveFile(file: string, contentTypeHeader: string, immutable = fa
   }
 }
 
+async function serveBrandAsset(config: SpaceRuntimeConfig, asset: string): Promise<Response> {
+  const response = await serveFile(path.join(config.assetsDir, asset), contentType(asset), true);
+  if (response.status !== 404 || asset === "mlclaw.svg") {
+    return response;
+  }
+  return serveFile(path.join(config.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8", true);
+}
+
 function safeRelativePath(value: string): string | undefined {
   let decoded: string;
   try {
@@ -410,6 +432,12 @@ function contentType(file: string): string {
   }
   if (file.endsWith(".svg")) {
     return "image/svg+xml; charset=utf-8";
+  }
+  if (file.endsWith(".png")) {
+    return "image/png";
+  }
+  if (file.endsWith(".ico")) {
+    return "image/x-icon";
   }
   if (file.endsWith(".html")) {
     return "text/html; charset=utf-8";

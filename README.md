@@ -172,6 +172,30 @@ Use the browser control UI for:
 The same control UI is linked from the OpenClaw gateway. Settings changes
 mutate only the current Space, inferred from `SPACE_ID`.
 
+## Branding
+
+ML Claw white-labels the browser-facing gateway by default. App Spaces use the
+agent name as the browser title, PWA name, login heading, favicon, assistant
+fallback avatar, and ML Claw control link label. The canonical template Space
+continues to show ML Claw.
+
+Override branding with Space variables:
+
+```text
+MLCLAW_BRAND_NAME=Bob Lab
+MLCLAW_BRAND_SHORT_NAME=Bob
+MLCLAW_BRAND_THEME_COLOR=#111827
+MLCLAW_BRAND_LOGO=mlclaw.svg
+MLCLAW_BRAND_FAVICON=mlclaw.svg
+MLCLAW_BRAND_FAVICON_32=mlclaw.svg
+MLCLAW_BRAND_FAVICON_ICO=mlclaw.svg
+MLCLAW_BRAND_APPLE_TOUCH_ICON=mlclaw.svg
+```
+
+Brand asset paths are relative to the Space `assets/` directory. ML Claw serves
+them through `/assets/brand/logo`, `/favicon.svg`, `/favicon-32.png`,
+`/favicon.ico`, `/apple-touch-icon.png`, and `/manifest.webmanifest`.
+
 ## OpenAI Credentials
 
 After signing into the Space, open:
