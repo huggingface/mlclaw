@@ -19,6 +19,7 @@ export type PublicBranding = {
 const DEFAULT_BRAND_NAME = "ML Claw";
 const DEFAULT_THEME_COLOR = "#111827";
 const DEFAULT_LOGO_ASSET = "mlclaw.svg";
+const DEFAULT_HUGGING_FACE_ASSET = "hf-logo.svg";
 
 export function resolveBranding(
   env: NodeJS.ProcessEnv,
@@ -33,19 +34,19 @@ export function resolveBranding(
     logoAsset: normalizeAssetRef(env.MLCLAW_BRAND_LOGO, DEFAULT_LOGO_ASSET),
     faviconSvgAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_SVG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET,
+      DEFAULT_HUGGING_FACE_ASSET,
     ),
     favicon32Asset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_32 ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET,
+      DEFAULT_HUGGING_FACE_ASSET,
     ),
     faviconIcoAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_ICO ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET,
+      DEFAULT_HUGGING_FACE_ASSET,
     ),
     appleTouchIconAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_APPLE_TOUCH_ICON ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET,
+      DEFAULT_HUGGING_FACE_ASSET,
     ),
   };
 }

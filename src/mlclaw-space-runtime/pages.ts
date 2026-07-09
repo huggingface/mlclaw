@@ -32,7 +32,7 @@ export function loginPage(config: SpaceRuntimeConfig, message?: string, next = "
   const loginHref = new URL(loginPath, config.publicUrl).toString();
   return page(`${config.branding.name} Login`, `
     <main>
-      <img src="/assets/brand/logo" alt="${escapeHtml(config.branding.name)}" class="logo">
+      <img src="/assets/hf-logo.svg" alt="Hugging Face" class="logo">
       <h1>${escapeHtml(config.branding.name)}</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
       ${oauthReady

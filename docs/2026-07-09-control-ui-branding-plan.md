@@ -17,6 +17,9 @@ ML Claw owns the browser-facing proxy layer, so branding is applied there:
 - app Spaces default the brand name from `OPENCLAW_AGENT_NAME`;
 - the canonical template Space keeps the default `ML Claw` brand;
 - `MLCLAW_BRAND_NAME` and related variables override the defaults;
+- the ML Claw logo is used only for the control UI brand mark;
+- the gateway shortcut, login page logo, and default favicon/PWA icons use the
+  Hugging Face logo;
 - ML Claw serves browser assets for:
   - `/assets/brand/logo`
   - `/favicon.svg`

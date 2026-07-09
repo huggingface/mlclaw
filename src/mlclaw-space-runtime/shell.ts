@@ -24,7 +24,7 @@ export function injectMlClawShell(html: string, branding: RuntimeBranding): stri
   const shell = `
 <div ${SHELL_MARKER} style="position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:2147483647;">
   <a href="/mlclaw" aria-label="Open ${escapeHtml(branding.name)} settings" title="${escapeHtml(branding.name)}" style="box-sizing:border-box;display:flex;width:44px;height:44px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(15,23,42,.16);text-decoration:none;">
-    <img src="/assets/brand/logo" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
+    <img src="/assets/hf-logo.svg" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
   </a>
 </div>
 `;

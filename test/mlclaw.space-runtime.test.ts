@@ -29,7 +29,9 @@ describe("ML Claw Space runtime", () => {
     const response = await fetch(`http://127.0.0.1:${config.port}/`);
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Sign in with Hugging Face");
+    const body = await response.text();
+    expect(body).toContain("Sign in with Hugging Face");
+    expect(body).toContain("src=\"/assets/hf-logo.svg\"");
   });
 
   it("requires an authenticated allowed session before returning deployment status", async () => {
@@ -625,7 +627,7 @@ describe("ML Claw Space runtime", () => {
     expect(body).toContain('name="application-name" content="Research"');
     expect(body).toContain("data-mlclaw-shell");
     expect(body).toContain("href=\"/mlclaw\"");
-    expect(body).toContain("src=\"/assets/brand/logo\"");
+    expect(body).toContain("src=\"/assets/hf-logo.svg\"");
     expect(body).toContain("title=\"Research\"");
     expect(body).toContain("left:max(16px,env(safe-area-inset-left))");
     expect(body).not.toContain(">Settings</a>");
@@ -859,6 +861,10 @@ describe("ML Claw Space runtime", () => {
       shortName: "Bob Lab",
       themeColor: "#111827",
       logoAsset: "mlclaw.svg",
+      faviconSvgAsset: "hf-logo.svg",
+      favicon32Asset: "hf-logo.svg",
+      faviconIcoAsset: "hf-logo.svg",
+      appleTouchIconAsset: "hf-logo.svg",
     });
 
     const explicit = loadConfig({

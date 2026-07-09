@@ -16,6 +16,7 @@ import { randomBytes } from "node:crypto";
 var DEFAULT_BRAND_NAME = "ML Claw";
 var DEFAULT_THEME_COLOR = "#111827";
 var DEFAULT_LOGO_ASSET = "mlclaw.svg";
+var DEFAULT_HUGGING_FACE_ASSET = "hf-logo.svg";
 function resolveBranding(env, agentName) {
   const defaultName = defaultBrandName(agentName);
   const name = cleanText(env.MLCLAW_BRAND_NAME) ?? defaultName;
@@ -26,19 +27,19 @@ function resolveBranding(env, agentName) {
     logoAsset: normalizeAssetRef(env.MLCLAW_BRAND_LOGO, DEFAULT_LOGO_ASSET),
     faviconSvgAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_SVG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET
+      DEFAULT_HUGGING_FACE_ASSET
     ),
     favicon32Asset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_32 ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET
+      DEFAULT_HUGGING_FACE_ASSET
     ),
     faviconIcoAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_FAVICON_ICO ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET
+      DEFAULT_HUGGING_FACE_ASSET
     ),
     appleTouchIconAsset: normalizeAssetRef(
       env.MLCLAW_BRAND_APPLE_TOUCH_ICON ?? env.MLCLAW_BRAND_FAVICON_PNG ?? env.MLCLAW_BRAND_FAVICON,
-      DEFAULT_LOGO_ASSET
+      DEFAULT_HUGGING_FACE_ASSET
     )
   };
 }
@@ -6980,7 +6981,7 @@ function loginPage(config2, message, next = "/") {
   const loginHref = new URL(loginPath, config2.publicUrl).toString();
   return page(`${config2.branding.name} Login`, `
     <main>
-      <img src="/assets/brand/logo" alt="${escapeHtml(config2.branding.name)}" class="logo">
+      <img src="/assets/hf-logo.svg" alt="Hugging Face" class="logo">
       <h1>${escapeHtml(config2.branding.name)}</h1>
       ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
       ${oauthReady ? `<a class="button" href="${escapeHtml(loginHref)}" target="_blank" rel="noopener">Sign in with Hugging Face</a>` : `<p class="notice">Hugging Face OAuth is not configured for this Space. Update the Space README metadata to include <code>hf_oauth: true</code>, then rebuild.</p>`}
@@ -7745,7 +7746,7 @@ function injectMlClawShell(html, branding) {
   const shell = `
 <div ${SHELL_MARKER} style="position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:2147483647;">
   <a href="/mlclaw" aria-label="Open ${escapeHtml2(branding.name)} settings" title="${escapeHtml2(branding.name)}" style="box-sizing:border-box;display:flex;width:44px;height:44px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.14);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(15,23,42,.16);text-decoration:none;">
-    <img src="/assets/brand/logo" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
+    <img src="/assets/hf-logo.svg" alt="" width="28" height="28" style="display:block;width:28px;height:28px;object-fit:contain;">
   </a>
 </div>
 `;

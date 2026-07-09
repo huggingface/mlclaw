@@ -229,9 +229,10 @@ to the browser.
 ## Branding
 
 ML Claw white-labels the browser gateway at the proxy layer. App Spaces default
-the browser title, PWA manifest, favicon, assistant fallback avatar, login
-heading, and ML Claw control link to the agent name. The canonical template
-Space remains branded as ML Claw.
+the browser title, PWA manifest, assistant fallback avatar, login heading, and
+ML Claw control link to the agent name. The ML Claw logo is reserved for the
+control UI brand mark. The gateway shortcut, login logo, and default browser
+icons use the Hugging Face logo.
 
 Use Space variables for explicit branding:
 
@@ -240,10 +241,10 @@ MLCLAW_BRAND_NAME="Bob Lab"
 MLCLAW_BRAND_SHORT_NAME="Bob"
 MLCLAW_BRAND_THEME_COLOR="#111827"
 MLCLAW_BRAND_LOGO="mlclaw.svg"
-MLCLAW_BRAND_FAVICON="mlclaw.svg"
-MLCLAW_BRAND_FAVICON_32="mlclaw.svg"
-MLCLAW_BRAND_FAVICON_ICO="mlclaw.svg"
-MLCLAW_BRAND_APPLE_TOUCH_ICON="mlclaw.svg"
+MLCLAW_BRAND_FAVICON="hf-logo.svg"
+MLCLAW_BRAND_FAVICON_32="hf-logo.svg"
+MLCLAW_BRAND_FAVICON_ICO="hf-logo.svg"
+MLCLAW_BRAND_APPLE_TOUCH_ICON="hf-logo.svg"
 ```
 
 Brand asset paths are relative to the Space `assets/` directory. ML Claw serves
