@@ -74,7 +74,7 @@ Recommended router-compatible options:
 
 - `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
 - `huggingface/Qwen/Qwen3.6-27B:deepinfra`: live Qwen 3.6 option with tool and structured-output support.
-- `huggingface/zai-org/GLM-5.2:fireworks-ai`: long-context GLM option with tool support.
+- `huggingface/zai-org/GLM-5.2:deepinfra`: long-context GLM option with tool and structured-output support.
 - `huggingface/moonshotai/Kimi-K2.7-Code:deepinfra`: coding-focused Kimi option with tool and structured-output support.
 - `huggingface/openai/gpt-oss-120b:deepinfra`: larger GPT-OSS option with tool and structured-output support.
 - `huggingface/openai/gpt-oss-20b:deepinfra`: lower-cost GPT-OSS option with tool and structured-output support.

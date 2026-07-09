@@ -25,7 +25,7 @@ describe("ML Claw Space runtime", () => {
       expect.arrayContaining([
         "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
         "huggingface/Qwen/Qwen3.6-27B:deepinfra",
-        "huggingface/zai-org/GLM-5.2:fireworks-ai",
+        "huggingface/zai-org/GLM-5.2:deepinfra",
         "huggingface/moonshotai/Kimi-K2.7-Code:deepinfra",
         "huggingface/openai/gpt-oss-120b:deepinfra",
         "huggingface/openai/gpt-oss-20b:deepinfra",
