@@ -43,10 +43,11 @@ uses the mounted bucket only for verified snapshots; live SQLite and workspace
 state stay on local container disk under
 `/home/node/.local/share/mlclaw/live`.
 
-ML Claw seeds a managed Hugging Face tooling note into workspace `AGENTS.md` so
-new OpenClaw sessions see the available Hugging Face skills directly in
-context. If a long-running session predates the seed, start a new OpenClaw
-session so its skill snapshot is rebuilt.
+ML Claw waits for OpenClaw's native first-run identity bootstrap to finish,
+then seeds a managed Hugging Face tooling note into workspace `AGENTS.md` so
+new sessions see the available Hugging Face skills directly in context. If a
+long-running session predates the seed, start a new OpenClaw session so its
+skill snapshot is rebuilt.
 
 ## Required Inputs
 

@@ -32,6 +32,11 @@ export type SeedHuggingFaceToolingOptions = {
   now?: () => Date;
 };
 
+export type WaitForBootstrapAndSeedOptions = SeedHuggingFaceToolingOptions & {
+  pollIntervalMs?: number;
+  signal?: AbortSignal;
+};
+
 export type SeedHuggingFaceToolingResult = {
   workspaceDir: string;
   copiedSkills: string[];
@@ -46,6 +51,9 @@ export type SeedHuggingFaceToolingResult = {
 type WorkspaceManifest = HfToolingManifest & {
   installedAt: string;
 };
+
+const OPENCLAW_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
+const OPENCLAW_WORKSPACE_STATE_FILENAME = "openclaw-workspace-state.json";
 
 const MLCLAW_CONTEXT_START = "<!-- MLCLAW:HUGGINGFACE_TOOLING:START -->";
 const MLCLAW_CONTEXT_END = "<!-- MLCLAW:HUGGINGFACE_TOOLING:END -->";
@@ -89,6 +97,63 @@ export async function seedHuggingFaceTooling(
     wroteContextFile,
     wroteManifest,
   };
+}
+
+/**
+ * Keep a fresh OpenClaw workspace pristine until its native onboarding flow
+ * has completed. OpenClaw treats changed profile files and workspace skills as
+ * evidence that onboarding already happened, so seeding either one early
+ * causes it to discard BOOTSTRAP.md before the first prompt.
+ */
+export async function waitForBootstrapAndSeedHuggingFaceTooling(
+  options: WaitForBootstrapAndSeedOptions = {},
+): Promise<SeedHuggingFaceToolingResult | null> {
+  const env = options.env ?? process.env;
+  const workspaceDir = options.workspaceDir ?? resolveWorkspaceDir(env);
+  const bootstrapPath = path.join(workspaceDir, OPENCLAW_BOOTSTRAP_FILENAME);
+  const statePath = path.join(workspaceDir, OPENCLAW_WORKSPACE_STATE_FILENAME);
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  let observedPendingBootstrap = false;
+
+  while (!options.signal?.aborted) {
+    if (await pathExists(bootstrapPath)) {
+      observedPendingBootstrap = true;
+    } else if (!observedPendingBootstrap || await workspaceSetupIsComplete(statePath)) {
+      return await seedHuggingFaceTooling({ ...options, workspaceDir });
+    }
+
+    await waitForPoll(pollIntervalMs, options.signal);
+  }
+
+  return null;
+}
+
+async function workspaceSetupIsComplete(statePath: string): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(statePath, "utf8")) as unknown;
+    if (typeof parsed !== "object" || parsed === null) {
+      return false;
+    }
+    const setupCompletedAt = (parsed as Record<string, unknown>).setupCompletedAt;
+    return typeof setupCompletedAt === "string" && setupCompletedAt.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPoll(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, delayMs);
+    signal?.addEventListener("abort", finish, { once: true });
+  });
 }
 
 async function copyBaselineSkills(params: {

@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { seedHuggingFaceTooling } from "../src/hf-tooling/seed.js";
+import {
+  seedHuggingFaceTooling,
+  waitForBootstrapAndSeedHuggingFaceTooling,
+} from "../src/hf-tooling/seed.js";
 
 const BASELINE_SKILLS = [
   "hf-cli",
@@ -136,5 +139,66 @@ describe("Hugging Face tooling baseline", () => {
     expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
     expect(agentsMd).toContain("`huggingface-datasets`");
     expect(agentsMd).not.toContain("old block");
+  });
+
+  it("does not modify a fresh workspace until OpenClaw records bootstrap completion", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-tooling-bootstrap-"));
+    const workspaceDir = path.join(root, "workspace");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(path.join(workspaceDir, "BOOTSTRAP.md"), "Complete native setup.\n", "utf8");
+    await fs.writeFile(
+      path.join(workspaceDir, "openclaw-workspace-state.json"),
+      `${JSON.stringify({ version: 1, bootstrapSeededAt: "2026-07-10T00:00:00.000Z" }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const pending = waitForBootstrapAndSeedHuggingFaceTooling({
+      assetRoot: path.resolve("assets/hf-tooling"),
+      workspaceDir,
+      pollIntervalMs: 5,
+      now: () => new Date("2026-07-10T00:01:00.000Z"),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await expect(fs.access(path.join(workspaceDir, "skills/hf-cli/SKILL.md"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.readFile(path.join(workspaceDir, "BOOTSTRAP.md"), "utf8")).resolves.toContain(
+      "Complete native setup",
+    );
+
+    await fs.rm(path.join(workspaceDir, "BOOTSTRAP.md"));
+    await fs.writeFile(
+      path.join(workspaceDir, "openclaw-workspace-state.json"),
+      `${JSON.stringify({
+        version: 1,
+        bootstrapSeededAt: "2026-07-10T00:00:00.000Z",
+        setupCompletedAt: "2026-07-10T00:00:30.000Z",
+      }, null, 2)}\n`,
+      "utf8",
+    );
+
+    const result = await pending;
+    expect(result?.copiedWorkspaceSkills).toEqual(BASELINE_SKILLS);
+    await expect(fs.access(path.join(workspaceDir, "skills/hf-cli/SKILL.md"))).resolves.toBeUndefined();
+    await expect(fs.readFile(path.join(workspaceDir, "AGENTS.md"), "utf8")).resolves.toContain(
+      "ML Claw Hugging Face Tooling",
+    );
+  });
+
+  it("seeds immediately when an existing workspace has no pending bootstrap", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-tooling-existing-"));
+    const workspaceDir = path.join(root, "workspace");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(path.join(workspaceDir, "IDENTITY.md"), "# Existing identity\n", "utf8");
+
+    const result = await waitForBootstrapAndSeedHuggingFaceTooling({
+      assetRoot: path.resolve("assets/hf-tooling"),
+      workspaceDir,
+      pollIntervalMs: 5,
+    });
+
+    expect(result?.copiedWorkspaceSkills).toEqual(BASELINE_SKILLS);
+    await expect(fs.access(path.join(workspaceDir, "skills/hf-cli/SKILL.md"))).resolves.toBeUndefined();
   });
 });

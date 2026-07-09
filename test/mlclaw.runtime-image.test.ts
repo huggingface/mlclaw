@@ -40,14 +40,14 @@ describe("runtime image Dockerfile", () => {
     expect(config.agents?.defaults?.workspace).toBe("${OPENCLAW_WORKSPACE_DIR}");
   });
 
-  it("initializes OpenClaw before adding ML Claw workspace tooling", async () => {
+  it("leaves workspace tooling seeding to the bootstrap-aware runtime", async () => {
     const entrypoint = await fs.readFile("entrypoint.sh", "utf8");
-    const openclawSetup = entrypoint.indexOf(
+    const runtimeCli = await fs.readFile("src/mlclaw-space-runtime/cli.ts", "utf8");
+
+    expect(entrypoint).toContain(
       'gosu node node /app/openclaw.mjs setup --baseline --workspace "$WORKSPACE_DIR"',
     );
-    const toolingSeed = entrypoint.indexOf("node /app/hf-tooling-seed.js");
-
-    expect(openclawSetup).toBeGreaterThan(-1);
-    expect(toolingSeed).toBeGreaterThan(openclawSetup);
+    expect(entrypoint).not.toContain("node /app/hf-tooling-seed.js");
+    expect(runtimeCli).toContain("waitForBootstrapAndSeedHuggingFaceTooling");
   });
 });

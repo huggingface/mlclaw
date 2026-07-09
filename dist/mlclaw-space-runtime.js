@@ -9,6 +9,290 @@ var __export = (target, all) => {
 // src/mlclaw-space-runtime/cli.ts
 import process2 from "node:process";
 
+// src/hf-tooling/seed.ts
+import fs from "node:fs/promises";
+import path from "node:path";
+var DEFAULT_HF_TOOLING_ASSET_ROOT = "/app/assets/hf-tooling";
+var DEFAULT_OPENCLAW_LIVE_DIR = "/tmp/openclaw-live";
+var OPENCLAW_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
+var OPENCLAW_WORKSPACE_STATE_FILENAME = "openclaw-workspace-state.json";
+var MLCLAW_CONTEXT_START = "<!-- MLCLAW:HUGGINGFACE_TOOLING:START -->";
+var MLCLAW_CONTEXT_END = "<!-- MLCLAW:HUGGINGFACE_TOOLING:END -->";
+async function seedHuggingFaceTooling(options = {}) {
+  const env = options.env ?? process.env;
+  const assetRoot = options.assetRoot ?? env.MLCLAW_HF_TOOLING_DIR ?? DEFAULT_HF_TOOLING_ASSET_ROOT;
+  const workspaceDir = options.workspaceDir ?? resolveWorkspaceDir(env);
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const manifest = await readToolingManifest(assetRoot);
+  const agentSkills = await copyBaselineSkills({
+    assetRoot,
+    manifest,
+    targetRoot: path.join(workspaceDir, ".agents", "skills")
+  });
+  const workspaceSkills = await copyBaselineSkills({
+    assetRoot,
+    manifest,
+    targetRoot: path.join(workspaceDir, "skills")
+  });
+  const templateRoot = path.join(assetRoot, "templates");
+  const copiedTemplateFiles = await copyMissingTree(templateRoot, workspaceDir);
+  const wroteContextFile = await ensureWorkspaceContextFile({ manifest, workspaceDir });
+  const wroteManifest = await writeWorkspaceManifest({
+    manifest,
+    workspaceDir,
+    installedAt: now().toISOString()
+  });
+  return {
+    workspaceDir,
+    copiedSkills: agentSkills.copied,
+    skippedSkills: agentSkills.skipped,
+    copiedWorkspaceSkills: workspaceSkills.copied,
+    skippedWorkspaceSkills: workspaceSkills.skipped,
+    copiedTemplateFiles,
+    wroteContextFile,
+    wroteManifest
+  };
+}
+async function waitForBootstrapAndSeedHuggingFaceTooling(options = {}) {
+  const env = options.env ?? process.env;
+  const workspaceDir = options.workspaceDir ?? resolveWorkspaceDir(env);
+  const bootstrapPath = path.join(workspaceDir, OPENCLAW_BOOTSTRAP_FILENAME);
+  const statePath = path.join(workspaceDir, OPENCLAW_WORKSPACE_STATE_FILENAME);
+  const pollIntervalMs = options.pollIntervalMs ?? 1e3;
+  let observedPendingBootstrap = false;
+  while (!options.signal?.aborted) {
+    if (await pathExists(bootstrapPath)) {
+      observedPendingBootstrap = true;
+    } else if (!observedPendingBootstrap || await workspaceSetupIsComplete(statePath)) {
+      return await seedHuggingFaceTooling({ ...options, workspaceDir });
+    }
+    await waitForPoll(pollIntervalMs, options.signal);
+  }
+  return null;
+}
+async function workspaceSetupIsComplete(statePath) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(statePath, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) {
+      return false;
+    }
+    const setupCompletedAt = parsed.setupCompletedAt;
+    return typeof setupCompletedAt === "string" && setupCompletedAt.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+async function waitForPoll(delayMs, signal) {
+  if (signal?.aborted) {
+    return;
+  }
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, delayMs);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
+async function copyBaselineSkills(params) {
+  const copied = [];
+  const skipped = [];
+  await fs.mkdir(params.targetRoot, { recursive: true });
+  for (const skill of params.manifest.skills.installed) {
+    const source = path.join(params.assetRoot, "skills", skill);
+    const target = path.join(params.targetRoot, skill);
+    if (await pathExists(target)) {
+      skipped.push(skill);
+      continue;
+    }
+    await assertDirectory(source, `baseline skill ${skill}`);
+    await fs.cp(source, target, { recursive: true, preserveTimestamps: true });
+    copied.push(skill);
+  }
+  return { copied, skipped };
+}
+async function ensureWorkspaceContextFile(params) {
+  const contextPath = path.join(params.workspaceDir, "AGENTS.md");
+  const block = buildWorkspaceContextBlock(params.manifest);
+  const existing = await readTextFileIfExists(contextPath);
+  const next = mergeManagedBlock(existing, block);
+  if (existing === next) {
+    return false;
+  }
+  await fs.mkdir(path.dirname(contextPath), { recursive: true });
+  await fs.writeFile(contextPath, next, "utf8");
+  return true;
+}
+function buildWorkspaceContextBlock(manifest) {
+  const skills = manifest.skills.installed.map((skill) => `- \`${skill}\``).join("\n");
+  return `${MLCLAW_CONTEXT_START}
+## ML Claw Hugging Face Tooling
+
+This workspace has Hugging Face tooling preinstalled. Use the Hugging Face CLI
+\`hf\`, \`hf-discover\`, and \`uv\` for Hub, dataset, model, Space, and bucket
+work.
+
+Hugging Face agent skills are available in both \`.agents/skills\` and
+\`skills\`. Prefer these skills when the task involves Hugging Face:
+
+${skills}
+
+The pinned tooling manifest is \`.agents/.mlclaw-hf-tooling.json\`.
+${MLCLAW_CONTEXT_END}
+`;
+}
+function mergeManagedBlock(existing, block) {
+  const normalizedBlock = block.endsWith("\n") ? block : `${block}
+`;
+  if (!existing) {
+    return `# ML Claw Workspace
+
+${normalizedBlock}`;
+  }
+  const start = existing.indexOf(MLCLAW_CONTEXT_START);
+  const end = existing.indexOf(MLCLAW_CONTEXT_END);
+  if (start >= 0 && end >= start) {
+    const afterEnd = end + MLCLAW_CONTEXT_END.length;
+    const suffix = existing.slice(afterEnd).replace(/^\r?\n/u, "");
+    const next = `${existing.slice(0, start)}${normalizedBlock}${suffix}`;
+    return next.replace(/\n{4,}/g, "\n\n\n");
+  }
+  const trimmed = existing.replace(/\s+$/u, "");
+  return `${trimmed}
+
+${normalizedBlock}`;
+}
+async function readTextFileIfExists(filePath) {
+  try {
+    return await fs.readFile(filePath, "utf8");
+  } catch (err) {
+    if (isMissingFileError(err)) {
+      return null;
+    }
+    throw err;
+  }
+}
+function resolveWorkspaceDir(env) {
+  const explicit = env.OPENCLAW_WORKSPACE_DIR?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const liveDir = env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_OPENCLAW_LIVE_DIR;
+  return path.join(liveDir, "workspace");
+}
+async function readToolingManifest(assetRoot) {
+  const raw2 = await fs.readFile(path.join(assetRoot, "manifest.json"), "utf8");
+  const parsed = JSON.parse(raw2);
+  assertToolingManifest(parsed);
+  return parsed;
+}
+function assertToolingManifest(value) {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("HF tooling manifest must be an object");
+  }
+  const record = value;
+  if (record.schemaVersion !== 1) {
+    throw new Error("HF tooling manifest schemaVersion must be 1");
+  }
+  const skills = record.skills;
+  if (!skills || !Array.isArray(skills.installed) || !skills.installed.every((skill) => typeof skill === "string")) {
+    throw new Error("HF tooling manifest must list installed skills");
+  }
+  const python = record.python;
+  if (!python || typeof python.packages !== "object" || python.packages === null) {
+    throw new Error("HF tooling manifest must list Python packages");
+  }
+}
+async function copyMissingTree(sourceRoot, targetRoot) {
+  const copied = [];
+  await assertDirectory(sourceRoot, "HF tooling templates");
+  for (const entry of await fs.readdir(sourceRoot, { withFileTypes: true })) {
+    const source = path.join(sourceRoot, entry.name);
+    const target = path.join(targetRoot, entry.name);
+    if (entry.isDirectory()) {
+      copied.push(...await copyMissingTree(source, target));
+    } else if (entry.isFile()) {
+      if (await pathExists(target)) {
+        continue;
+      }
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.copyFile(source, target);
+      copied.push(path.relative(targetRoot, target).split(path.sep).join(path.posix.sep));
+    }
+  }
+  return copied;
+}
+async function writeWorkspaceManifest(params) {
+  const manifestPath = path.join(params.workspaceDir, ".agents", ".mlclaw-hf-tooling.json");
+  const existing = await readExistingWorkspaceManifest(manifestPath);
+  const installedAt = existing?.installedAt ?? params.installedAt;
+  const next = {
+    ...params.manifest,
+    installedAt
+  };
+  if (existing && sameBaseline(existing, next)) {
+    return false;
+  }
+  await fs.mkdir(path.dirname(manifestPath), { recursive: true });
+  await fs.writeFile(manifestPath, `${JSON.stringify(next, null, 2)}
+`, "utf8");
+  return true;
+}
+async function readExistingWorkspaceManifest(manifestPath) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) {
+      return null;
+    }
+    const record = parsed;
+    if (typeof record.installedAt !== "string") {
+      return null;
+    }
+    assertToolingManifest(record);
+    return record;
+  } catch (err) {
+    if (isMissingFileError(err)) {
+      return null;
+    }
+    return null;
+  }
+}
+function sameBaseline(a, b) {
+  return JSON.stringify(withoutInstalledAt(a)) === JSON.stringify(withoutInstalledAt(b));
+}
+function withoutInstalledAt(value) {
+  const { installedAt: _installedAt, ...rest } = value;
+  return rest;
+}
+async function assertDirectory(dir, label) {
+  let stat;
+  try {
+    stat = await fs.stat(dir);
+  } catch (err) {
+    if (isMissingFileError(err)) {
+      throw new Error(`${label} is missing: ${dir}`);
+    }
+    throw err;
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`${label} is not a directory: ${dir}`);
+  }
+}
+async function pathExists(candidate) {
+  try {
+    await fs.access(candidate);
+    return true;
+  } catch (err) {
+    if (isMissingFileError(err)) {
+      return false;
+    }
+    throw err;
+  }
+}
+function isMissingFileError(err) {
+  return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
+
 // src/mlclaw-space-runtime/config.ts
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -657,8 +941,8 @@ import http2 from "node:http";
 import { Readable } from "node:stream";
 
 // src/mlclaw-space-runtime/app.ts
-import fs3 from "node:fs/promises";
-import path3 from "node:path";
+import fs4 from "node:fs/promises";
+import path4 from "node:path";
 
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -799,26 +1083,26 @@ var handleParsingNestedValues = (form, key, value) => {
 };
 
 // node_modules/hono/dist/utils/url.js
-var splitPath = (path4) => {
-  const paths = path4.split("/");
+var splitPath = (path5) => {
+  const paths = path5.split("/");
   if (paths[0] === "") {
     paths.shift();
   }
   return paths;
 };
 var splitRoutingPath = (routePath) => {
-  const { groups, path: path4 } = extractGroupsFromPath(routePath);
-  const paths = splitPath(path4);
+  const { groups, path: path5 } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path5);
   return replaceGroupMarks(paths, groups);
 };
-var extractGroupsFromPath = (path4) => {
+var extractGroupsFromPath = (path5) => {
   const groups = [];
-  path4 = path4.replace(/\{[^}]+\}/g, (match2, index) => {
+  path5 = path5.replace(/\{[^}]+\}/g, (match2, index) => {
     const mark = `@${index}`;
     groups.push([mark, match2]);
     return mark;
   });
-  return { groups, path: path4 };
+  return { groups, path: path5 };
 };
 var replaceGroupMarks = (paths, groups) => {
   for (let i = groups.length - 1; i >= 0; i--) {
@@ -875,8 +1159,8 @@ var getPath = (request) => {
       const queryIndex = url.indexOf("?", i);
       const hashIndex = url.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
-      const path4 = url.slice(start, end);
-      return tryDecodeURI(path4.includes("%25") ? path4.replace(/%25/g, "%2525") : path4);
+      const path5 = url.slice(start, end);
+      return tryDecodeURI(path5.includes("%25") ? path5.replace(/%25/g, "%2525") : path5);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -893,11 +1177,11 @@ var mergePath = (base, sub, ...rest) => {
   }
   return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
 };
-var checkOptionalParameter = (path4) => {
-  if (path4.charCodeAt(path4.length - 1) !== 63 || !path4.includes(":")) {
+var checkOptionalParameter = (path5) => {
+  if (path5.charCodeAt(path5.length - 1) !== 63 || !path5.includes(":")) {
     return null;
   }
-  const segments = path4.split("/");
+  const segments = path5.split("/");
   const results = [];
   let basePath = "";
   segments.forEach((segment) => {
@@ -1038,9 +1322,9 @@ var HonoRequest = class {
    */
   path;
   bodyCache = {};
-  constructor(request, path4 = "/", matchResult = [[]]) {
+  constructor(request, path5 = "/", matchResult = [[]]) {
     this.raw = request;
-    this.path = path4;
+    this.path = path5;
     this.#matchResult = matchResult;
     this.#validatedData = {};
   }
@@ -1792,8 +2076,8 @@ var Hono = class _Hono {
         return this;
       };
     });
-    this.on = (method, path4, ...handlers) => {
-      for (const p of [path4].flat()) {
+    this.on = (method, path5, ...handlers) => {
+      for (const p of [path5].flat()) {
         this.#path = p;
         for (const m of [method].flat()) {
           handlers.map((handler) => {
@@ -1850,8 +2134,8 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path4, app) {
-    const subApp = this.basePath(path4);
+  route(path5, app) {
+    const subApp = this.basePath(path5);
     app.routes.map((r) => {
       let handler;
       if (app.errorHandler === errorHandler) {
@@ -1877,9 +2161,9 @@ var Hono = class _Hono {
    * const api = new Hono().basePath('/api')
    * ```
    */
-  basePath(path4) {
+  basePath(path5) {
     const subApp = this.#clone();
-    subApp._basePath = mergePath(this._basePath, path4);
+    subApp._basePath = mergePath(this._basePath, path5);
     return subApp;
   }
   /**
@@ -1953,7 +2237,7 @@ var Hono = class _Hono {
    * })
    * ```
    */
-  mount(path4, applicationHandler, options) {
+  mount(path5, applicationHandler, options) {
     let replaceRequest;
     let optionHandler;
     if (options) {
@@ -1980,7 +2264,7 @@ var Hono = class _Hono {
       return [c.env, executionContext];
     };
     replaceRequest ||= (() => {
-      const mergedPath = mergePath(this._basePath, path4);
+      const mergedPath = mergePath(this._basePath, path5);
       const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
       return (request) => {
         const url = new URL(request.url);
@@ -1995,19 +2279,19 @@ var Hono = class _Hono {
       }
       await next();
     };
-    this.#addRoute(METHOD_NAME_ALL, mergePath(path4, "*"), handler);
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path5, "*"), handler);
     return this;
   }
-  #addRoute(method, path4, handler, baseRoutePath) {
+  #addRoute(method, path5, handler, baseRoutePath) {
     method = method.toUpperCase();
-    path4 = mergePath(this._basePath, path4);
+    path5 = mergePath(this._basePath, path5);
     const r = {
       basePath: baseRoutePath !== void 0 ? mergePath(this._basePath, baseRoutePath) : this._basePath,
-      path: path4,
+      path: path5,
       method,
       handler
     };
-    this.router.add(method, path4, [handler, r]);
+    this.router.add(method, path5, [handler, r]);
     this.routes.push(r);
   }
   #handleError(err, c) {
@@ -2020,10 +2304,10 @@ var Hono = class _Hono {
     if (method === "HEAD") {
       return (async () => new Response(null, await this.#dispatch(request, executionCtx, env, "GET")))();
     }
-    const path4 = this.getPath(request, { env });
-    const matchResult = this.router.match(method, path4);
+    const path5 = this.getPath(request, { env });
+    const matchResult = this.router.match(method, path5);
     const c = new Context(request, {
-      path: path4,
+      path: path5,
       matchResult,
       env,
       executionCtx,
@@ -2123,7 +2407,7 @@ var Hono = class _Hono {
 
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
-function match(method, path4) {
+function match(method, path5) {
   const matchers = this.buildAllMatchers();
   const match2 = ((method2, path22) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
@@ -2139,7 +2423,7 @@ function match(method, path4) {
     return [matcher[1][index], match3];
   });
   this.match = match2;
-  return match2(method, path4);
+  return match2(method, path5);
 }
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
@@ -2254,12 +2538,12 @@ var Node = class _Node {
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
-  insert(path4, index, pathErrorCheckOnly) {
+  insert(path5, index, pathErrorCheckOnly) {
     const paramAssoc = [];
     const groups = [];
     for (let i = 0; ; ) {
       let replaced = false;
-      path4 = path4.replace(/\{[^}]+\}/g, (m) => {
+      path5 = path5.replace(/\{[^}]+\}/g, (m) => {
         const mark = `@\\${i}`;
         groups[i] = [mark, m];
         i++;
@@ -2270,7 +2554,7 @@ var Trie = class {
         break;
       }
     }
-    const tokens = path4.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    const tokens = path5.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
     for (let i = groups.length - 1; i >= 0; i--) {
       const [mark] = groups[i];
       for (let j = tokens.length - 1; j >= 0; j--) {
@@ -2309,9 +2593,9 @@ var Trie = class {
 // node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
-function buildWildcardRegExp(path4) {
-  return wildcardRegExpCache[path4] ??= new RegExp(
-    path4 === "*" ? "" : `^${path4.replace(
+function buildWildcardRegExp(path5) {
+  return wildcardRegExpCache[path5] ??= new RegExp(
+    path5 === "*" ? "" : `^${path5.replace(
       /\/\*$|([.\\+*[^\]$()])/g,
       (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)"
     )}$`
@@ -2333,17 +2617,17 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   );
   const staticMap = /* @__PURE__ */ Object.create(null);
   for (let i = 0, j = -1, len = routesWithStaticPathFlag.length; i < len; i++) {
-    const [pathErrorCheckOnly, path4, handlers] = routesWithStaticPathFlag[i];
+    const [pathErrorCheckOnly, path5, handlers] = routesWithStaticPathFlag[i];
     if (pathErrorCheckOnly) {
-      staticMap[path4] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+      staticMap[path5] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
     } else {
       j++;
     }
     let paramAssoc;
     try {
-      paramAssoc = trie.insert(path4, j, pathErrorCheckOnly);
+      paramAssoc = trie.insert(path5, j, pathErrorCheckOnly);
     } catch (e) {
-      throw e === PATH_ERROR ? new UnsupportedPathError(path4) : e;
+      throw e === PATH_ERROR ? new UnsupportedPathError(path5) : e;
     }
     if (pathErrorCheckOnly) {
       continue;
@@ -2377,12 +2661,12 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware, path4) {
+function findMiddleware(middleware, path5) {
   if (!middleware) {
     return void 0;
   }
   for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
-    if (buildWildcardRegExp(k).test(path4)) {
+    if (buildWildcardRegExp(k).test(path5)) {
       return [...middleware[k]];
     }
   }
@@ -2396,7 +2680,7 @@ var RegExpRouter = class {
     this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
-  add(method, path4, handler) {
+  add(method, path5, handler) {
     const middleware = this.#middleware;
     const routes = this.#routes;
     if (!middleware || !routes) {
@@ -2411,18 +2695,18 @@ var RegExpRouter = class {
         });
       });
     }
-    if (path4 === "/*") {
-      path4 = "*";
+    if (path5 === "/*") {
+      path5 = "*";
     }
-    const paramCount = (path4.match(/\/:/g) || []).length;
-    if (/\*$/.test(path4)) {
-      const re = buildWildcardRegExp(path4);
+    const paramCount = (path5.match(/\/:/g) || []).length;
+    if (/\*$/.test(path5)) {
+      const re = buildWildcardRegExp(path5);
       if (method === METHOD_NAME_ALL) {
         Object.keys(middleware).forEach((m) => {
-          middleware[m][path4] ||= findMiddleware(middleware[m], path4) || findMiddleware(middleware[METHOD_NAME_ALL], path4) || [];
+          middleware[m][path5] ||= findMiddleware(middleware[m], path5) || findMiddleware(middleware[METHOD_NAME_ALL], path5) || [];
         });
       } else {
-        middleware[method][path4] ||= findMiddleware(middleware[method], path4) || findMiddleware(middleware[METHOD_NAME_ALL], path4) || [];
+        middleware[method][path5] ||= findMiddleware(middleware[method], path5) || findMiddleware(middleware[METHOD_NAME_ALL], path5) || [];
       }
       Object.keys(middleware).forEach((m) => {
         if (method === METHOD_NAME_ALL || method === m) {
@@ -2440,7 +2724,7 @@ var RegExpRouter = class {
       });
       return;
     }
-    const paths = checkOptionalParameter(path4) || [path4];
+    const paths = checkOptionalParameter(path5) || [path5];
     for (let i = 0, len = paths.length; i < len; i++) {
       const path22 = paths[i];
       Object.keys(routes).forEach((m) => {
@@ -2467,13 +2751,13 @@ var RegExpRouter = class {
     const routes = [];
     let hasOwnRoute = method === METHOD_NAME_ALL;
     [this.#middleware, this.#routes].forEach((r) => {
-      const ownRoute = r[method] ? Object.keys(r[method]).map((path4) => [path4, r[method][path4]]) : [];
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path5) => [path5, r[method][path5]]) : [];
       if (ownRoute.length !== 0) {
         hasOwnRoute ||= true;
         routes.push(...ownRoute);
       } else if (method !== METHOD_NAME_ALL) {
         routes.push(
-          ...Object.keys(r[METHOD_NAME_ALL]).map((path4) => [path4, r[METHOD_NAME_ALL][path4]])
+          ...Object.keys(r[METHOD_NAME_ALL]).map((path5) => [path5, r[METHOD_NAME_ALL][path5]])
         );
       }
     });
@@ -2493,13 +2777,13 @@ var SmartRouter = class {
   constructor(init) {
     this.#routers = init.routers;
   }
-  add(method, path4, handler) {
+  add(method, path5, handler) {
     if (!this.#routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    this.#routes.push([method, path4, handler]);
+    this.#routes.push([method, path5, handler]);
   }
-  match(method, path4) {
+  match(method, path5) {
     if (!this.#routes) {
       throw new Error("Fatal error");
     }
@@ -2514,7 +2798,7 @@ var SmartRouter = class {
         for (let i2 = 0, len2 = routes.length; i2 < len2; i2++) {
           router.add(...routes[i2]);
         }
-        res = router.match(method, path4);
+        res = router.match(method, path5);
       } catch (e) {
         if (e instanceof UnsupportedPathError) {
           continue;
@@ -2564,10 +2848,10 @@ var Node2 = class _Node2 {
     }
     this.#patterns = [];
   }
-  insert(method, path4, handler) {
+  insert(method, path5, handler) {
     this.#order = ++this.#order;
     let curNode = this;
-    const parts = splitRoutingPath(path4);
+    const parts = splitRoutingPath(path5);
     const possibleKeys = [];
     for (let i = 0, len = parts.length; i < len; i++) {
       const p = parts[i];
@@ -2616,12 +2900,12 @@ var Node2 = class _Node2 {
       }
     }
   }
-  search(method, path4) {
+  search(method, path5) {
     const handlerSets = [];
     this.#params = emptyParams;
     const curNode = this;
     let curNodes = [curNode];
-    const parts = splitPath(path4);
+    const parts = splitPath(path5);
     const curNodesQueue = [];
     const len = parts.length;
     let partOffsets = null;
@@ -2663,13 +2947,13 @@ var Node2 = class _Node2 {
           if (matcher instanceof RegExp) {
             if (partOffsets === null) {
               partOffsets = new Array(len);
-              let offset = path4[0] === "/" ? 1 : 0;
+              let offset = path5[0] === "/" ? 1 : 0;
               for (let p = 0; p < len; p++) {
                 partOffsets[p] = offset;
                 offset += parts[p].length + 1;
               }
             }
-            const restPathString = path4.substring(partOffsets[i]);
+            const restPathString = path5.substring(partOffsets[i]);
             const m = matcher.exec(restPathString);
             if (m) {
               params[name] = m[0];
@@ -2722,18 +3006,18 @@ var TrieRouter = class {
   constructor() {
     this.#node = new Node2();
   }
-  add(method, path4, handler) {
-    const results = checkOptionalParameter(path4);
+  add(method, path5, handler) {
+    const results = checkOptionalParameter(path5);
     if (results) {
       for (let i = 0, len = results.length; i < len; i++) {
         this.#node.insert(method, results[i], handler);
       }
       return;
     }
-    this.#node.insert(method, path4, handler);
+    this.#node.insert(method, path5, handler);
   }
-  match(method, path4) {
-    return this.#node.search(method, path4);
+  match(method, path5) {
+    return this.#node.search(method, path5);
   }
 };
 
@@ -2847,8 +3131,8 @@ async function restartCurrentSpace(config2) {
   });
   return true;
 }
-async function hubRequest(config2, path4, init) {
-  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path4}`, {
+async function hubRequest(config2, path5, init) {
+  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path5}`, {
     ...init,
     headers: {
       authorization: `Bearer ${config2.hfToken}`,
@@ -3339,8 +3623,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path4, errorMaps, issueData } = params;
-  const fullPath = [...path4, ...issueData.path || []];
+  const { data, path: path5, errorMaps, issueData } = params;
+  const fullPath = [...path5, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -3456,11 +3740,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path4, key) {
+  constructor(parent, value, path5, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path4;
+    this._path = path5;
     this._key = key;
   }
   get path() {
@@ -6956,10 +7240,10 @@ async function exchangeCodeForIdentity(settings, code) {
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
-import fs from "node:fs/promises";
-import path from "node:path";
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
 async function configureOpenClawGateway(config2) {
-  const raw2 = await fs.readFile(config2.openclawConfigPath, "utf8");
+  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
   const openclawConfig = JSON.parse(raw2);
   const gateway = object(openclawConfig, "gateway");
   gateway.mode = "local";
@@ -6980,10 +7264,10 @@ async function configureOpenClawGateway(config2) {
     allowedOrigins: [config2.publicUrl]
   };
   configureOpenClawModels(openclawConfig, config2);
-  await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
-  await fs.chmod(config2.openclawConfigPath, 384);
+  await fs2.chmod(config2.openclawConfigPath, 384);
 }
 function configureOpenClawModels(openclawConfig, config2) {
   const agents = object(openclawConfig, "agents");
@@ -7072,14 +7356,14 @@ function object(parent, key) {
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
 function openAiConfigured(env = process.env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
 }
 async function loadOpenAiCredentialFile(file) {
   try {
-    const raw2 = await fs2.readFile(file, "utf8");
+    const raw2 = await fs3.readFile(file, "utf8");
     const match2 = raw2.match(/(?:^|\n)OPENAI_API_KEY=([^\n]+)/);
     return match2?.[1]?.trim() || void 0;
   } catch {
@@ -7087,10 +7371,10 @@ async function loadOpenAiCredentialFile(file) {
   }
 }
 async function writeEphemeralOpenAiCredential(file, apiKey) {
-  await fs2.mkdir(path2.dirname(file), { recursive: true, mode: 448 });
-  await fs2.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
+  await fs3.mkdir(path3.dirname(file), { recursive: true, mode: 448 });
+  await fs3.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
 `, { encoding: "utf8", mode: 384 });
-  await fs2.chmod(file, 384);
+  await fs3.chmod(file, 384);
 }
 function validateOpenAiApiKey(value) {
   if (typeof value !== "string") {
@@ -7666,9 +7950,9 @@ function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
-  app.get("/assets/mlclaw.svg", async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
-  app.get("/assets/hf-logo.svg", async () => serveFile(path3.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
-  app.get("/assets/assistant-avatar.svg", async () => serveFile(path3.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/mlclaw.svg", async () => serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/hf-logo.svg", async () => serveFile(path4.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8"));
+  app.get("/assets/assistant-avatar.svg", async () => serveFile(path4.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8"));
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
   app.get("/assets/brand/logo", async () => serveBrandAsset(config2, config2.branding.logoAsset));
   app.get("/favicon.svg", async () => serveBrandAsset(config2, config2.branding.faviconSvgAsset));
@@ -7694,7 +7978,7 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!safe) {
       return c.text("not found\n", 404);
     }
-    const file = path3.join(config2.assetsDir, "mlclaw-control-ui", safe);
+    const file = path4.join(config2.assetsDir, "mlclaw-control-ui", safe);
     return serveFile(file, contentType(file), true);
   });
   app.get("/mlclaw/openai", (c) => c.redirect("/mlclaw/credentials", 302));
@@ -7894,7 +8178,7 @@ async function controlUi(c, config2) {
   if (auth instanceof Response) {
     return auth;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 function logoutResponse(config2, json) {
   const headers = new Headers();
@@ -8008,19 +8292,19 @@ async function readJson(c) {
   }
 }
 async function writeRuntimeSettingsFile(config2, model, choices) {
-  await fs3.mkdir(path3.dirname(config2.runtimeSettingsFile), { recursive: true });
-  await fs3.writeFile(config2.runtimeSettingsFile, `${JSON.stringify({
+  await fs4.mkdir(path4.dirname(config2.runtimeSettingsFile), { recursive: true });
+  await fs4.writeFile(config2.runtimeSettingsFile, `${JSON.stringify({
     version: 1,
     model,
     modelChoices: choices,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   }, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-  await fs3.chmod(config2.runtimeSettingsFile, 384);
+  await fs4.chmod(config2.runtimeSettingsFile, 384);
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
-    const body = await fs3.readFile(file);
+    const body = await fs4.readFile(file);
     const headers = new Headers({ "content-type": contentTypeHeader });
     if (immutable) {
       headers.set("cache-control", "public, max-age=31536000, immutable");
@@ -8034,11 +8318,11 @@ async function serveFile(file, contentTypeHeader, immutable = false) {
   }
 }
 async function serveBrandAsset(config2, asset) {
-  const response = await serveFile(path3.join(config2.assetsDir, asset), contentType(asset));
+  const response = await serveFile(path4.join(config2.assetsDir, asset), contentType(asset));
   if (response.status !== 404 || asset === "mlclaw.svg") {
     return response;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
 }
 function safeRelativePath(value) {
   let decoded;
@@ -8047,7 +8331,7 @@ function safeRelativePath(value) {
   } catch {
     return void 0;
   }
-  const normalized = path3.posix.normalize(decoded).replace(/^\/+/, "");
+  const normalized = path4.posix.normalize(decoded).replace(/^\/+/, "");
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
     return void 0;
   }
@@ -8498,13 +8782,33 @@ function formatError2(err) {
 // src/mlclaw-space-runtime/cli.ts
 var config = loadConfig();
 var server = new SpaceRuntimeServer(config);
+var toolingSeedAbort = new AbortController();
 if (config.sessionSecretGenerated && config.mode === "app") {
   process2.stderr.write("[mlclaw] MLCLAW_SESSION_SECRET is missing; generated an ephemeral session secret for this boot\n");
 }
 var httpServer = await server.start();
+if (config.mode === "app") {
+  void waitForBootstrapAndSeedHuggingFaceTooling({ signal: toolingSeedAbort.signal }).then(
+    (result) => {
+      if (result) {
+        process2.stdout.write(
+          `[hf-tooling] seeded after OpenClaw bootstrap skills=${result.copiedWorkspaceSkills.length} templates=${result.copiedTemplateFiles.length}
+`
+        );
+      }
+    },
+    (err) => {
+      if (!toolingSeedAbort.signal.aborted) {
+        process2.stderr.write(`[hf-tooling] delayed seed failed: ${err instanceof Error ? err.message : String(err)}
+`);
+      }
+    }
+  );
+}
 async function shutdown(signal) {
   process2.stdout.write(`[mlclaw] received ${signal}; shutting down
 `);
+  toolingSeedAbort.abort();
   httpServer.close();
   await server.stop();
   process2.exit(0);

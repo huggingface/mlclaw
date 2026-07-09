@@ -45,9 +45,9 @@ if [ ! -f "$CONFIG_PATH" ]; then
 fi
 chown -R node:node "$LIVE_DIR"
 
-# Let OpenClaw create its native workspace files before ML Claw customizes the
-# workspace. Otherwise OpenClaw can mistake the tooling seed for an existing
-# user configuration and skip the first-run BOOTSTRAP.md flow.
+# Let OpenClaw create its native workspace files. The ML Claw runtime waits for
+# native onboarding to finish before adding workspace tooling; OpenClaw treats
+# any preinstalled workspace skills as evidence that onboarding already ran.
 echo "[openclaw-setup] initializing baseline workspace"
 gosu node node /app/openclaw.mjs setup --baseline --workspace "$WORKSPACE_DIR"
 echo "[openclaw-setup] baseline workspace ready"
@@ -85,10 +85,6 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE
     echo "[telegram-probe] curl is unavailable; skipping"
   fi
 fi
-
-echo "[hf-tooling] seeding baseline Hugging Face tooling"
-node /app/hf-tooling-seed.js
-echo "[hf-tooling] baseline Hugging Face tooling ready"
 
 chown -R node:node "$LIVE_DIR"
 exec gosu node node /app/hf-state-sync.js supervise -- node /app/mlclaw-space-runtime.js
