@@ -45,6 +45,13 @@ if [ ! -f "$CONFIG_PATH" ]; then
 fi
 chown -R node:node "$LIVE_DIR"
 
+# Let OpenClaw create its native workspace files before ML Claw customizes the
+# workspace. Otherwise OpenClaw can mistake the tooling seed for an existing
+# user configuration and skip the first-run BOOTSTRAP.md flow.
+echo "[openclaw-setup] initializing baseline workspace"
+gosu node node /app/openclaw.mjs setup --baseline --workspace "$WORKSPACE_DIR"
+echo "[openclaw-setup] baseline workspace ready"
+
 if [ -n "${OPENCLAW_MODEL:-}" ]; then
   echo "[huggingface-config] configuring selected Hugging Face model"
   gosu node node /app/scripts/configure-huggingface-model.mjs "$CONFIG_PATH"
