@@ -158,9 +158,10 @@ Node server wiring. `app.ts` should compose Hono routes and middleware.
 
 ## Settings Data Model
 
-The server reads and writes deployment configuration from Space variables and
-secrets. The bucket remains durable OpenClaw state and must not become the
-settings store.
+The server reads deployment configuration from Space variables and snapshotted
+runtime settings. App Spaces must not require the user's broad Hub token just
+to save browser settings. The bucket remains durable OpenClaw state and must
+not become the live database filesystem.
 
 Readable settings:
 
@@ -224,15 +225,19 @@ softly to the curated list.
 
 ## Mutating Space Configuration
 
-Admin API writes happen server-side using the Space's `HF_TOKEN` secret.
+Admin API writes must not depend on a broad `HF_TOKEN` secret inside app
+Spaces. Browser changes that do not need privileged Hub mutation should be
+stored in snapshotted runtime state. Privileged Space changes such as variables,
+hardware, and durable secrets remain local CLI operations.
 
 Rules:
 
 - only mutate the current Space, inferred from `SPACE_ID`;
 - never accept arbitrary repo IDs from the browser for mutation endpoints;
 - never return secret values to the browser;
-- write Space variables/secrets through the Hugging Face API;
-- restart the Space only after successful writes;
+- do not store the user's broad Hub token in app Spaces;
+- write Space variables/secrets through the local `mlclaw` CLI;
+- restart the Space only after successful CLI writes;
 - expose restart status to the UI.
 
 Changing `OPENCLAW_MODEL` should:

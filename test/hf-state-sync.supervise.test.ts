@@ -26,6 +26,7 @@ describe("supervise", () => {
     const config: SyncConfig = {
       liveDir,
       bucket: "tester/bucket",
+      stateMountDir: null,
       bucketPrefix: "openclaw-state",
       intervalSeconds: 3600,
       handoffPollSeconds: 1,
@@ -57,6 +58,7 @@ describe("supervise", () => {
     const config: SyncConfig = {
       liveDir,
       bucket: "tester/bucket",
+      stateMountDir: null,
       bucketPrefix: "openclaw-state",
       intervalSeconds: 3600,
       handoffPollSeconds: 1,
@@ -106,6 +108,7 @@ describe("supervise", () => {
     const config: SyncConfig = {
       liveDir,
       bucket: "tester/bucket",
+      stateMountDir: null,
       bucketPrefix: "openclaw-state",
       intervalSeconds: 3600,
       handoffPollSeconds: 1,
@@ -155,6 +158,7 @@ describe("supervise", () => {
     const config: SyncConfig = {
       liveDir,
       bucket: "tester/bucket",
+      stateMountDir: null,
       bucketPrefix: "openclaw-state",
       intervalSeconds: 3600,
       handoffPollSeconds: 0.01,
@@ -194,6 +198,7 @@ describe("supervise", () => {
     const config: SyncConfig = {
       liveDir,
       bucket: "tester/bucket",
+      stateMountDir: null,
       bucketPrefix: "openclaw-state",
       intervalSeconds: 3600,
       handoffPollSeconds: 3600,

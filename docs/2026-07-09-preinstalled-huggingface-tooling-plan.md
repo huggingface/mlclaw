@@ -43,15 +43,16 @@ hf upload --help
 hf spaces --help
 ```
 
-Authentication should come from the deployment environment:
+Authentication should not assume a broad Hub token exists inside app Spaces:
 
 ```text
-HF_TOKEN
-HUGGINGFACE_HUB_TOKEN
+HF_TOKEN=<optional narrow token only>
+HUGGINGFACE_HUB_TOKEN=<optional narrow token only>
 ```
 
-Do not ask the user to run `hf auth login` inside the Space. The Space already
-has an `HF_TOKEN` secret managed by ML Claw.
+Do not ask the user to run `hf auth login` inside the Space. The default Space
+gateway path keeps the user's broad Hugging Face token on the local machine;
+state sync uses the mounted bucket volume instead of Hub API credentials.
 
 ### hf-discover
 

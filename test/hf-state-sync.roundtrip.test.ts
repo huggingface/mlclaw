@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseManifest } from "../src/hf-state-sync/manifest.js";
 import type { SyncConfig } from "../src/hf-state-sync/paths.js";
+import { createMountedBucketHub } from "../src/hf-state-sync/hub.js";
 import { runRestore } from "../src/hf-state-sync/restore.js";
 import { runSnapshot } from "../src/hf-state-sync/snapshot.js";
 import { createFakeHub } from "./fake-hub.js";
@@ -26,6 +27,7 @@ function configFor(liveDir: string, overrides?: Partial<SyncConfig>): SyncConfig
   return {
     liveDir,
     bucket: "tester/bucket",
+      stateMountDir: null,
     bucketPrefix: PREFIX,
     intervalSeconds: 60,
     handoffPollSeconds: 5,
@@ -80,6 +82,55 @@ describe("snapshot/restore round-trip", () => {
     const row = db.prepare("SELECT v FROM memory").get() as { v: string };
     db.close();
     expect(row.v).toBe("turn-1");
+  });
+
+  it("round-trips through a mounted bucket directory without Hub credentials", async () => {
+    const mountDir = path.join(dir, "mounted-bucket");
+    await fs.mkdir(mountDir);
+    const hub = createMountedBucketHub({ mountDir });
+    const liveA = path.join(dir, "live-mounted-a");
+    await writeState(liveA, "mounted-bucket");
+
+    const snap = await runSnapshot({
+      config: configFor(liveA, { stateMountDir: mountDir }),
+      hub,
+      bootTime: BOOT,
+    });
+    expect(snap.kind).toBe("uploaded");
+    await expect(fs.access(path.join(mountDir, MANIFEST_KEY))).resolves.toBeUndefined();
+
+    const liveB = path.join(dir, "live-mounted-b");
+    const restore = await runRestore({
+      config: configFor(liveB, { stateMountDir: mountDir }),
+      hub,
+    });
+    expect(restore.kind).toBe("restored");
+    expect(await fs.readFile(path.join(liveB, "workspace/notes.md"), "utf8")).toBe(
+      "workspace mounted-bucket",
+    );
+  });
+
+  it("fails closed when the configured mounted bucket root is missing", async () => {
+    const mountDir = path.join(dir, "missing-mounted-bucket");
+    const hub = createMountedBucketHub({ mountDir });
+    const live = path.join(dir, "live-missing-mount");
+    await writeState(live, "missing-mount");
+
+    const snap = await runSnapshot({
+      config: configFor(live, { stateMountDir: mountDir }),
+      hub,
+      bootTime: BOOT,
+    });
+
+    expect(snap.kind).toBe("failed");
+    if (snap.kind === "failed") {
+      expect(snap.detail).toContain("mounted bucket root is missing");
+    }
+    await expect(fs.access(mountDir)).rejects.toThrow();
+    await expect(runRestore({
+      config: configFor(path.join(dir, "restore-missing-mount"), { stateMountDir: mountDir }),
+      hub,
+    })).rejects.toThrow("mounted bucket root is missing");
   });
 
   it("restores into a live dir child under an existing mounted volume root", async () => {

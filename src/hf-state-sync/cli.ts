@@ -1,6 +1,6 @@
-import { createHfBucketHub } from "./hub.js";
+import { createHfBucketHub, createMountedBucketHub } from "./hub.js";
 import type { BucketHub } from "./hub.js";
-import { log, logError, resolveSyncConfig } from "./paths.js";
+import { type SyncConfig, log, logError, resolveSyncConfig } from "./paths.js";
 import { runRestore } from "./restore.js";
 import { runSnapshot } from "./snapshot.js";
 import { supervise } from "./supervise.js";
@@ -10,13 +10,20 @@ const USAGE = `usage:
   hf-state-sync snapshot
   hf-state-sync supervise -- <command> [args...]`;
 
-function makeHub(bucket: string | null): BucketHub | null {
-  return bucket ? createHfBucketHub({ bucket }) : null;
+function makeHub(config: SyncConfig): BucketHub | null {
+  if (!config.bucket) {
+    return null;
+  }
+  if (config.stateMountDir) {
+    log(`using mounted state bucket at ${config.stateMountDir}`);
+    return createMountedBucketHub({ mountDir: config.stateMountDir });
+  }
+  return createHfBucketHub({ bucket: config.bucket });
 }
 
 async function main(argv: string[]): Promise<number> {
   const config = resolveSyncConfig();
-  const hub = makeHub(config.bucket);
+  const hub = makeHub(config);
   if (!hub) {
     logError("OPENCLAW_HF_STATE_BUCKET is not set; state will NOT survive restarts");
   }

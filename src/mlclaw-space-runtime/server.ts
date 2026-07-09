@@ -29,6 +29,7 @@ export class SpaceRuntimeServer {
       openAiConfigured: async () =>
         openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
+      restartOpenClaw: () => this.restartOpenClaw(),
       setModelSettings: (model, choices) => {
         this.config.model = model;
         this.config.modelChoices = choices;
@@ -162,13 +163,17 @@ export class SpaceRuntimeServer {
     try {
       await configureOpenClawGateway(this.config);
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
-      const env = {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
         OPENCLAW_GATEWAY_PORT: String(this.config.openclawPort),
         OPENCLAW_MODEL: this.config.model,
         ...(persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {}),
         ...extraEnv,
       };
+      if (this.config.routerToken) {
+        env.HF_TOKEN = this.config.routerToken;
+        env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
+      }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,
@@ -189,6 +194,11 @@ export class SpaceRuntimeServer {
   private async restartOpenClawWithOpenAi(apiKey: string): Promise<void> {
     await this.stop();
     await this.startOpenClaw({ OPENAI_API_KEY: apiKey });
+  }
+
+  private async restartOpenClaw(): Promise<void> {
+    await this.stop();
+    await this.startOpenClaw();
   }
 
   private isAllowed(username: string): boolean {

@@ -34,6 +34,7 @@ function createFakeHub(opts: {
   acknowledgeHandoff?: boolean;
   ackCompletedAt?: string;
   downloadFileError?: Error;
+  getSpaceRuntimeError?: Error;
   spaceRuntime?: SpaceRuntime;
   existingBuckets?: string[];
   existingSpaces?: string[];
@@ -41,6 +42,7 @@ function createFakeHub(opts: {
   const calls: Array<{ name: string; args: unknown[] }> = [];
   const variables = new Map<string, { value?: string }>();
   const secrets = new Map<string, { key: string }>();
+  const volumes: Array<{ type: "bucket" | "model" | "dataset" | "space"; source: string; mountPath: string; readOnly?: boolean }> = [];
   const bucketObjects = new Map<string, string>();
   const existingBuckets = new Set(opts.existingBuckets ?? []);
   const existingSpaces = new Set(opts.existingSpaces ?? []);
@@ -134,6 +136,10 @@ function createFakeHub(opts: {
       calls.push({ name: "getSpaceSecrets", args: [] });
       return secrets;
     },
+    async deleteSpaceSecret(repoId: string, key: string) {
+      calls.push({ name: "deleteSpaceSecret", args: [repoId, key] });
+      secrets.delete(key);
+    },
     async restartSpace(...args: unknown[]) {
       calls.push({ name: "restartSpace", args });
       const agent = variables.get("OPENCLAW_AGENT_NAME")?.value ?? "research";
@@ -156,7 +162,14 @@ function createFakeHub(opts: {
     },
     async getSpaceRuntime(): Promise<SpaceRuntime> {
       calls.push({ name: "getSpaceRuntime", args: [] });
-      return opts.spaceRuntime ?? { stage: "RUNNING", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1 };
+      if (opts.getSpaceRuntimeError) {
+        throw opts.getSpaceRuntimeError;
+      }
+      return opts.spaceRuntime ?? { stage: "RUNNING", hardware: "cpu-upgrade", requested_hardware: "cpu-upgrade", sleep_time: -1, volumes };
+    },
+    async setSpaceVolumes(repoId: string, nextVolumes: typeof volumes) {
+      calls.push({ name: "setSpaceVolumes", args: [repoId, nextVolumes] });
+      volumes.splice(0, volumes.length, ...nextVolumes);
     },
     async fetchSpaceLogs() {
       calls.push({ name: "fetchSpaceLogs", args: [] });
@@ -199,7 +212,7 @@ async function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt
   const docker = createFakeDocker();
   const configRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-cli-test-"));
   return {
-    env: {},
+    env: { MLCLAW_ROUTER_TOKEN: "hf_router_test" },
     stdout: { log: () => undefined },
     stderr: { error: (message: unknown) => stderr.push(String(message)) },
     readToken: async () => "hf_test_token",
@@ -830,7 +843,123 @@ describe("mlclaw CLI", () => {
       name: "addSpaceVariable",
       args: ["alice/research", "MLCLAW_ADMINS", "alice"],
     });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "MLCLAW_STATE_MOUNT_DIR", "/data/mlclaw-state"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "OPENCLAW_LIVE_DIR", "/home/node/.local/share/mlclaw/live"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "setSpaceVolumes",
+      args: ["alice/research", [
+        { type: "bucket", source: "alice/research-data", mountPath: "/data/mlclaw-state", readOnly: false },
+      ]],
+    });
+    expect(hub.calls.some((call) =>
+      call.name === "addSpaceSecret" && ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].includes(String(call.args[1]))
+    )).toBe(false);
+    expect(hub.calls).toContainEqual({ name: "addSpaceSecret", args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_test"] });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HUGGINGFACE_HUB_TOKEN"] });
     expect(hub.calls.some((call) => call.name === "addSpaceSecret" && call.args[1] === "TELEGRAM_BOT_TOKEN")).toBe(false);
+  });
+
+  it("requires a Router token for non-interactive Space bootstrap with Hugging Face Router models", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt, stderr),
+      env: {},
+    };
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("set MLCLAW_ROUTER_TOKEN or pass --router-token-file");
+    expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+  });
+
+  it("reuses a persisted Router token for non-interactive Space bootstrap", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt, stderr),
+      env: {},
+    };
+    await writeSecretEnv(runtime.configRoot, "research", {
+      HF_TOKEN: "hf_test_token",
+      OPENCLAW_HF_STATE_BUCKET: "alice/research-data",
+      OPENCLAW_AGENT_NAME: "research",
+      OPENCLAW_MODEL: DEFAULT_MODEL,
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_ID: "space-research",
+      MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
+      MLCLAW_SESSION_SECRET: "session-secret",
+      MLCLAW_ROUTER_TOKEN: "hf_router_saved",
+    });
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(0);
+    expect(stderr.join("\n")).toBe("");
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_saved"],
+    });
+  });
+
+  it("does not overwrite Space volumes when runtime volume metadata cannot be read", async () => {
+    const hub = createFakeHub({
+      getSpaceRuntimeError: new Error("runtime metadata unavailable"),
+    });
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("runtime metadata unavailable");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
+  });
+
+  it("does not overwrite Space volumes when runtime volume metadata is omitted", async () => {
+    const hub = createFakeHub({
+      spaceRuntime: { stage: "RUNNING", hardware: "cpu-basic", requested_hardware: "cpu-basic", sleep_time: -1 },
+    });
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main([
+      "bootstrap",
+      "--name",
+      "research",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("did not include volumes");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
   });
 
   it("shows existing bucket and Space actions before bootstrap updates resources", async () => {
@@ -1262,6 +1391,108 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "assertBucketAccessible")).toBe(false);
   });
 
+  it("repairs app Space mounted state and removes stale broad Hub token secrets", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_OPENCLAW_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_GATEWAY_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ALLOWED_USERS", "alice");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
+    await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "HUGGINGFACE_HUB_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
+    hub.calls.length = 0;
+
+    const { prompt } = createPrompt([]);
+    const output: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt),
+      stdout: { log: (message: unknown) => output.push(String(message)) },
+    };
+
+    const code = await main(["doctor", "alice/research", "--fix"], runtime);
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("deleted stale secrets HF_TOKEN, HUGGINGFACE_HUB_TOKEN");
+    expect(output.join("\n")).toContain("mounted bucket alice/research-data at /data/mlclaw-state");
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "MLCLAW_STATE_MOUNT_DIR", "/data/mlclaw-state"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "OPENCLAW_LIVE_DIR", "/home/node/.local/share/mlclaw/live"],
+    });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HUGGINGFACE_HUB_TOKEN"] });
+    expect(hub.calls).toContainEqual({
+      name: "setSpaceVolumes",
+      args: ["alice/research", [
+        { type: "bucket", source: "alice/research-data", mountPath: "/data/mlclaw-state", readOnly: false },
+      ]],
+    });
+  });
+
+  it("does not delete legacy broad Hub tokens until a Router token is configured", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", DEFAULT_MODEL);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_OPENCLAW_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_GATEWAY_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ALLOWED_USERS", "alice");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
+    await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
+    hub.calls.length = 0;
+
+    const { prompt } = createPrompt([]);
+    const output: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt),
+      stdout: { log: (message: unknown) => output.push(String(message)) },
+    };
+
+    const code = await main(["doctor", "alice/research", "--fix"], runtime);
+
+    expect(code).toBe(0);
+    expect(output.join("\n")).toContain("add MLCLAW_ROUTER_TOKEN before removing");
+    expect(hub.calls).not.toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
+  });
+
+  it("does not overwrite Space volumes during doctor --fix when runtime volume metadata is omitted", async () => {
+    const hub = createFakeHub({
+      spaceRuntime: { stage: "RUNNING", hardware: "cpu-basic", requested_hardware: "cpu-basic", sleep_time: -1 },
+    });
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", "openai/gpt-4.1-mini");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceVariable("alice/research", "MLCLAW_OPENCLAW_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_GATEWAY_PORT", "7861");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ALLOWED_USERS", "alice");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
+    hub.calls.length = 0;
+
+    const { prompt } = createPrompt([]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main(["doctor", "alice/research", "--fix"], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("did not include volumes");
+    expect(hub.calls.some((call) => call.name === "setSpaceVolumes")).toBe(false);
+  });
+
   it("migrates local to Space and back without starting both gateways", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt(["telegram-token", "1234567890"]);
@@ -1330,6 +1561,56 @@ describe("mlclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(startIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+  });
+
+  it("reuses a persisted Router token when migrating local to Space", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt, stderr),
+      env: {},
+    };
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: DEFAULT_MODEL,
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+    await writeSecretEnv(runtime.configRoot, "research", {
+      HF_TOKEN: "hf_test_token",
+      OPENCLAW_HF_STATE_BUCKET: "alice/research-data",
+      OPENCLAW_AGENT_NAME: "research",
+      OPENCLAW_MODEL: DEFAULT_MODEL,
+      MLCLAW_GATEWAY_LOCATION: "local",
+      MLCLAW_RUNTIME_ID: "local-research-existing",
+      MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
+      MLCLAW_SESSION_SECRET: "session-secret",
+      MLCLAW_ROUTER_TOKEN: "hf_router_saved",
+    });
+
+    const code = await main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "space",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(0);
+    expect(stderr.join("\n")).toBe("");
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_saved"],
+    });
   });
 
   it("rejects free Space hardware when migrating a Telegram-enabled local gateway", async () => {

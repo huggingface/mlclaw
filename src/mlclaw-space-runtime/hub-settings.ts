@@ -7,6 +7,7 @@ export type RuntimeSettings = {
   agentName: string | null;
   model: string;
   stateBucket: string | null;
+  stateMountDir: string | null;
   statePrefix: string | null;
   gatewayLocation: string | null;
   runtimeImage: string | null;
@@ -24,6 +25,7 @@ export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
     agentName: config.agentName ?? null,
     model: config.model,
     stateBucket: config.stateBucket ?? null,
+    stateMountDir: config.stateMountDir ?? null,
     statePrefix: config.statePrefix ?? null,
     gatewayLocation: config.gatewayLocation ?? null,
     runtimeImage: config.runtimeImage ?? null,

@@ -10,6 +10,7 @@ var __export = (target, all) => {
 import process2 from "node:process";
 
 // src/mlclaw-space-runtime/config.ts
+import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 
 // src/mlclaw-space-runtime/branding.ts
@@ -539,7 +540,9 @@ function loadConfig(env = process.env) {
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
-  const model = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
+  const runtimeSettings2 = readRuntimeSettings(runtimeSettingsFile);
+  const model = runtimeSettings2.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
   return {
     port,
@@ -561,16 +564,19 @@ function loadConfig(env = process.env) {
     allowAnySignedIn: env.MLCLAW_ALLOW_ANY_SIGNED_IN === "1" || env.MLCLAW_ALLOW_ANY_SIGNED_IN === "true",
     mode,
     hfToken: trim(env.HF_TOKEN ?? env.HUGGINGFACE_HUB_TOKEN),
+    routerToken: trim(env.MLCLAW_ROUTER_TOKEN ?? env.HF_ROUTER_TOKEN),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
-    openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/tmp/openclaw-live/.openclaw/openclaw.json",
+    runtimeSettingsFile,
+    openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
     agentName,
     model,
-    modelChoices: parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    modelChoices: runtimeSettings2.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
+    stateMountDir: trim(env.MLCLAW_STATE_MOUNT_DIR),
     statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
@@ -627,6 +633,22 @@ function splitArgs(value) {
 function trim(value) {
   const trimmed = value?.trim();
   return trimmed || void 0;
+}
+function readRuntimeSettings(file) {
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    const model = typeof parsed.model === "string" ? parsed.model.trim() : void 0;
+    if (!model) {
+      return {};
+    }
+    const modelChoices = normalizeModelChoices(parsed.modelChoices, model);
+    return {
+      model,
+      ...modelChoices ? { modelChoices } : {}
+    };
+  } catch {
+    return {};
+  }
 }
 
 // src/mlclaw-space-runtime/server.ts
@@ -2778,6 +2800,7 @@ function runtimeSettings(config2) {
     agentName: config2.agentName ?? null,
     model: config2.model,
     stateBucket: config2.stateBucket ?? null,
+    stateMountDir: config2.stateMountDir ?? null,
     statePrefix: config2.statePrefix ?? null,
     gatewayLocation: config2.gatewayLocation ?? null,
     runtimeImage: config2.runtimeImage ?? null,
@@ -7734,18 +7757,30 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
     }
-    await setCurrentSpaceVariable(config2, "OPENCLAW_MODEL", model);
-    await setCurrentSpaceVariable(config2, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+    if (parseOpenClawModelRef(model) && !config2.routerToken && !config2.hfToken) {
+      return c.json({ ok: false, error: "Hugging Face Router token is required before selecting a Hugging Face Router model" }, 400);
+    }
+    let persistent = false;
+    if (config2.spaceId && config2.hfToken) {
+      await setCurrentSpaceVariable(config2, "OPENCLAW_MODEL", model);
+      await setCurrentSpaceVariable(config2, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
+      persistent = true;
+    }
+    await writeRuntimeSettingsFile(config2, model, choices);
     controls.setModelSettings(model, choices);
     await configureOpenClawGateway(config2);
     let restartPending = false;
-    try {
-      restartPending = await restartCurrentSpace(config2);
-    } catch (err) {
-      process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}
+    if (persistent) {
+      try {
+        restartPending = await restartCurrentSpace(config2);
+      } catch (err) {
+        process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}
 `);
+      }
+    } else {
+      await controls.restartOpenClaw();
     }
-    return c.json({ ok: true, model, modelChoices: choices, restartPending });
+    return c.json({ ok: true, model, modelChoices: choices, persistent, restartPending });
   });
   app.post("/mlclaw/api/credentials/openai", async (c) => {
     const auth = requireAdmin(c, config2);
@@ -7789,7 +7824,11 @@ function createSpaceRuntimeApp(config2, controls) {
     if (config2.mode !== "app") {
       return c.json({ ok: false, error: "template mode cannot restart runtime" }, 403);
     }
-    return c.json({ ok: true, restartPending: await restartCurrentSpace(config2) });
+    const restartPending = await restartCurrentSpace(config2);
+    if (!restartPending) {
+      await controls.restartOpenClaw();
+    }
+    return c.json({ ok: true, restartPending });
   });
   app.get("/mlclaw", (c) => controlUi(c, config2));
   app.get("/mlclaw/*", (c) => controlUi(c, config2));
@@ -7926,6 +7965,7 @@ async function statusPayload(config2, controls) {
     model: config2.model,
     space: config2.spaceId ?? null,
     stateBucket: config2.stateBucket ?? null,
+    stateMountDir: config2.stateMountDir ?? null,
     statePrefix: config2.statePrefix ?? null,
     gatewayLocation: config2.gatewayLocation ?? null,
     runtimeImage: config2.runtimeImage ?? null,
@@ -7966,6 +8006,17 @@ async function readJson(c) {
   } catch {
     return void 0;
   }
+}
+async function writeRuntimeSettingsFile(config2, model, choices) {
+  await fs3.mkdir(path3.dirname(config2.runtimeSettingsFile), { recursive: true });
+  await fs3.writeFile(config2.runtimeSettingsFile, `${JSON.stringify({
+    version: 1,
+    model,
+    modelChoices: choices,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  }, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+  await fs3.chmod(config2.runtimeSettingsFile, 384);
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
@@ -8196,6 +8247,7 @@ var SpaceRuntimeServer = class {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
       openAiConfigured: async () => openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
+      restartOpenClaw: () => this.restartOpenClaw(),
       setModelSettings: (model, choices) => {
         this.config.model = model;
         this.config.modelChoices = choices;
@@ -8319,6 +8371,10 @@ var SpaceRuntimeServer = class {
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
         ...extraEnv
       };
+      if (this.config.routerToken) {
+        env.HF_TOKEN = this.config.routerToken;
+        env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
+      }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env
@@ -8339,6 +8395,10 @@ var SpaceRuntimeServer = class {
   async restartOpenClawWithOpenAi(apiKey) {
     await this.stop();
     await this.startOpenClaw({ OPENAI_API_KEY: apiKey });
+  }
+  async restartOpenClaw() {
+    await this.stop();
+    await this.startOpenClaw();
   }
   isAllowed(username) {
     return this.config.allowAnySignedIn || this.config.allowedUsers.includes(username);

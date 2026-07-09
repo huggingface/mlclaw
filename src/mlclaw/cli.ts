@@ -12,7 +12,7 @@ import { readToken } from "./auth.js";
 import { CliDockerRunner, containerNameFor, type DockerRunner, volumeNameFor } from "./docker.js";
 import { parseGatewayLocation, type GatewayLocation } from "./gateway-location.js";
 import { pushTemplateToSpace } from "./git.js";
-import { HubApi, HubApiError } from "./hub-api.js";
+import { HubApi, HubApiError, type SpaceRuntime, type SpaceVolume } from "./hub-api.js";
 import {
   assertNoLiveForeignLease,
   clearRuntimeHandoffRequest,
@@ -26,6 +26,7 @@ import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 import {
   defaultConfigRoot,
   manifestExists,
+  parseSecretEnv,
   readManifest,
   readSecretEnv,
   secretEnvPath,
@@ -47,6 +48,8 @@ export const DEFAULT_LOCAL_PORT = 7860;
 export const DEFAULT_SPACE_OPENCLAW_PORT = 7861;
 export const LOCAL_VOLUME_MOUNT_PATH = "/tmp/mlclaw-local";
 export const LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
+export const SPACE_STATE_MOUNT_DIR = "/data/mlclaw-state";
+export const SPACE_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
 export const SPACE_HANDOFF_TIMEOUT_MS = 120_000;
 export const SPACE_HANDOFF_POLL_MS = 5_000;
 
@@ -73,6 +76,8 @@ type BootstrapOptions = {
   bundledRuntime?: boolean;
   publicSpace?: boolean;
   gatewayToken?: string;
+  routerToken?: string;
+  routerTokenFile?: string;
   dockerContext?: string;
   pull?: boolean;
   takeover?: boolean;
@@ -103,6 +108,8 @@ type GatewayCommandOptions = {
   sleepTime?: number;
   runtimeImage?: string;
   bundledRuntime?: boolean;
+  routerToken?: string;
+  routerTokenFile?: string;
   dockerContext?: string;
   pull?: boolean;
   takeover?: boolean;
@@ -246,6 +253,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false)
     .option("--public-space", "Create the Hugging Face Space as public instead of private", false)
     .addOption(new Option("--gateway-token <token>").hideHelp())
+    .option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls")
+    .option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token")
     .option("--docker-context <name>", "Docker context for local gateway mode")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if a stale runtime lease is present", false)
@@ -348,6 +357,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--runtime-image <image>", "ML Claw runtime image")
     .option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false)
     .option("--public-space", "Create the Hugging Face Space as public instead of private", false)
+    .option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls")
+    .option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token")
     .option("--docker-context <name>", "Docker context for local gateway startup when migrating to local")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
@@ -587,6 +598,13 @@ async function resolveBootstrapPlan(params: {
     hub,
   });
   const bucket = bucketPlan.bucket;
+  const routerToken = await resolveRouterToken({
+    opts,
+    runtime,
+    existingSecrets,
+    gatewayLocation,
+    model,
+  });
   const spacePlan = gatewayLocation === "space"
     ? {
       space: names.space,
@@ -623,6 +641,7 @@ async function resolveBootstrapPlan(params: {
     ...(bucketPrefix ? { bucketPrefix } : {}),
     ...(opts.telegramProxy ? { telegramProxy: opts.telegramProxy } : {}),
     ...(opts.telegramApiRoot ? { telegramApiRoot: opts.telegramApiRoot } : {}),
+    ...(routerToken ? { routerToken } : {}),
   });
   return {
     agentName,
@@ -715,6 +734,8 @@ async function confirmBootstrapPlan(params: {
       ? "exists; files, variables, secrets, and runtime will be updated"
       : `will be created as ${params.spacePlan.visibility}`})`);
     lines.push(`Hardware: ${params.hardware}`);
+    lines.push(`Bucket mount: ${SPACE_STATE_MOUNT_DIR}`);
+    lines.push(`Live state: ${SPACE_LIVE_DIR}`);
     if (typeof params.sleepTime === "number") {
       lines.push(`Sleep time: ${params.sleepTime}`);
     }
@@ -827,9 +848,16 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
   } else {
     await setDeploymentVariables(hub, updated.space, {
       OPENCLAW_HF_STATE_BUCKET: bucket,
+      MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+      OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+      MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
     });
+    await ensureSpaceStateVolume(hub, updated.space, bucket);
+    if (canDeleteBroadTokenSecrets({ model: updated.model, routerTokenPresent: hasRouterTokenSecretRecord(secrets) })) {
+      await deleteStaleSpaceTokenSecrets(hub, updated.space);
+    }
     await clearSpaceGatewayDisabled(hub, updated.space);
     if (bucketChanged) {
       await hub.restartSpace(updated.space, true);
@@ -933,6 +961,7 @@ function parseBucketId(raw: string): string {
 
 function deploymentSecrets(params: {
   hfToken: string;
+  routerToken?: string;
   telegramToken?: string;
   telegramUserId?: string;
   sessionSecret: string;
@@ -949,6 +978,7 @@ function deploymentSecrets(params: {
   return {
     HF_TOKEN: params.hfToken,
     HUGGINGFACE_HUB_TOKEN: params.hfToken,
+    ...(params.routerToken ? { MLCLAW_ROUTER_TOKEN: params.routerToken } : {}),
     OPENCLAW_HF_STATE_BUCKET: params.bucket,
     OPENCLAW_MODEL: params.model,
     OPENCLAW_AGENT_NAME: params.agentName,
@@ -1014,6 +1044,9 @@ async function deploySpaceGateway(params: {
 
   await setDeploymentVariables(hub, manifest.space, {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
+    MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+    OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+    MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
     ...(secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {}),
     MLCLAW_TEMPLATE_REV: templateRev,
     OPENCLAW_MODEL: manifest.model,
@@ -1027,16 +1060,21 @@ async function deploySpaceGateway(params: {
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
   });
+  await ensureSpaceStateVolume(hub, manifest.space, manifest.bucket);
   await clearSpaceGatewayDisabled(hub, manifest.space);
   await setDeploymentSecrets(hub, manifest.space, {
-    HF_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
-    HUGGINGFACE_HUB_TOKEN: requiredSecret(secrets, "HF_TOKEN"),
     MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
+    ...(secrets.MLCLAW_ROUTER_TOKEN ? { MLCLAW_ROUTER_TOKEN: secrets.MLCLAW_ROUTER_TOKEN } : {}),
     ...(secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {}),
     ...(secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {}),
     ...(secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {}),
     ...(secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}),
   });
+  if (canDeleteBroadTokenSecrets({ model: manifest.model, routerTokenPresent: hasRouterTokenSecretRecord(secrets) })) {
+    await deleteStaleSpaceTokenSecrets(hub, manifest.space);
+  } else {
+    runtime.stdout.log("Keeping existing broad Hub token secrets until MLCLAW_ROUTER_TOKEN is configured for Router inference");
+  }
   await hub.restartSpace(manifest.space, true);
   return { runtimeImage: spaceRuntimeRef };
 }
@@ -1203,6 +1241,19 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
     updatedAt: runtime.now().toISOString(),
   };
   if (target === "space") {
+    const routerToken = await resolveRouterToken({
+      opts,
+      runtime,
+      existingSecrets: secrets,
+      gatewayLocation: "space",
+      model: updated.model,
+    });
+    const deploymentSecrets = {
+      ...secrets,
+      MLCLAW_GATEWAY_LOCATION: "space",
+      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+      ...(routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}),
+    };
     const paidHardware = await resolveHardware({
       ...(opts.hardware ? { requestedHardware: opts.hardware } : {}),
       ...(typeof opts.sleepTime === "number"
@@ -1229,11 +1280,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       runtime,
       hfToken: token,
       manifest: updated,
-      secrets: {
-        ...secrets,
-        MLCLAW_GATEWAY_LOCATION: "space",
-        MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-      },
+      secrets: deploymentSecrets,
       allowedUsers: me.name,
       publicSpace: Boolean(opts.publicSpace),
       spaceExists,
@@ -1242,7 +1289,7 @@ async function gatewayMigrate(agent: string, opts: GatewayCommandOptions, runtim
       ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
     });
     await writeSecretEnv(runtime.configRoot, agent, {
-      ...secrets,
+      ...deploymentSecrets,
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
@@ -1686,6 +1733,13 @@ async function update(
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
+  const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value;
+  if (bucket) {
+    await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
+    await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
+    await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", `${SPACE_LIVE_DIR}/.mlclaw/settings.json`);
+    await ensureSpaceStateVolume(hub, repoId, bucket);
+  }
   await doctor(repoId, { fix: true }, hub, runtime);
   await hub.restartSpace(repoId, true);
 }
@@ -1750,6 +1804,31 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
     await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
     fixed.push("set OPENCLAW_HF_STATE_BUCKET");
   }
+  if ((variables.get("MLCLAW_STATE_MOUNT_DIR")?.value ?? "") !== SPACE_STATE_MOUNT_DIR) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
+      fixed.push("set MLCLAW_STATE_MOUNT_DIR");
+    } else {
+      issues.push(`MLCLAW_STATE_MOUNT_DIR is not ${SPACE_STATE_MOUNT_DIR}`);
+    }
+  }
+  if ((variables.get("OPENCLAW_LIVE_DIR")?.value ?? "") !== SPACE_LIVE_DIR) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
+      fixed.push("set OPENCLAW_LIVE_DIR");
+    } else {
+      issues.push(`OPENCLAW_LIVE_DIR is not ${SPACE_LIVE_DIR}`);
+    }
+  }
+  const expectedRuntimeSettingsFile = `${SPACE_LIVE_DIR}/.mlclaw/settings.json`;
+  if ((variables.get("MLCLAW_RUNTIME_SETTINGS_FILE")?.value ?? "") !== expectedRuntimeSettingsFile) {
+    if (fix) {
+      await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", expectedRuntimeSettingsFile);
+      fixed.push("set MLCLAW_RUNTIME_SETTINGS_FILE");
+    } else {
+      issues.push(`MLCLAW_RUNTIME_SETTINGS_FILE is not ${expectedRuntimeSettingsFile}`);
+    }
+  }
   for (const key of STALE_PATH_VARS) {
     if (variables.has(key)) {
       if (fix) {
@@ -1760,8 +1839,21 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
       }
     }
   }
-  if (!secrets.has("HF_TOKEN")) {
-    issues.push("secret HF_TOKEN is missing");
+  const staleTokenSecrets = ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].filter((key) => secrets.has(key));
+  if (staleTokenSecrets.length > 0) {
+    const model = variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL;
+    const canDelete = canDeleteBroadTokenSecrets({
+      model,
+      routerTokenPresent: hasRouterTokenSecretMap(secrets),
+    });
+    if (fix && canDelete) {
+      await deleteStaleSpaceTokenSecrets(hub, repoId);
+      fixed.push(`deleted stale secret${staleTokenSecrets.length === 1 ? "" : "s"} ${staleTokenSecrets.join(", ")}`);
+    } else if (fix) {
+      issues.push(`stale broad Hub token secret${staleTokenSecrets.length === 1 ? "" : "s"} present: ${staleTokenSecrets.join(", ")}; add MLCLAW_ROUTER_TOKEN before removing`);
+    } else {
+      issues.push(`stale broad Hub token secret${staleTokenSecrets.length === 1 ? "" : "s"} present: ${staleTokenSecrets.join(", ")}`);
+    }
   }
   if (!secrets.has("MLCLAW_SESSION_SECRET")) {
     if (fix) {
@@ -1811,6 +1903,14 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
   }
 
   const runtimeInfo = await hub.getSpaceRuntime(repoId);
+  if (bucket && !hasStateVolume(runtimeInfo.volumes, bucket)) {
+    if (fix) {
+      await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtimeInfo, repoId), bucket));
+      fixed.push(`mounted bucket ${bucket} at ${SPACE_STATE_MOUNT_DIR}`);
+    } else {
+      issues.push(`bucket ${bucket} is not mounted read-write at ${SPACE_STATE_MOUNT_DIR}`);
+    }
+  }
   let logs = "";
   try {
     logs = await hub.fetchSpaceLogs(repoId, "run");
@@ -1930,6 +2030,58 @@ async function setDeploymentSecrets(
   }
 }
 
+async function deleteStaleSpaceTokenSecrets(hub: HubApi, repoId: string): Promise<void> {
+  await Promise.all([
+    hub.deleteSpaceSecret(repoId, "HF_TOKEN"),
+    hub.deleteSpaceSecret(repoId, "HUGGINGFACE_HUB_TOKEN"),
+  ]);
+}
+
+function canDeleteBroadTokenSecrets(params: { model: string; routerTokenPresent: boolean }): boolean {
+  return params.routerTokenPresent || !isHuggingFaceRouterModel(params.model);
+}
+
+function hasRouterTokenSecretRecord(secrets: Record<string, string>): boolean {
+  return Boolean(secrets.MLCLAW_ROUTER_TOKEN || secrets.HF_ROUTER_TOKEN);
+}
+
+function hasRouterTokenSecretMap(secrets: Map<string, { key: string }>): boolean {
+  return secrets.has("MLCLAW_ROUTER_TOKEN") || secrets.has("HF_ROUTER_TOKEN");
+}
+
+async function ensureSpaceStateVolume(hub: HubApi, repoId: string, bucket: string): Promise<void> {
+  const runtime = await hub.getSpaceRuntime(repoId);
+  await hub.setSpaceVolumes(repoId, mergeStateVolume(requireRuntimeVolumes(runtime, repoId), bucket));
+}
+
+function requireRuntimeVolumes(runtime: SpaceRuntime, repoId: string): SpaceVolume[] {
+  if (!Array.isArray(runtime.volumes)) {
+    throw new Error(`Space runtime metadata for ${repoId} did not include volumes; refusing to replace mounts`);
+  }
+  return runtime.volumes;
+}
+
+export function mergeStateVolume(existing: SpaceVolume[], bucket: string): SpaceVolume[] {
+  return [
+    ...existing.filter((volume) => volume.mountPath !== SPACE_STATE_MOUNT_DIR),
+    {
+      type: "bucket",
+      source: bucket,
+      mountPath: SPACE_STATE_MOUNT_DIR,
+      readOnly: false,
+    },
+  ];
+}
+
+function hasStateVolume(volumes: SpaceVolume[] | null | undefined, bucket: string): boolean {
+  return Boolean(volumes?.some((volume) =>
+    volume.type === "bucket" &&
+    volume.source === bucket &&
+    volume.mountPath === SPACE_STATE_MOUNT_DIR &&
+    volume.readOnly !== true
+  ));
+}
+
 async function clearSpaceGatewayDisabled(hub: HubApi, repoId: string): Promise<void> {
   try {
     await hub.deleteSpaceVariable(repoId, "MLCLAW_GATEWAY_DISABLED");
@@ -1952,6 +2104,57 @@ async function readOptionalTelegramToken(opts: BootstrapOptions, runtime: Requir
     return (match?.[1] ?? raw.trim()).trim();
   }
   return undefined;
+}
+
+async function resolveRouterToken(params: {
+  opts: { routerToken?: string; routerTokenFile?: string };
+  runtime: Required<CliRuntime>;
+  existingSecrets?: Record<string, string>;
+  gatewayLocation: GatewayLocation;
+  model: string;
+}): Promise<string | undefined> {
+  const direct = params.opts.routerToken ??
+    params.runtime.env.MLCLAW_ROUTER_TOKEN ??
+    params.runtime.env.HF_ROUTER_TOKEN ??
+    params.existingSecrets?.MLCLAW_ROUTER_TOKEN ??
+    params.existingSecrets?.HF_ROUTER_TOKEN;
+  const fromFile = direct ? undefined : await readOptionalRouterTokenFile(params.opts.routerTokenFile);
+  const existing = nonEmpty(direct) ?? fromFile;
+  if (existing) {
+    return existing;
+  }
+  if (params.gatewayLocation !== "space" || !isHuggingFaceRouterModel(params.model)) {
+    return undefined;
+  }
+  if (!params.runtime.prompt.isInteractive()) {
+    throw new Error("Space gateway model uses the Hugging Face Router; set MLCLAW_ROUTER_TOKEN or pass --router-token-file for inference.");
+  }
+  const value = await params.runtime.prompt.password({
+    message: "Hugging Face Router token",
+    placeholder: "hf_...",
+  });
+  if (isCancel(value)) {
+    params.runtime.prompt.cancel("Cancelled");
+    throw new Error("cancelled");
+  }
+  const token = typeof value === "string" ? nonEmpty(value) : undefined;
+  if (!token) {
+    throw new Error("Hugging Face Router token is required for Space gateway inference with huggingface/ models.");
+  }
+  return token;
+}
+
+async function readOptionalRouterTokenFile(file: string | undefined): Promise<string | undefined> {
+  if (!file) {
+    return undefined;
+  }
+  const raw = await fs.readFile(file, "utf8");
+  const parsed = parseSecretEnv(raw);
+  return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
+}
+
+function isHuggingFaceRouterModel(model: string): boolean {
+  return model.trim().startsWith("huggingface/");
 }
 
 async function promptAgentName(runtime: Required<CliRuntime>): Promise<string> {

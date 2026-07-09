@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LIVE_DIR="${OPENCLAW_LIVE_DIR:-/tmp/openclaw-live}"
+LIVE_DIR="${OPENCLAW_LIVE_DIR:-/home/node/.local/share/mlclaw/live}"
 
 if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
   echo "[mlclaw] gateway disabled"
   exit 0
-fi
-
-if [ -z "${HUGGINGFACE_HUB_TOKEN:-}" ] && [ -n "${HF_TOKEN:-}" ]; then
-  export HUGGINGFACE_HUB_TOKEN="$HF_TOKEN"
 fi
 
 # State, workspace, and config paths are ALWAYS derived from the live dir,

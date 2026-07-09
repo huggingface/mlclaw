@@ -7,6 +7,7 @@ var __export = (target, all) => {
 
 // src/hf-state-sync/hub.ts
 import fs from "node:fs/promises";
+import path from "node:path";
 
 // src/vendor/hfjs-xet/error.ts
 async function createApiError(response, opts) {
@@ -3828,10 +3829,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path6, processedBytes]) => ({
-        path: path6,
-        progress: processedBytes / this.fileSize[path6],
-        lastSentProgress: ((this.fileUploadedBytes[path6] ?? 0) + (processedBytes - (this.fileUploadedBytes[path6] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path6]
+      files: Object.entries(this.fileProcessedBytes).map(([path7, processedBytes]) => ({
+        path: path7,
+        progress: processedBytes / this.fileSize[path7],
+        lastSentProgress: ((this.fileUploadedBytes[path7] ?? 0) + (processedBytes - (this.fileUploadedBytes[path7] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path7]
       }))
     };
   }
@@ -4704,7 +4705,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path6) => ({ type: "deleteFile", path: path6 })));
+    await this.batch(paths.map((path7) => ({ type: "deleteFile", path: path7 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -4720,8 +4721,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path6) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path6)}`;
+  async downloadFile(path7) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path7)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -4813,10 +4814,81 @@ function createHfBucketHub(params) {
     }
   };
 }
+function createMountedBucketHub(params) {
+  const root = path.resolve(params.mountDir);
+  const assertMountRoot = async () => {
+    let stat;
+    try {
+      stat = await fs.stat(root);
+    } catch (err) {
+      if (isNotFound(err)) {
+        throw new Error(`mounted bucket root is missing: ${root}`);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`mounted bucket root is not accessible: ${root}: ${message}`);
+    }
+    if (!stat.isDirectory()) {
+      throw new Error(`mounted bucket root is not a directory: ${root}`);
+    }
+  };
+  const localPathFor = (remotePath2) => {
+    const normalized = remotePath2.replace(/^\/+/, "");
+    const resolved = path.resolve(root, normalized);
+    if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+      throw new Error(`invalid bucket path outside mount: ${remotePath2}`);
+    }
+    return resolved;
+  };
+  return {
+    async download(remotePath2, localPath) {
+      await assertMountRoot();
+      const source = localPathFor(remotePath2);
+      try {
+        await fs.copyFile(source, localPath);
+        return "downloaded";
+      } catch (err) {
+        if (isNotFound(err)) {
+          return "not-found";
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`mounted bucket download failed for ${remotePath2}: ${message}`);
+      }
+    },
+    async upload(localPath, remotePath2) {
+      await assertMountRoot();
+      const target = localPathFor(remotePath2);
+      const dir = path.dirname(target);
+      const tmp = path.join(dir, `.tmp-${path.basename(target)}-${process.pid}-${Date.now()}`);
+      try {
+        await fs.mkdir(dir, { recursive: true });
+        await fs.copyFile(localPath, tmp);
+        await fs.rename(tmp, target);
+      } catch (err) {
+        await fs.rm(tmp, { force: true }).catch(() => void 0);
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`mounted bucket upload failed for ${remotePath2}: ${message}`);
+      }
+    },
+    async delete(remotePaths) {
+      await assertMountRoot();
+      for (const remotePath2 of remotePaths) {
+        try {
+          await fs.rm(localPathFor(remotePath2), { force: true });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[hf-state-sync] prune failed for ${remotePath2}: ${message}`);
+        }
+      }
+    }
+  };
+}
+function isNotFound(err) {
+  return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
 
 // src/hf-state-sync/paths.ts
 import { randomUUID } from "node:crypto";
-var DEFAULT_LIVE_DIR = "/tmp/openclaw-live";
+var DEFAULT_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
 var DEFAULT_BUCKET_PREFIX = "openclaw-state";
 var DEFAULT_INTERVAL_SECONDS = 60;
 var DEFAULT_HANDOFF_POLL_SECONDS = 5;
@@ -4830,6 +4902,7 @@ function resolveSyncConfig(env = process.env) {
   return {
     liveDir: env.OPENCLAW_LIVE_DIR?.trim() || DEFAULT_LIVE_DIR,
     bucket: env.OPENCLAW_HF_STATE_BUCKET?.trim() || null,
+    stateMountDir: env.MLCLAW_STATE_MOUNT_DIR?.trim() || null,
     bucketPrefix: normalizeBucketPrefix(env.OPENCLAW_HF_STATE_PREFIX),
     intervalSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS),
     handoffPollSeconds: positiveIntFromEnv(env.HF_STATE_SYNC_HANDOFF_POLL_SECONDS, DEFAULT_HANDOFF_POLL_SECONDS),
@@ -4858,20 +4931,20 @@ function logError(message) {
 // src/hf-state-sync/restore.ts
 import fs4 from "node:fs/promises";
 import os from "node:os";
-import path3 from "node:path";
+import path4 from "node:path";
 
 // src/hf-state-sync/archive.ts
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs3 from "node:fs/promises";
-import path2 from "node:path";
+import path3 from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 
 // src/hf-state-sync/sqlite.ts
 import fs2 from "node:fs/promises";
-import path from "node:path";
+import path2 from "node:path";
 import { DatabaseSync } from "node:sqlite";
 async function findSqliteFiles(root) {
   const found = [];
@@ -4883,7 +4956,7 @@ async function findSqliteFiles(root) {
   }
   for (const entry of entries) {
     if (entry.isFile() && entry.name.endsWith(".sqlite")) {
-      found.push(path.join(entry.parentPath, entry.name));
+      found.push(path2.join(entry.parentPath, entry.name));
     }
   }
   return found.sort();
@@ -4936,8 +5009,8 @@ async function copyTreeFiltered(params) {
     if (isExcluded(entry.name, inStateDir)) {
       continue;
     }
-    const source = path2.join(sourceDir, entry.name);
-    const dest = path2.join(destDir, entry.name);
+    const source = path3.join(sourceDir, entry.name);
+    const dest = path3.join(destDir, entry.name);
     if (entry.isDirectory()) {
       await copyTreeFiltered({
         sourceDir: source,
@@ -4951,7 +5024,7 @@ async function copyTreeFiltered(params) {
       });
     } else if (entry.isFile()) {
       if (entry.name.endsWith(".sqlite")) {
-        databases.push(path2.relative(rootDir, source));
+        databases.push(path3.relative(rootDir, source));
       } else {
         await fs3.copyFile(source, dest);
       }
@@ -4971,9 +5044,9 @@ async function stageLiveDir(liveDir, stagingDir) {
     depth: 0
   });
   for (const relative of databases) {
-    const staged = path2.join(stagingDir, relative);
-    await fs3.mkdir(path2.dirname(staged), { recursive: true });
-    vacuumInto(path2.join(liveDir, relative), staged);
+    const staged = path3.join(stagingDir, relative);
+    await fs3.mkdir(path3.dirname(staged), { recursive: true });
+    vacuumInto(path3.join(liveDir, relative), staged);
     const integrity = checkIntegrity(staged);
     if (integrity.kind === "corrupt") {
       return { kind: "corrupt-database", database: relative, detail: integrity.detail };
@@ -5480,8 +5553,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path6, errorMaps, issueData } = params;
-  const fullPath = [...path6, ...issueData.path || []];
+  const { data, path: path7, errorMaps, issueData } = params;
+  const fullPath = [...path7, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -5597,11 +5670,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path6, key) {
+  constructor(parent, value, path7, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path6;
+    this._path = path7;
     this._key = key;
   }
   get path() {
@@ -9086,7 +9159,7 @@ function promoteSnapshot(params) {
 // src/hf-state-sync/restore.ts
 async function tryRestoreEntry(params) {
   const { hub, entry, workDir, liveDir } = params;
-  const archivePath = path3.join(workDir, `candidate-${entry.id}.tar.zst`);
+  const archivePath = path4.join(workDir, `candidate-${entry.id}.tar.zst`);
   const downloaded = await hub.download(entry.path, archivePath);
   if (downloaded === "not-found") {
     logError(`snapshot ${entry.id} missing from bucket`);
@@ -9110,11 +9183,11 @@ async function tryRestoreEntry(params) {
     for (const database of await findSqliteFiles(extractDir)) {
       const integrity = checkIntegrity(database);
       if (integrity.kind === "corrupt") {
-        logError(`snapshot ${entry.id} db ${path3.basename(database)} corrupt: ${integrity.detail}`);
+        logError(`snapshot ${entry.id} db ${path4.basename(database)} corrupt: ${integrity.detail}`);
         return "failed";
       }
     }
-    await fs4.mkdir(path3.dirname(liveDir), { recursive: true });
+    await fs4.mkdir(path4.dirname(liveDir), { recursive: true });
     await fs4.rename(extractDir, liveDir);
     return "restored";
   } finally {
@@ -9131,9 +9204,9 @@ async function runRestore(params) {
     return { kind: "fresh-start", reason: "live-dir-exists" };
   } catch {
   }
-  const workDir = await fs4.mkdtemp(path3.join(os.tmpdir(), "hf-state-restore-"));
+  const workDir = await fs4.mkdtemp(path4.join(os.tmpdir(), "hf-state-restore-"));
   try {
-    const manifestPath = path3.join(workDir, "manifest.json");
+    const manifestPath = path4.join(workDir, "manifest.json");
     const downloaded = await hub.download(remotePath(config, MANIFEST_REMOTE_NAME), manifestPath);
     if (downloaded === "not-found") {
       return { kind: "fresh-start", reason: "no-manifest" };
@@ -9160,7 +9233,7 @@ async function runRestore(params) {
 // src/hf-state-sync/snapshot.ts
 import fs5 from "node:fs/promises";
 import os2 from "node:os";
-import path4 from "node:path";
+import path5 from "node:path";
 var snapshotCounter = 0;
 function snapshotId(now, runId) {
   snapshotCounter += 1;
@@ -9168,7 +9241,7 @@ function snapshotId(now, runId) {
   return `${stamp}-${runId.slice(0, 8)}-${snapshotCounter}`;
 }
 async function fetchManifest(config, hub, workDir) {
-  const localPath = path4.join(workDir, "manifest.remote.json");
+  const localPath = path5.join(workDir, "manifest.remote.json");
   const result = await hub.download(remotePath(config, MANIFEST_REMOTE_NAME), localPath);
   if (result === "not-found") {
     return { kind: "none" };
@@ -9186,9 +9259,9 @@ async function runSnapshot(params) {
   } catch {
     return { kind: "skipped", reason: "empty-state" };
   }
-  const workDir = await fs5.mkdtemp(path4.join(os2.tmpdir(), "hf-state-snapshot-"));
+  const workDir = await fs5.mkdtemp(path5.join(os2.tmpdir(), "hf-state-snapshot-"));
   try {
-    const stagingDir = path4.join(workDir, "stage");
+    const stagingDir = path5.join(workDir, "stage");
     const staged = await stageLiveDir(config.liveDir, stagingDir);
     if (staged.kind === "corrupt-database") {
       return {
@@ -9199,7 +9272,7 @@ async function runSnapshot(params) {
     const now = (params.now ?? (() => /* @__PURE__ */ new Date()))();
     const id = snapshotId(now, config.runId);
     const archiveName = `state-${id}.tar.zst`;
-    const archivePath = path4.join(workDir, archiveName);
+    const archivePath = path5.join(workDir, archiveName);
     await createTarZst(stagingDir, archivePath);
     const entry = {
       id,
@@ -9223,7 +9296,7 @@ async function runSnapshot(params) {
       entry,
       keep: config.keepSnapshots
     });
-    const manifestPath = path4.join(workDir, "manifest.json");
+    const manifestPath = path5.join(workDir, "manifest.json");
     await fs5.writeFile(manifestPath, serializeManifest(manifest));
     await hub.upload(manifestPath, remotePath(config, MANIFEST_REMOTE_NAME));
     if (expired.length > 0) {
@@ -9242,7 +9315,7 @@ async function runSnapshot(params) {
 import { spawn } from "node:child_process";
 import fs6 from "node:fs/promises";
 import os3 from "node:os";
-import path5 from "node:path";
+import path6 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 var LEASE_HEARTBEAT_MS = 6e4;
 var HANDOFF_REQUEST_TTL_MS = 10 * 60 * 1e3;
@@ -9266,9 +9339,9 @@ async function supervise(params) {
       lastHeartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...lastSnapshotId ? { lastSnapshotId } : {}
     };
-    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-lease-"));
+    const tmpDir = await fs6.mkdtemp(path6.join(os3.tmpdir(), "hf-state-lease-"));
     try {
-      const file = path5.join(tmpDir, "status.json");
+      const file = path6.join(tmpDir, "status.json");
       await fs6.writeFile(file, JSON.stringify(status, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/status.json"));
     } finally {
@@ -9276,9 +9349,9 @@ async function supervise(params) {
     }
   };
   const readHandoffRequest = async () => {
-    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-"));
+    const tmpDir = await fs6.mkdtemp(path6.join(os3.tmpdir(), "hf-state-handoff-"));
     try {
-      const file = path5.join(tmpDir, "request.json");
+      const file = path6.join(tmpDir, "request.json");
       const result = await hub.download(remotePath(config, "runtime/handoff-request.json"), file);
       if (result === "not-found") {
         return null;
@@ -9310,9 +9383,9 @@ async function supervise(params) {
       completedAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...lastSnapshotId ? { lastSnapshotId } : {}
     };
-    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "hf-state-handoff-ack-"));
+    const tmpDir = await fs6.mkdtemp(path6.join(os3.tmpdir(), "hf-state-handoff-ack-"));
     try {
-      const file = path5.join(tmpDir, "ack.json");
+      const file = path6.join(tmpDir, "ack.json");
       await fs6.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/handoff-ack.json"));
       await hub.delete([remotePath(config, "runtime/handoff-request.json")]);
@@ -9456,12 +9529,19 @@ var USAGE = `usage:
   hf-state-sync restore
   hf-state-sync snapshot
   hf-state-sync supervise -- <command> [args...]`;
-function makeHub(bucket) {
-  return bucket ? createHfBucketHub({ bucket }) : null;
+function makeHub(config) {
+  if (!config.bucket) {
+    return null;
+  }
+  if (config.stateMountDir) {
+    log(`using mounted state bucket at ${config.stateMountDir}`);
+    return createMountedBucketHub({ mountDir: config.stateMountDir });
+  }
+  return createHfBucketHub({ bucket: config.bucket });
 }
 async function main(argv) {
   const config = resolveSyncConfig();
-  const hub = makeHub(config.bucket);
+  const hub = makeHub(config);
   if (!hub) {
     logError("OPENCLAW_HF_STATE_BUCKET is not set; state will NOT survive restarts");
   }
