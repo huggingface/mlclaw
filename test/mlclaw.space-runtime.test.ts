@@ -142,7 +142,7 @@ describe("ML Claw Space runtime", () => {
     });
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/oauth/login?next=%2Fchat%3Fthread%3D1");
+    expect(response.headers.get("location")).toBe("/oauth/login?intent=integrations&next=%2Fchat%3Fthread%3D1");
   });
 
   it("recovers unreadable MCP credentials through OAuth", async () => {
@@ -162,7 +162,70 @@ describe("ML Claw Space runtime", () => {
     });
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/oauth/login?next=%2Fchat");
+    expect(response.headers.get("location")).toBe("/oauth/login?intent=integrations&next=%2Fchat");
+  });
+
+  it("does not require integration authorization when every managed server is disabled", async () => {
+    const openclawPort = await freePort();
+    const upstream = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      res.end("gateway");
+    });
+    await listen(upstream, openclawPort);
+    cleanups.push(() => closeServer(upstream));
+
+    const config = await testConfig({ openclawPort });
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify({
+      gateway: {},
+      mcp: {
+        servers: {
+          huggingface: { enabled: false },
+          "research-agent": { enabled: false },
+        },
+      },
+    }), "utf8");
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/`, {
+      headers: {
+        cookie: sessionCookie(config, "alice"),
+        accept: "text/html",
+      },
+      redirect: "manual",
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("gateway");
+  });
+
+  it("requests broad integration scopes only for an authenticated admin", async () => {
+    const config = await testConfig({
+      allowedUsers: ["alice", "bob"],
+      adminUsers: ["alice"],
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const admin = await fetch(`http://127.0.0.1:${config.port}/oauth/login?intent=integrations`, {
+      headers: { cookie: sessionCookie(config, "alice") },
+      redirect: "manual",
+    });
+    const member = await fetch(`http://127.0.0.1:${config.port}/oauth/login?intent=integrations`, {
+      headers: { cookie: sessionCookie(config, "bob") },
+      redirect: "manual",
+    });
+    const anonymous = await fetch(`http://127.0.0.1:${config.port}/oauth/login?intent=integrations`, {
+      redirect: "manual",
+    });
+
+    expect(new URL(admin.headers.get("location") ?? "").searchParams.get("scope"))
+      .toContain("manage-repos");
+    expect(new URL(member.headers.get("location") ?? "").searchParams.get("scope"))
+      .toBe("openid profile");
+    expect(new URL(anonymous.headers.get("location") ?? "").searchParams.get("scope"))
+      .toBe("openid profile");
   });
 
   it("returns dynamic Hugging Face Router model/provider options", async () => {

@@ -29,6 +29,8 @@ export const HF_MCP_OAUTH_SCOPES = [
   "jobs",
 ] as const;
 
+export const HF_LOGIN_OAUTH_SCOPES = ["openid", "profile"] as const;
+
 const tokenResponseSchema = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(1).optional(),
@@ -41,12 +43,16 @@ const userInfoSchema = z.object({
   preferred_username: z.string().min(1),
 }).passthrough();
 
-export function authorizeUrl(settings: OAuthSettings, state: string): string {
+export function authorizeUrl(
+  settings: OAuthSettings,
+  state: string,
+  scopes: readonly string[] = HF_LOGIN_OAUTH_SCOPES,
+): string {
   const url = new URL(`${settings.providerUrl.replace(/\/+$/, "")}/oauth/authorize`);
   url.searchParams.set("client_id", settings.clientId);
   url.searchParams.set("redirect_uri", settings.redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", HF_MCP_OAUTH_SCOPES.join(" "));
+  url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("state", state);
   return url.toString();
 }

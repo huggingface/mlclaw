@@ -12,9 +12,11 @@ The browser never receives an OpenClaw gateway token. ML Claw authenticates the
 signed-in Hugging Face user, then proxies HTTP and WebSocket traffic to
 OpenClaw on loopback using OpenClaw trusted-proxy auth.
 
-The same Hugging Face sign-in automatically enables the hosted Hugging Face
-MCP server and Research Agent. OAuth credentials stay in the trusted ML Claw
-wrapper; the unprivileged OpenClaw process receives only loopback MCP access.
+After signing in, an administrator can authorize the hosted Hugging Face MCP
+server and Research Agent with the same Hugging Face account. Ordinary users
+grant only identity scopes. Integration credentials stay in the trusted ML
+Claw wrapper; the unprivileged OpenClaw process receives only loopback MCP
+access.
 
 ## Install
 

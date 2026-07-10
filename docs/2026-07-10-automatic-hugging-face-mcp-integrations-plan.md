@@ -7,14 +7,16 @@ Status: implemented
 ## Goal
 
 Every ML Claw Space automatically configures and enables the hosted Hugging
-Face MCP server and `evalstate/research-agent-two`. The user signs into ML Claw
-with Hugging Face once. No CLI command, token copy, or second MCP login is
-required.
+Face MCP server and `evalstate/research-agent-two`. Users sign into ML Claw
+with identity-only Hugging Face OAuth. An administrator then authorizes both
+integrations with the same Hugging Face account. No CLI command, token copy, or
+per-MCP login is required.
 
 ## Runtime Design
 
-- Request the OAuth scopes needed by both integrations during the existing
-  Hugging Face sign-in.
+- Keep ordinary Hugging Face sign-in limited to identity scopes. Request the
+  additional scopes needed by both integrations only from an authenticated
+  ML Claw admin in a separate authorization step.
 - Store access and refresh token metadata in an AES-256-GCM encrypted file on
   the private mounted state volume.
 - Encrypt with a dedicated `MLCLAW_CREDENTIAL_KEY`, generated and maintained as
@@ -37,8 +39,9 @@ required.
 ## Product Behavior
 
 - Fresh, updated, and repaired deployments contain both managed MCP servers.
-- An admin entering the browser gateway is sent through Hugging Face OAuth when
-  durable integration authorization is missing.
+- An admin entering the browser gateway is sent through the integration OAuth
+  flow when at least one managed integration is enabled and durable
+  authorization is missing.
 - The control UI reports authorization state and offers reconnect and explicit
   disconnect actions.
 - Logging out clears only the browser session. Disconnecting removes the

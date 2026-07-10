@@ -24,6 +24,7 @@ type BufferedResponse = {
 export class McpIntegrationServer {
   private server: http.Server | undefined;
   private readonly internalToken: string;
+  private readonly activeRequests = new Set<AbortController>();
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
@@ -41,13 +42,26 @@ export class McpIntegrationServer {
       return;
     }
     const server = http.createServer((req, res) => {
-      this.handle(req, res).catch((err) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      this.activeRequests.add(controller);
+      req.once("aborted", abort);
+      res.once("close", abort);
+      this.handle(req, res, controller.signal).catch((err) => {
+        if (controller.signal.aborted) {
+          res.destroy();
+          return;
+        }
         process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}\n`);
         if (!res.headersSent) {
           writeJson(res, 502, mcpError(null, -32603, "MCP integration request failed"));
         } else {
           res.end();
         }
+      }).finally(() => {
+        req.off("aborted", abort);
+        res.off("close", abort);
+        this.activeRequests.delete(controller);
       });
     });
     await new Promise<void>((resolve, reject) => {
@@ -67,10 +81,15 @@ export class McpIntegrationServer {
     if (!server) {
       return;
     }
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    for (const controller of this.activeRequests) {
+      controller.abort();
+    }
+    server.closeAllConnections();
+    await closed;
   }
 
-  private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async handle(req: http.IncomingMessage, res: http.ServerResponse, signal: AbortSignal): Promise<void> {
     if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
       writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
       return;
@@ -96,7 +115,7 @@ export class McpIntegrationServer {
     if (pathname === "/mcp/research" && req.method === "POST") {
       const parsed = parseJsonRpc(body);
       if (parsed?.method === "tools/call" && toolName(parsed) === "research") {
-        await this.handleResearchCall(req, res, body, parsed, accessToken);
+        await this.handleResearchCall(req, res, body, parsed, accessToken, signal);
         return;
       }
     }
@@ -106,6 +125,7 @@ export class McpIntegrationServer {
       body,
       url: pathname === "/mcp/huggingface" ? this.config.hfMcpUrl : this.config.researchMcpUrl,
       accessToken,
+      signal,
     });
   }
 
@@ -115,6 +135,7 @@ export class McpIntegrationServer {
     body: Uint8Array,
     request: JsonRpcRequest,
     accessToken: string,
+    signal: AbortSignal,
   ): Promise<void> {
     const initial = await forwardBuffered({
       method: req.method ?? "POST",
@@ -122,6 +143,7 @@ export class McpIntegrationServer {
       body,
       url: this.config.researchMcpUrl,
       accessToken,
+      signal,
     });
     const message = parseMcpResponse(initial.body);
     const prefab = prefabJob(message);
@@ -141,6 +163,7 @@ export class McpIntegrationServer {
         arguments: { job_id: prefab.jobId },
         accessToken,
         id: `${String(request.id ?? "research")}:start`,
+        signal,
       });
 
       const deadline = Date.now() + this.config.researchTimeoutMs;
@@ -155,6 +178,7 @@ export class McpIntegrationServer {
           arguments: { job_id: prefab.jobId },
           accessToken,
           id: `${String(request.id ?? "research")}:status`,
+          signal,
         });
         status = toolResultObject(result);
         if (status?.done === true) {
@@ -176,7 +200,7 @@ export class McpIntegrationServer {
           });
           return;
         }
-        await delay(this.config.researchPollMs);
+        await delay(this.config.researchPollMs, signal);
       }
       writeJson(res, 200, {
         jsonrpc: "2.0",
@@ -202,6 +226,7 @@ export class McpIntegrationServer {
     arguments: Record<string, unknown>;
     accessToken: string;
     id: string;
+    signal: AbortSignal;
   }): Promise<Record<string, unknown>> {
     const response = await forwardBuffered({
       method: "POST",
@@ -218,6 +243,7 @@ export class McpIntegrationServer {
       })),
       url: this.config.researchMcpUrl,
       accessToken: params.accessToken,
+      signal: params.signal,
     });
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Research Agent returned HTTP ${response.status}`);
@@ -276,19 +302,16 @@ async function forwardStreaming(params: {
   body: Uint8Array;
   url: string;
   accessToken: string;
+  signal: AbortSignal;
 }): Promise<void> {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  const timeout = setTimeout(abort, UPSTREAM_TIMEOUT_MS);
-  params.req.once("aborted", abort);
-  params.res.once("close", abort);
+  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
   try {
     const response = await fetch(params.url, {
       method: params.req.method ?? "POST",
       headers: upstreamHeaders(params.req.headers, params.accessToken),
       ...(params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {}),
       redirect: "error",
-      signal: controller.signal,
+      signal: timed.signal,
     });
     params.res.writeHead(response.status, responseHeaders(response.headers));
     if (!response.body) {
@@ -303,9 +326,7 @@ async function forwardStreaming(params: {
       stream.pipe(params.res);
     });
   } finally {
-    clearTimeout(timeout);
-    params.req.off("aborted", abort);
-    params.res.off("close", abort);
+    timed.dispose();
   }
 }
 
@@ -315,16 +336,16 @@ async function forwardBuffered(params: {
   body: Uint8Array;
   url: string;
   accessToken: string;
+  signal: AbortSignal;
 }): Promise<BufferedResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
   try {
     const response = await fetch(params.url, {
       method: params.method,
       headers: upstreamHeaders(params.requestHeaders, params.accessToken),
       ...(params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {}),
       redirect: "error",
-      signal: controller.signal,
+      signal: timed.signal,
     });
     return {
       status: response.status,
@@ -332,7 +353,7 @@ async function forwardBuffered(params: {
       body: new Uint8Array(await response.arrayBuffer()),
     };
   } finally {
-    clearTimeout(timeout);
+    timed.dispose();
   }
 }
 
@@ -535,6 +556,40 @@ function safeError(err: unknown): string {
   return err instanceof Error ? err.message : "unknown error";
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function timedAbortSignal(parent: AbortSignal, timeoutMs: number): {
+  signal: AbortSignal;
+  dispose(): void;
+} {
+  const controller = new AbortController();
+  const abort = () => controller.abort(parent.reason);
+  if (parent.aborted) {
+    abort();
+  } else {
+    parent.addEventListener("abort", abort, { once: true });
+  }
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parent.removeEventListener("abort", abort);
+    },
+  };
 }

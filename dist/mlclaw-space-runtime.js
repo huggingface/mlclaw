@@ -7345,6 +7345,7 @@ var HF_MCP_OAUTH_SCOPES = [
   "inference-api",
   "jobs"
 ];
+var HF_LOGIN_OAUTH_SCOPES = ["openid", "profile"];
 var tokenResponseSchema = external_exports.object({
   access_token: external_exports.string().min(1),
   refresh_token: external_exports.string().min(1).optional(),
@@ -7355,12 +7356,12 @@ var tokenResponseSchema = external_exports.object({
 var userInfoSchema = external_exports.object({
   preferred_username: external_exports.string().min(1)
 }).passthrough();
-function authorizeUrl(settings, state) {
+function authorizeUrl(settings, state, scopes = HF_LOGIN_OAUTH_SCOPES) {
   const url = new URL(`${settings.providerUrl.replace(/\/+$/, "")}/oauth/authorize`);
   url.searchParams.set("client_id", settings.clientId);
   url.searchParams.set("redirect_uri", settings.redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", HF_MCP_OAUTH_SCOPES.join(" "));
+  url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -7431,6 +7432,7 @@ var McpIntegrationServer = class {
   }
   server;
   internalToken;
+  activeRequests = /* @__PURE__ */ new Set();
   managedServerConfig() {
     return managedMcpServerConfig(this.config);
   }
@@ -7439,7 +7441,16 @@ var McpIntegrationServer = class {
       return;
     }
     const server2 = http.createServer((req, res) => {
-      this.handle(req, res).catch((err) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      this.activeRequests.add(controller);
+      req.once("aborted", abort);
+      res.once("close", abort);
+      this.handle(req, res, controller.signal).catch((err) => {
+        if (controller.signal.aborted) {
+          res.destroy();
+          return;
+        }
         process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}
 `);
         if (!res.headersSent) {
@@ -7447,6 +7458,10 @@ var McpIntegrationServer = class {
         } else {
           res.end();
         }
+      }).finally(() => {
+        req.off("aborted", abort);
+        res.off("close", abort);
+        this.activeRequests.delete(controller);
       });
     });
     await new Promise((resolve, reject) => {
@@ -7466,9 +7481,14 @@ var McpIntegrationServer = class {
     if (!server2) {
       return;
     }
-    await new Promise((resolve) => server2.close(() => resolve()));
+    const closed = new Promise((resolve) => server2.close(() => resolve()));
+    for (const controller of this.activeRequests) {
+      controller.abort();
+    }
+    server2.closeAllConnections();
+    await closed;
   }
-  async handle(req, res) {
+  async handle(req, res, signal) {
     if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
       writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
       return;
@@ -7494,7 +7514,7 @@ var McpIntegrationServer = class {
     if (pathname === "/mcp/research" && req.method === "POST") {
       const parsed = parseJsonRpc(body);
       if (parsed?.method === "tools/call" && toolName(parsed) === "research") {
-        await this.handleResearchCall(req, res, body, parsed, accessToken);
+        await this.handleResearchCall(req, res, body, parsed, accessToken, signal);
         return;
       }
     }
@@ -7503,16 +7523,18 @@ var McpIntegrationServer = class {
       res,
       body,
       url: pathname === "/mcp/huggingface" ? this.config.hfMcpUrl : this.config.researchMcpUrl,
-      accessToken
+      accessToken,
+      signal
     });
   }
-  async handleResearchCall(req, res, body, request, accessToken) {
+  async handleResearchCall(req, res, body, request, accessToken, signal) {
     const initial = await forwardBuffered({
       method: req.method ?? "POST",
       requestHeaders: req.headers,
       body,
       url: this.config.researchMcpUrl,
-      accessToken
+      accessToken,
+      signal
     });
     const message = parseMcpResponse(initial.body);
     const prefab = prefabJob(message);
@@ -7531,7 +7553,8 @@ var McpIntegrationServer = class {
         tool: prefab.startTool,
         arguments: { job_id: prefab.jobId },
         accessToken,
-        id: `${String(request.id ?? "research")}:start`
+        id: `${String(request.id ?? "research")}:start`,
+        signal
       });
       const deadline = Date.now() + this.config.researchTimeoutMs;
       let status;
@@ -7544,7 +7567,8 @@ var McpIntegrationServer = class {
           tool: prefab.statusTool,
           arguments: { job_id: prefab.jobId },
           accessToken,
-          id: `${String(request.id ?? "research")}:status`
+          id: `${String(request.id ?? "research")}:status`,
+          signal
         });
         status = toolResultObject(result);
         if (status?.done === true) {
@@ -7564,7 +7588,7 @@ var McpIntegrationServer = class {
           });
           return;
         }
-        await delay(this.config.researchPollMs);
+        await delay(this.config.researchPollMs, signal);
       }
       writeJson(res, 200, {
         jsonrpc: "2.0",
@@ -7598,7 +7622,8 @@ var McpIntegrationServer = class {
         params: { name: params.tool, arguments: params.arguments }
       })),
       url: this.config.researchMcpUrl,
-      accessToken: params.accessToken
+      accessToken: params.accessToken,
+      signal: params.signal
     });
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Research Agent returned HTTP ${response.status}`);
@@ -7649,18 +7674,14 @@ function managedMcpServerConfig(config2) {
   };
 }
 async function forwardStreaming(params) {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  const timeout = setTimeout(abort, UPSTREAM_TIMEOUT_MS);
-  params.req.once("aborted", abort);
-  params.res.once("close", abort);
+  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
   try {
     const response = await fetch(params.url, {
       method: params.req.method ?? "POST",
       headers: upstreamHeaders(params.req.headers, params.accessToken),
       ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
       redirect: "error",
-      signal: controller.signal
+      signal: timed.signal
     });
     params.res.writeHead(response.status, responseHeaders(response.headers));
     if (!response.body) {
@@ -7675,21 +7696,18 @@ async function forwardStreaming(params) {
       stream.pipe(params.res);
     });
   } finally {
-    clearTimeout(timeout);
-    params.req.off("aborted", abort);
-    params.res.off("close", abort);
+    timed.dispose();
   }
 }
 async function forwardBuffered(params) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
   try {
     const response = await fetch(params.url, {
       method: params.method,
       headers: upstreamHeaders(params.requestHeaders, params.accessToken),
       ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
       redirect: "error",
-      signal: controller.signal
+      signal: timed.signal
     });
     return {
       status: response.status,
@@ -7697,7 +7715,7 @@ async function forwardBuffered(params) {
       body: new Uint8Array(await response.arrayBuffer())
     };
   } finally {
-    clearTimeout(timeout);
+    timed.dispose();
   }
 }
 function upstreamHeaders(headers, accessToken) {
@@ -7871,8 +7889,38 @@ function numberValue(value) {
 function safeError(err) {
   return err instanceof Error ? err.message : "unknown error";
 }
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms, signal) {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+function timedAbortSignal(parent, timeoutMs) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(parent.reason);
+  if (parent.aborted) {
+    abort();
+  } else {
+    parent.addEventListener("abort", abort, { once: true });
+  }
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parent.removeEventListener("abort", abort);
+    }
+  };
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
@@ -8431,7 +8479,7 @@ function createOauthStateCookie(params) {
       secret: params.sessionSecret,
       maxAgeSeconds: STATE_TTL_SECONDS,
       secure: params.secure
-    }, { state, next: normalizeNext(params.next) })
+    }, { state, next: normalizeNext(params.next), intent: params.intent ?? "login" })
   };
 }
 function clearSessionCookie(secure) {
@@ -8812,8 +8860,12 @@ function handleOauthLogin(c, config2) {
   if (!config2.oauthClientId || !config2.oauthClientSecret) {
     return c.html(loginPage(config2, "Hugging Face OAuth is not configured.", next));
   }
+  const session = readSession(c.req.header("cookie"), config2.sessionSecret);
+  const integrationsRequested = c.req.query("intent") === "integrations";
+  const intent = integrationsRequested && session && isAdmin(config2, session.username) ? "integrations" : "login";
   const { state, cookie } = createOauthStateCookie({
     next,
+    intent,
     sessionSecret: config2.sessionSecret,
     secure: config2.cookieSecure
   });
@@ -8823,7 +8875,7 @@ function handleOauthLogin(c, config2) {
     clientSecret: config2.oauthClientSecret,
     providerUrl: config2.providerUrl,
     redirectUri
-  }, state) });
+  }, state, intent === "integrations" ? HF_MCP_OAUTH_SCOPES : void 0) });
   headers.append("set-cookie", cookie);
   return new Response(null, { status: 302, headers });
 }
@@ -8843,7 +8895,11 @@ async function handleOauthCallback(c, config2, controls) {
   if (!identity) {
     return c.html(loginPage(config2, "Hugging Face sign-in failed. Try again."), 401);
   }
-  if (isAdmin(config2, identity.username)) {
+  if (stateCookie.intent === "integrations") {
+    const session = readSession(c.req.header("cookie"), config2.sessionSecret);
+    if (!session || !isAdmin(config2, session.username) || session.username !== identity.username) {
+      return c.html(loginPage(config2, "Integration authorization requires the signed-in ML Claw administrator."), 403);
+    }
     try {
       await controls.saveMcpCredentials(identity);
     } catch (err) {
@@ -9642,11 +9698,12 @@ var SpaceRuntimeServer = class {
       return;
     }
     if (this.isAdmin(session.username) && this.config.oauthClientId && this.config.oauthClientSecret && isBrowserNavigation2(req)) {
+      const integrations = await managedMcpServerStatus(this.config);
       const credentialSlot = integrationCredentialSlot(this.config);
       const authorization = credentialSlot ? await this.mcpCredentials.status(credentialSlot).catch(() => void 0) : void 0;
-      if (!authorization?.configured) {
+      if (integrations.some((integration) => integration.enabled) && !authorization?.configured) {
         const next = normalizeNext(`${url.pathname}${url.search}`);
-        this.sendRedirect(res, `/oauth/login?next=${encodeURIComponent(next)}`);
+        this.sendRedirect(res, `/oauth/login?intent=integrations&next=${encodeURIComponent(next)}`);
         return;
       }
     }

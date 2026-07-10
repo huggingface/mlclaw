@@ -27,8 +27,8 @@ An ML Claw deployment has:
   hardware is used;
 - a prebuilt `ghcr.io/osolmaz/mlclaw` runtime image by default;
 - Hugging Face OAuth enabled on the Space;
-- automatic Hugging Face MCP and Research Agent integrations authorized by the
-  same OAuth sign-in;
+- automatic Hugging Face MCP and Research Agent integrations authorized by an
+  admin-only OAuth step after ordinary Hugging Face sign-in;
 - a local deployment manifest under `~/.config/mlclaw/deployments/`;
 - local secrets under `~/.config/mlclaw/secrets/`;
 - app Spaces mount the private Storage Bucket read-write at

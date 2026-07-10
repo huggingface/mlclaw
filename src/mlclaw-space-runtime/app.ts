@@ -8,7 +8,12 @@ import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
 import { normalizeModelChoices, parseOpenClawModelRef, serializeModelChoices, type ModelChoice } from "./model-choices.js";
-import { authorizeUrl, exchangeCodeForIdentity, type OAuthIdentity } from "./oauth.js";
+import {
+  authorizeUrl,
+  exchangeCodeForIdentity,
+  HF_MCP_OAUTH_SCOPES,
+  type OAuthIdentity,
+} from "./oauth.js";
 import { configureOpenClawGateway } from "./openclaw-config.js";
 import {
   loadOpenAiCredentialFile,
@@ -258,8 +263,14 @@ function handleOauthLogin(c: Context, config: SpaceRuntimeConfig): Response {
   if (!config.oauthClientId || !config.oauthClientSecret) {
     return c.html(loginPage(config, "Hugging Face OAuth is not configured.", next));
   }
+  const session = readSession(c.req.header("cookie"), config.sessionSecret);
+  const integrationsRequested = c.req.query("intent") === "integrations";
+  const intent = integrationsRequested && session && isAdmin(config, session.username)
+    ? "integrations"
+    : "login";
   const { state, cookie } = createOauthStateCookie({
     next,
+    intent,
     sessionSecret: config.sessionSecret,
     secure: config.cookieSecure,
   });
@@ -269,7 +280,7 @@ function handleOauthLogin(c: Context, config: SpaceRuntimeConfig): Response {
     clientSecret: config.oauthClientSecret,
     providerUrl: config.providerUrl,
     redirectUri,
-  }, state) });
+  }, state, intent === "integrations" ? HF_MCP_OAUTH_SCOPES : undefined) });
   headers.append("set-cookie", cookie);
   return new Response(null, { status: 302, headers });
 }
@@ -290,7 +301,11 @@ async function handleOauthCallback(c: Context, config: SpaceRuntimeConfig, contr
   if (!identity) {
     return c.html(loginPage(config, "Hugging Face sign-in failed. Try again."), 401);
   }
-  if (isAdmin(config, identity.username)) {
+  if (stateCookie.intent === "integrations") {
+    const session = readSession(c.req.header("cookie"), config.sessionSecret);
+    if (!session || !isAdmin(config, session.username) || session.username !== identity.username) {
+      return c.html(loginPage(config, "Integration authorization requires the signed-in ML Claw administrator."), 403);
+    }
     try {
       await controls.saveMcpCredentials(identity);
     } catch (err) {

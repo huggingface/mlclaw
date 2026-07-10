@@ -539,7 +539,7 @@ function CredentialsPage(props: {
         </div>
         {props.status.integrations.error ? <p className="statusWarn">{props.status.integrations.error}</p> : null}
         <div className="buttonRow">
-          <a className="primaryButton" href="/oauth/login?next=%2Fmlclaw%2Fcredentials">
+          <a className="primaryButton" href="/oauth/login?intent=integrations&next=%2Fmlclaw%2Fcredentials">
             {props.status.integrations.configured ? "Reconnect" : "Connect"}
           </a>
           <button

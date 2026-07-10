@@ -160,13 +160,14 @@ export class SpaceRuntimeServer {
       return;
     }
     if (this.isAdmin(session.username) && this.config.oauthClientId && this.config.oauthClientSecret && isBrowserNavigation(req)) {
+      const integrations = await managedMcpServerStatus(this.config);
       const credentialSlot = integrationCredentialSlot(this.config);
       const authorization = credentialSlot
         ? await this.mcpCredentials.status(credentialSlot).catch(() => undefined)
         : undefined;
-      if (!authorization?.configured) {
+      if (integrations.some((integration) => integration.enabled) && !authorization?.configured) {
         const next = normalizeNext(`${url.pathname}${url.search}`);
-        this.sendRedirect(res, `/oauth/login?next=${encodeURIComponent(next)}`);
+        this.sendRedirect(res, `/oauth/login?intent=integrations&next=${encodeURIComponent(next)}`);
         return;
       }
     }

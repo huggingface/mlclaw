@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
 import { McpCredentialStore } from "../src/mlclaw-space-runtime/mcp-credentials.js";
 import { deriveInternalToken, McpIntegrationServer } from "../src/mlclaw-space-runtime/mcp-integrations.js";
-import { authorizeUrl, HF_MCP_OAUTH_SCOPES } from "../src/mlclaw-space-runtime/oauth.js";
+import {
+  authorizeUrl,
+  HF_LOGIN_OAUTH_SCOPES,
+  HF_MCP_OAUTH_SCOPES,
+} from "../src/mlclaw-space-runtime/oauth.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -17,14 +21,17 @@ afterEach(async () => {
 });
 
 describe("automatic MCP integrations", () => {
-  it("requests the complete automatic integration scope set", () => {
-    const url = new URL(authorizeUrl({
+  it("separates ordinary login scopes from integration authorization", () => {
+    const settings = {
       clientId: "client",
       clientSecret: "secret",
       providerUrl: "https://huggingface.co",
       redirectUri: "https://example.test/oauth/callback",
-    }, "state"));
-    expect(url.searchParams.get("scope")?.split(" ")).toEqual([...HF_MCP_OAUTH_SCOPES]);
+    };
+    const login = new URL(authorizeUrl(settings, "state"));
+    const integrations = new URL(authorizeUrl(settings, "state", HF_MCP_OAUTH_SCOPES));
+    expect(login.searchParams.get("scope")?.split(" ")).toEqual([...HF_LOGIN_OAUTH_SCOPES]);
+    expect(integrations.searchParams.get("scope")?.split(" ")).toEqual([...HF_MCP_OAUTH_SCOPES]);
   });
 
   it("encrypts credentials, refreshes once, and never writes token plaintext", async () => {
@@ -467,11 +474,43 @@ describe("automatic MCP integrations", () => {
     });
     expect(calls).toEqual(["research", "abc_start_research", "xyz_research_status"]);
   });
+
+  it("aborts active upstream requests during shutdown", async () => {
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+    const upstream = http.createServer(async (req) => {
+      await drain(req);
+      requestStarted();
+    });
+    const upstreamPort = await listen(upstream);
+    cleanups.push(() => closeServer(upstream));
+
+    const fixture = await integrationFixture({
+      hfMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+    });
+    const pending = fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/huggingface`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    }).catch((err) => err);
+    await started;
+
+    const before = Date.now();
+    await fixture.server.stop();
+    expect(Date.now() - before).toBeLessThan(1_000);
+    expect(await pending).toBeInstanceOf(Error);
+  });
 });
 
 async function integrationFixture(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<{
   config: SpaceRuntimeConfig;
   store: McpCredentialStore;
+  server: McpIntegrationServer;
 }> {
   const root = await temporaryDirectory();
   const mcpPort = await freePort();
@@ -499,7 +538,7 @@ async function integrationFixture(overrides: Partial<SpaceRuntimeConfig> = {}): 
   const server = new McpIntegrationServer(config, store);
   await server.start();
   cleanups.push(() => server.stop());
-  return { config, store };
+  return { config, store, server };
 }
 
 async function temporaryDirectory(): Promise<string> {
