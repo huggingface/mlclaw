@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 
-Status: implemented; final validation in progress
+Status: implemented and locally validated
 
 ## Goal
 

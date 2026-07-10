@@ -14969,7 +14969,7 @@ function imageDockerfile(runtimeImage) {
 `;
 }
 function bundledDockerfile() {
-  return `ARG HF_BROKER_VERSION=cc9388b0ffb63e2fbb913955cc695e27d6a1e633
+  return `ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG HF_BROKER_VERSION
