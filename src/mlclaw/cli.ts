@@ -88,6 +88,8 @@ type UpdateOptions = {
   force?: boolean;
   runtimeImage?: string;
   bundledRuntime?: boolean;
+  routerToken?: string;
+  routerTokenFile?: string;
 };
 
 type DoctorOptions = {
@@ -269,6 +271,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .argument("<owner/space>", "Hugging Face Space repo ID")
     .option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile")
     .option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false)
+    .option("--router-token <token>", "Dedicated Hugging Face Router inference token")
+    .option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token")
     .option("--force", "Update even if the Space does not look like ML Claw", false)
     .action(async (repoId: string, opts: UpdateOptions) => {
       const token = await runtime.readToken(runtime.env);
@@ -1756,6 +1760,16 @@ async function update(
   }
   const runtimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
   const agentName = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
+  if (!canonicalTemplate) {
+    await ensureUpdateRouterToken({
+      repoId,
+      agentName,
+      model: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL,
+      opts,
+      hub,
+      runtime,
+    });
+  }
   runtime.stdout.log(`Generating current Space files into ${repoId}`);
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: repoId,
@@ -1783,6 +1797,43 @@ async function update(
   }
   await doctor(repoId, { fix: true }, hub, runtime);
   await hub.restartSpace(repoId, true);
+}
+
+async function ensureUpdateRouterToken(params: {
+  repoId: string;
+  agentName: string;
+  model: string;
+  opts: UpdateOptions;
+  hub: HubApi;
+  runtime: Required<CliRuntime>;
+}): Promise<void> {
+  if (!isHuggingFaceRouterModel(params.model)) {
+    return;
+  }
+  const spaceSecrets = await params.hub.getSpaceSecrets(params.repoId);
+  if (hasRouterTokenSecretMap(spaceSecrets)) {
+    return;
+  }
+  const hasManifest = await manifestExists(params.runtime.configRoot, params.agentName);
+  const localSecrets = hasManifest
+    ? await readSecretEnv(params.runtime.configRoot, params.agentName).catch(() => ({}))
+    : {};
+  const routerToken = await resolveRouterToken({
+    opts: params.opts,
+    runtime: params.runtime,
+    existingSecrets: localSecrets,
+    model: params.model,
+  });
+  if (!routerToken) {
+    throw new Error("Hugging Face Router models require a dedicated inference token before update");
+  }
+  await params.hub.addSpaceSecret(params.repoId, "MLCLAW_ROUTER_TOKEN", routerToken);
+  if (hasManifest) {
+    await writeSecretEnv(params.runtime.configRoot, params.agentName, {
+      ...localSecrets,
+      MLCLAW_ROUTER_TOKEN: routerToken,
+    });
+  }
 }
 
 async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime: Required<CliRuntime>): Promise<void> {

@@ -164,7 +164,7 @@ describe("automatic MCP integrations", () => {
       clientId: "client",
       clientSecret: "client-secret",
       now: () => 2_000_000,
-      fetchImpl: async () => new Response("revoked", { status: 400 }),
+      fetchImpl: async () => Response.json({ error: "invalid_grant" }, { status: 400 }),
     });
     await rejected.save({
       username: "alice",
@@ -213,6 +213,68 @@ describe("automatic MCP integrations", () => {
     await expect(refresh).resolves.toBe("hf_refreshed");
     await disconnect;
     await expect(racing.status("alice")).resolves.toMatchObject({ configured: false });
+  });
+
+  it("retains credentials after a transient refresh failure and retries later", async () => {
+    const root = await temporaryDirectory();
+    let refreshCalls = 0;
+    const store = new McpCredentialStore({
+      file: path.join(root, "transient.enc"),
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      clientId: "client",
+      clientSecret: "client-secret",
+      now: () => 2_000_000,
+      fetchImpl: async () => {
+        refreshCalls += 1;
+        return refreshCalls === 1
+          ? Response.json({ error: "server_error" }, { status: 503 })
+          : Response.json({ access_token: "hf_recovered", expires_in: 3600 });
+      },
+    });
+    await store.save({
+      username: "alice",
+      accessToken: "hf_expired",
+      refreshToken: "refresh-valid",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+
+    await expect(store.accessToken("alice")).rejects.toThrow("temporarily unavailable");
+    await expect(store.status("alice")).resolves.toMatchObject({ configured: true, refreshable: true });
+    await expect(store.accessToken("alice")).resolves.toBe("hf_recovered");
+    expect(refreshCalls).toBe(2);
+  });
+
+  it("bounds a stalled OAuth refresh without clearing credentials", async () => {
+    const root = await temporaryDirectory();
+    const store = new McpCredentialStore({
+      file: path.join(root, "stalled.enc"),
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      clientId: "client",
+      clientSecret: "client-secret",
+      now: () => 2_000_000,
+      refreshTimeoutMs: 10,
+      fetchImpl: async (_url, request) => await new Promise<Response>((_resolve, reject) => {
+        const signal = request?.signal;
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }),
+    });
+    await store.save({
+      username: "alice",
+      accessToken: "hf_expired",
+      refreshToken: "refresh-valid",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+
+    const started = Date.now();
+    await expect(store.accessToken("alice")).rejects.toThrow("temporarily unavailable");
+    expect(Date.now() - started).toBeLessThan(500);
+    await expect(store.status("alice")).resolves.toMatchObject({ configured: true, refreshable: true });
   });
 
   it("reports expired unrefreshable credentials disconnected and clears stale expiry after refresh", async () => {

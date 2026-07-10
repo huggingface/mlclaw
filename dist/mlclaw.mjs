@@ -15333,7 +15333,7 @@ function createProgram(runtimeOverrides = {}) {
   program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Create the Hugging Face Space as public instead of private", false).addOption(new Option("--gateway-token <token>").hideHelp()).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
-  program2.command("update").description("Regenerate and upload current ML Claw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--force", "Update even if the Space does not look like ML Claw", false).action(async (repoId, opts) => {
+  program2.command("update").description("Regenerate and upload current ML Claw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--router-token <token>", "Dedicated Hugging Face Router inference token").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--force", "Update even if the Space does not look like ML Claw", false).action(async (repoId, opts) => {
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
     await update(repoId, opts, hub, token, runtime);
@@ -16486,6 +16486,16 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   }
   const runtimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
   const agentName = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
+  if (!canonicalTemplate) {
+    await ensureUpdateRouterToken({
+      repoId,
+      agentName,
+      model: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL,
+      opts,
+      hub,
+      runtime
+    });
+  }
   runtime.stdout.log(`Generating current Space files into ${repoId}`);
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: repoId,
@@ -16513,6 +16523,33 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   }
   await doctor(repoId, { fix: true }, hub, runtime);
   await hub.restartSpace(repoId, true);
+}
+async function ensureUpdateRouterToken(params) {
+  if (!isHuggingFaceRouterModel(params.model)) {
+    return;
+  }
+  const spaceSecrets = await params.hub.getSpaceSecrets(params.repoId);
+  if (hasRouterTokenSecretMap(spaceSecrets)) {
+    return;
+  }
+  const hasManifest = await manifestExists(params.runtime.configRoot, params.agentName);
+  const localSecrets = hasManifest ? await readSecretEnv(params.runtime.configRoot, params.agentName).catch(() => ({})) : {};
+  const routerToken = await resolveRouterToken({
+    opts: params.opts,
+    runtime: params.runtime,
+    existingSecrets: localSecrets,
+    model: params.model
+  });
+  if (!routerToken) {
+    throw new Error("Hugging Face Router models require a dedicated inference token before update");
+  }
+  await params.hub.addSpaceSecret(params.repoId, "MLCLAW_ROUTER_TOKEN", routerToken);
+  if (hasManifest) {
+    await writeSecretEnv(params.runtime.configRoot, params.agentName, {
+      ...localSecrets,
+      MLCLAW_ROUTER_TOKEN: routerToken
+    });
+  }
 }
 async function doctor(repoId, opts, hub, runtime) {
   if (!repoId.includes("/") && await manifestExists(runtime.configRoot, repoId)) {

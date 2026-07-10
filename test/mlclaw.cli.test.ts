@@ -1328,6 +1328,10 @@ describe("mlclaw CLI", () => {
       args: ["alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE],
     });
     expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_test"],
+    });
+    expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
       args: ["alice/research", "MLCLAW_GATEWAY_LOCATION", "space"],
     });
@@ -1350,6 +1354,35 @@ describe("mlclaw CLI", () => {
     expect(adminsIndex).toBeGreaterThanOrEqual(0);
     expect(restartIndex).toBeGreaterThan(allowedUsersIndex);
     expect(restartIndex).toBeGreaterThan(adminsIndex);
+  });
+
+  it("blocks a legacy Router update before changing or restarting the Space", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", DEFAULT_MODEL);
+    await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_legacy_broad");
+    hub.calls.length = 0;
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const baseRuntime = await createRuntime(hub, prompt, stderr);
+    let pushed = false;
+    const runtime = {
+      ...baseRuntime,
+      env: {},
+      pushTemplateToSpace: async () => {
+        pushed = true;
+        return { templateRev: "test-template" };
+      },
+    };
+
+    const code = await main(["update", "alice/research"], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("dedicated inference token");
+    expect(pushed).toBe(false);
+    expect(hub.calls.some((call) => call.name === "addSpaceVariable")).toBe(false);
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
+    expect(hub.calls.some((call) => call.name === "deleteSpaceSecret")).toBe(false);
   });
 
   it("can bundle the current Space runtime during update when requested", async () => {

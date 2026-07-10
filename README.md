@@ -186,7 +186,9 @@ It never reads secret values and never modifies bucket contents.
 
 `mlclaw update` also refreshes the generated Space Dockerfile and runtime
 metadata, so older Spaces can move to the current implementation without
-recreating their bucket.
+recreating their bucket. When updating a legacy deployment that still uses a
+broad Hub token for Router inference, ML Claw requires and installs a dedicated
+Router token before it changes or restarts the Space.
 
 ## Browser Settings
 

@@ -46,6 +46,8 @@ per-MCP login is required.
 ## Product Behavior
 
 - Fresh, updated, and repaired deployments contain both managed MCP servers.
+- Legacy updates provision or require a dedicated Router inference token before
+  restarting, so removing broad Hub tokens cannot interrupt inference.
 - An admin entering the browser gateway is sent through the integration OAuth
   flow when at least one managed integration is enabled and durable
   authorization is missing.

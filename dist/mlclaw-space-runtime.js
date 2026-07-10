@@ -8872,6 +8872,7 @@ function contentType(file) {
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes4 } from "node:crypto";
 import fs4 from "node:fs/promises";
 import path4 from "node:path";
+var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
 var McpCredentialStore = class {
   constructor(options) {
     this.options = options;
@@ -9023,22 +9024,32 @@ var McpCredentialStore = class {
       }
       const providerUrl = this.options.providerUrl.replace(/\/+$/, "");
       const basic = Buffer.from(`${this.options.clientId}:${this.options.clientSecret}`).toString("base64");
-      const response = await this.fetchImpl(`${providerUrl}/oauth/token`, {
-        method: "POST",
-        headers: {
-          authorization: `Basic ${basic}`,
-          "content-type": "application/x-www-form-urlencoded"
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: credential.refreshToken,
-          client_id: this.options.clientId
-        })
-      });
+      let response;
+      try {
+        response = await this.fetchImpl(`${providerUrl}/oauth/token`, {
+          method: "POST",
+          headers: {
+            authorization: `Basic ${basic}`,
+            "content-type": "application/x-www-form-urlencoded"
+          },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: credential.refreshToken,
+            client_id: this.options.clientId
+          }),
+          signal: AbortSignal.timeout(this.options.refreshTimeoutMs ?? DEFAULT_REFRESH_TIMEOUT_MS)
+        });
+      } catch {
+        throw new Error("Hugging Face MCP authorization refresh is temporarily unavailable");
+      }
       if (!response.ok) {
-        delete this.document.credentials[slot];
-        await this.persist();
-        throw new Error("Hugging Face MCP authorization expired; sign in again");
+        const error = await response.clone().json().catch(() => void 0);
+        if ((response.status === 400 || response.status === 401) && stringValue4(error?.error) === "invalid_grant") {
+          delete this.document.credentials[slot];
+          await this.persist();
+          throw new Error("Hugging Face MCP authorization expired; sign in again");
+        }
+        throw new Error("Hugging Face MCP authorization refresh is temporarily unavailable");
       }
       const body = await response.json();
       const accessToken = stringValue4(body.access_token);
