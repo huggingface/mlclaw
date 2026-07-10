@@ -9,6 +9,7 @@ export MLCLAW_OPENCLAW_UID="$OPENCLAW_UID"
 export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"
 HF_BROKER_ENABLED=0
 HF_BROKER_RUN_DIR="/run/mlclaw-hf-broker"
+STATE_HF_TOKEN=""
 PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
 HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"
 
@@ -38,6 +39,10 @@ prepare_hf_broker() {
   printf '{"version":1,"brokers":[{"id":"hf-broker","label":"Hugging Face","url":"http://127.0.0.1:7864","token_file":"%s"}]}\n' "$operator_secret_file" > "$operator_brokers_file"
   chown hf-broker:hf-broker "$token_file" "$broker_agent_secrets" "$broker_operator_secrets"
   chmod 0600 "$token_file" "$agent_secret_file" "$operator_secret_file" "$broker_agent_secrets" "$broker_operator_secrets" "$operator_brokers_file"
+
+  if [ -z "${MLCLAW_STATE_MOUNT_DIR:-}" ]; then
+    STATE_HF_TOKEN="$broker_token"
+  fi
 
   export MLCLAW_HF_BROKER_URL="http://127.0.0.1:7863"
   export MLCLAW_HF_BROKER_AGENT_SECRET_FILE="$agent_secret_file"
@@ -98,9 +103,10 @@ fi
 prepare_hf_broker
 export MLCLAW_PROTECTED_STATE_DIR="$PROTECTED_STATE_DIR"
 export MLCLAW_OPENAI_CREDENTIAL_STORE_FILE="$PROTECTED_STATE_DIR/control/openai-api-key.enc"
-# The broad token and legacy Router token must not enter the trusted wrapper or
-# any restore, control-plane, or OpenClaw child. The token is already in the
-# broker-owned runtime file before the environment is scrubbed.
+# The broad token and legacy Router token must not enter the control plane or
+# OpenClaw. The token is already in the broker-owned runtime file before the
+# environment is scrubbed; local bucket state sync receives a dedicated copy
+# only around trusted restore and supervisor execution.
 unset MLCLAW_BROKER_HF_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN
 
 # State, workspace, and config paths are ALWAYS derived from the live dir,
@@ -123,9 +129,9 @@ echo "[hf-state-sync] starting restore"
 RESTORE_TIMEOUT_SECONDS="${MLCLAW_RESTORE_TIMEOUT_SECONDS:-180}"
 node /app/hf-state-sync.js prepare-restore
 if command -v timeout >/dev/null 2>&1; then
-  timeout "${RESTORE_TIMEOUT_SECONDS}s" gosu "$OPENCLAW_IDENTITY" node /app/hf-state-sync.js restore
+  env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" timeout "${RESTORE_TIMEOUT_SECONDS}s" gosu "$OPENCLAW_IDENTITY" node /app/hf-state-sync.js restore
 else
-  gosu "$OPENCLAW_IDENTITY" node /app/hf-state-sync.js restore
+  env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" gosu "$OPENCLAW_IDENTITY" node /app/hf-state-sync.js restore
 fi
 echo "[hf-state-sync] restore complete"
 
@@ -202,4 +208,7 @@ chown_openclaw_live
 # process environment are not readable by the unprivileged OpenClaw child. The
 # state supervisor stages live files in a separate secret-free node process;
 # only the trusted parent uploads the resulting archive.
+if [ -n "$STATE_HF_TOKEN" ]; then
+  export MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN"
+fi
 exec node /app/hf-state-sync.js supervise -- node /app/mlclaw-space-runtime.js

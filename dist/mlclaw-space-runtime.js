@@ -9378,7 +9378,7 @@ function optionalPositiveInteger(value, maximum) {
   if (value === void 0 || value === null || value === "") {
     return void 0;
   }
-  const parsed = typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  const parsed = typeof value === "number" ? value : Number(String(value));
   return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= maximum ? parsed : "invalid";
 }
 function selectedOperatorBroker(c, registry) {

@@ -20,7 +20,8 @@ function makeHub(config: SyncConfig): BucketHub | null {
     log(`using mounted state bucket at ${config.stateMountDir}`);
     return createMountedBucketHub({ mountDir: config.stateMountDir });
   }
-  return createHfBucketHub({ bucket: config.bucket });
+  const token = process.env.MLCLAW_STATE_HF_TOKEN ?? process.env.HF_TOKEN;
+  return createHfBucketHub({ bucket: config.bucket, ...(token ? { token } : {}) });
 }
 
 async function main(argv: string[]): Promise<number> {

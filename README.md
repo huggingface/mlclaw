@@ -281,6 +281,9 @@ event state and encrypted control credentials are included in the durable
 snapshot through a root-only `.mlclaw-protected` staging step, then restored
 with protected ownership before OpenClaw starts. The broad token and operator
 credentials remain ephemeral and are never included in snapshots.
+Local gateways pass the broad credential only to the trusted state-sync
+supervisor for bucket I/O; the supervisor removes it before starting the web
+control process or OpenClaw.
 
 ## Costs
 

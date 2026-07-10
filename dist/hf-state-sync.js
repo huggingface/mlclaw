@@ -9610,7 +9610,10 @@ async function supervise(params) {
       await fs8.rm(tmpDir, { recursive: true, force: true });
     }
   };
-  const child = spawn2(binary, args, { stdio: "inherit" });
+  const child = spawn2(binary, args, {
+    stdio: "inherit",
+    env: supervisedChildEnvironment(process.env)
+  });
   const childExit = new Promise((resolve) => {
     child.on("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
     child.on("error", (err) => {
@@ -9741,6 +9744,11 @@ async function supervise(params) {
   }
   return exitCode;
 }
+function supervisedChildEnvironment(source) {
+  const env = { ...source };
+  delete env.MLCLAW_STATE_HF_TOKEN;
+  return env;
+}
 function snapshotFailureDetail(outcome) {
   switch (outcome.kind) {
     case "uploaded":
@@ -9765,7 +9773,8 @@ function makeHub(config) {
     log(`using mounted state bucket at ${config.stateMountDir}`);
     return createMountedBucketHub({ mountDir: config.stateMountDir });
   }
-  return createHfBucketHub({ bucket: config.bucket });
+  const token = process.env.MLCLAW_STATE_HF_TOKEN ?? process.env.HF_TOKEN;
+  return createHfBucketHub({ bucket: config.bucket, ...token ? { token } : {} });
 }
 async function main(argv) {
   if (argv[0] === "stage-worker") {

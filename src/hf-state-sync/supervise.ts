@@ -103,7 +103,10 @@ export async function supervise(params: { config: SyncConfig; hub: BucketHub; co
     }
   };
 
-  const child: ChildProcess = spawn(binary, args, { stdio: "inherit" });
+  const child: ChildProcess = spawn(binary, args, {
+    stdio: "inherit",
+    env: supervisedChildEnvironment(process.env),
+  });
   const childExit = new Promise<number>((resolve) => {
     child.on("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
     child.on("error", (err) => {
@@ -243,6 +246,12 @@ export async function supervise(params: { config: SyncConfig; hub: BucketHub; co
     return 0;
   }
   return exitCode;
+}
+
+export function supervisedChildEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...source };
+  delete env.MLCLAW_STATE_HF_TOKEN;
+  return env;
 }
 
 function snapshotFailureDetail(outcome: SnapshotOutcome): string {

@@ -117,6 +117,7 @@ describe("snapshot/restore round-trip", () => {
     expect(snapshotWorkerEnvironment({
       PATH: "/bin",
       HF_TOKEN: "hf_secret",
+      MLCLAW_STATE_HF_TOKEN: "hf_state_secret",
       MLCLAW_CREDENTIAL_KEY: "credential-secret",
       MLCLAW_SESSION_SECRET: "session-secret",
     })).toEqual({ HOME: "/home/node", PATH: "/bin", TMPDIR: undefined });
