@@ -51,6 +51,7 @@ export class McpCredentialStore {
   private loadPromise: Promise<void> | undefined;
   private document: CredentialDocument = { version: 1, credentials: {} };
   private refreshes = new Map<string, Promise<string>>();
+  private mutationTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: McpCredentialStoreOptions) {
     this.key = Buffer.from(hkdfSync(
@@ -65,26 +66,30 @@ export class McpCredentialStore {
   }
 
   async save(identity: OAuthIdentity, slot = identity.username): Promise<void> {
-    await this.load();
-    this.document.credentials[slot] = {
-      username: identity.username,
-      accessToken: identity.accessToken,
-      ...(identity.refreshToken ? { refreshToken: identity.refreshToken } : {}),
-      tokenType: identity.tokenType,
-      scope: [...identity.scope],
-      ...(identity.expiresAt ? { expiresAt: identity.expiresAt } : {}),
-      updatedAt: this.now(),
-    };
-    await this.persist();
+    await this.mutate(async () => {
+      await this.loadForRecovery();
+      this.document.credentials[slot] = {
+        username: identity.username,
+        accessToken: identity.accessToken,
+        ...(identity.refreshToken ? { refreshToken: identity.refreshToken } : {}),
+        tokenType: identity.tokenType,
+        scope: [...identity.scope],
+        ...(identity.expiresAt ? { expiresAt: identity.expiresAt } : {}),
+        updatedAt: this.now(),
+      };
+      await this.persist();
+    });
   }
 
   async clear(username: string): Promise<void> {
-    await this.load();
-    if (!(username in this.document.credentials)) {
-      return;
-    }
-    delete this.document.credentials[username];
-    await this.persist();
+    await this.mutate(async () => {
+      const recovered = await this.loadForRecovery();
+      if (!(username in this.document.credentials) && !recovered) {
+        return;
+      }
+      delete this.document.credentials[username];
+      await this.persist();
+    });
   }
 
   async status(slot: string): Promise<McpCredentialStatus> {
@@ -154,8 +159,28 @@ export class McpCredentialStore {
     try {
       this.document = decodeDocument(decryptEnvelope(raw, this.key));
     } catch {
-      throw new Error("Encrypted MCP credentials are invalid or cannot be decrypted");
+      throw new InvalidCredentialFileError();
     }
+  }
+
+  private async loadForRecovery(): Promise<boolean> {
+    try {
+      await this.load();
+      return false;
+    } catch (err) {
+      if (!(err instanceof InvalidCredentialFileError)) {
+        throw err;
+      }
+      this.document = { version: 1, credentials: {} };
+      this.loadPromise = Promise.resolve();
+      return true;
+    }
+  }
+
+  private mutate<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationTail.then(operation);
+    this.mutationTail = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private async persist(): Promise<void> {
@@ -174,45 +199,59 @@ export class McpCredentialStore {
   }
 
   private async refresh(slot: string, credential: StoredCredential): Promise<string> {
-    if (!credential.refreshToken || !this.options.clientId || !this.options.clientSecret) {
-      throw new Error("Hugging Face MCP authorization expired; sign in again");
-    }
-    const providerUrl = this.options.providerUrl.replace(/\/+$/, "");
-    const basic = Buffer.from(`${this.options.clientId}:${this.options.clientSecret}`).toString("base64");
-    const response = await this.fetchImpl(`${providerUrl}/oauth/token`, {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${basic}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: credential.refreshToken,
-        client_id: this.options.clientId,
-      }),
+    return this.mutate(async () => {
+      if (this.document.credentials[slot] !== credential) {
+        throw new Error("Hugging Face MCP authorization expired; sign in again");
+      }
+      if (!credential.refreshToken || !this.options.clientId || !this.options.clientSecret) {
+        throw new Error("Hugging Face MCP authorization expired; sign in again");
+      }
+      const providerUrl = this.options.providerUrl.replace(/\/+$/, "");
+      const basic = Buffer.from(`${this.options.clientId}:${this.options.clientSecret}`).toString("base64");
+      const response = await this.fetchImpl(`${providerUrl}/oauth/token`, {
+        method: "POST",
+        headers: {
+          authorization: `Basic ${basic}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: credential.refreshToken,
+          client_id: this.options.clientId,
+        }),
+      });
+      if (!response.ok) {
+        delete this.document.credentials[slot];
+        await this.persist();
+        throw new Error("Hugging Face MCP authorization expired; sign in again");
+      }
+      const body = await response.json() as Record<string, unknown>;
+      const accessToken = stringValue(body.access_token);
+      if (!accessToken) {
+        throw new Error("Hugging Face MCP token refresh returned an invalid response");
+      }
+      const expiresIn = numberValue(body.expires_in);
+      const { expiresAt: _expired, ...credentialWithoutExpiry } = credential;
+      const refreshed: StoredCredential = {
+        ...credentialWithoutExpiry,
+        accessToken,
+        refreshToken: stringValue(body.refresh_token) ?? credential.refreshToken,
+        tokenType: stringValue(body.token_type) ?? credential.tokenType,
+        scope: scopeValue(body.scope) ?? credential.scope,
+        ...(expiresIn ? { expiresAt: this.now() + expiresIn * 1000 } : {}),
+        updatedAt: this.now(),
+      };
+      this.document.credentials[slot] = refreshed;
+      await this.persist();
+      return accessToken;
     });
-    if (!response.ok) {
-      throw new Error("Hugging Face MCP authorization expired; sign in again");
-    }
-    const body = await response.json() as Record<string, unknown>;
-    const accessToken = stringValue(body.access_token);
-    if (!accessToken) {
-      throw new Error("Hugging Face MCP token refresh returned an invalid response");
-    }
-    const expiresIn = numberValue(body.expires_in);
-    const { expiresAt: _expired, ...credentialWithoutExpiry } = credential;
-    const refreshed: StoredCredential = {
-      ...credentialWithoutExpiry,
-      accessToken,
-      refreshToken: stringValue(body.refresh_token) ?? credential.refreshToken,
-      tokenType: stringValue(body.token_type) ?? credential.tokenType,
-      scope: scopeValue(body.scope) ?? credential.scope,
-      ...(expiresIn ? { expiresAt: this.now() + expiresIn * 1000 } : {}),
-      updatedAt: this.now(),
-    };
-    this.document.credentials[slot] = refreshed;
-    await this.persist();
-    return accessToken;
+  }
+}
+
+class InvalidCredentialFileError extends Error {
+  constructor() {
+    super("Encrypted MCP credentials are invalid or cannot be decrypted");
+    this.name = "InvalidCredentialFileError";
   }
 }
 

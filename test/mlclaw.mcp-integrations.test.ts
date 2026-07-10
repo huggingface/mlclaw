@@ -115,6 +115,99 @@ describe("automatic MCP integrations", () => {
     expect(token).toBe("hf_bob");
   });
 
+  it("lets an administrator replace or clear an unreadable encrypted credential", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "mcp-oauth.enc");
+    await fs.writeFile(file, "not-an-encrypted-credential");
+
+    const replacement = new McpCredentialStore({
+      file,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+    });
+    await replacement.save({
+      username: "alice",
+      accessToken: "hf_replacement",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+    });
+    await expect(replacement.accessToken("alice")).resolves.toBe("hf_replacement");
+
+    await fs.writeFile(file, "still-not-an-encrypted-credential");
+    const clearing = new McpCredentialStore({
+      file,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+    });
+    await clearing.clear("alice");
+    await expect(clearing.status("alice")).resolves.toMatchObject({ configured: false });
+    await expect(new McpCredentialStore({
+      file,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+    }).status("alice")).resolves.toMatchObject({ configured: false });
+  });
+
+  it("disconnects after a rejected refresh and does not resurrect access during disconnect", async () => {
+    const root = await temporaryDirectory();
+    const rejected = new McpCredentialStore({
+      file: path.join(root, "rejected.enc"),
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      clientId: "client",
+      clientSecret: "client-secret",
+      now: () => 2_000_000,
+      fetchImpl: async () => new Response("revoked", { status: 400 }),
+    });
+    await rejected.save({
+      username: "alice",
+      accessToken: "hf_expired",
+      refreshToken: "refresh-revoked",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+    await expect(rejected.accessToken("alice")).rejects.toThrow("sign in again");
+    await expect(rejected.status("alice")).resolves.toMatchObject({ configured: false });
+
+    let finishRefresh: (() => void) | undefined;
+    const refreshStarted = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    let releaseResponse: (() => void) | undefined;
+    const responseReleased = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const racing = new McpCredentialStore({
+      file: path.join(root, "racing.enc"),
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      clientId: "client",
+      clientSecret: "client-secret",
+      now: () => 2_000_000,
+      fetchImpl: async () => {
+        finishRefresh?.();
+        await responseReleased;
+        return Response.json({ access_token: "hf_refreshed", expires_in: 3600 });
+      },
+    });
+    await racing.save({
+      username: "alice",
+      accessToken: "hf_expired",
+      refreshToken: "refresh-valid",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+    const refresh = racing.accessToken("alice");
+    await refreshStarted;
+    const disconnect = racing.clear("alice");
+    releaseResponse?.();
+    await expect(refresh).resolves.toBe("hf_refreshed");
+    await disconnect;
+    await expect(racing.status("alice")).resolves.toMatchObject({ configured: false });
+  });
+
   it("reports expired unrefreshable credentials disconnected and clears stale expiry after refresh", async () => {
     const root = await temporaryDirectory();
     const expiredFile = path.join(root, "expired.enc");
