@@ -1031,7 +1031,8 @@ describe("ML Claw Space runtime", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-wrapper-secrets-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
     const envFile = path.join(root, "env.json");
-    const keys = ["MLCLAW_CREDENTIAL_KEY", "MLCLAW_SESSION_SECRET", "SESSION_SECRET", "OAUTH_CLIENT_SECRET"];
+    const secretKeys = ["MLCLAW_CREDENTIAL_KEY", "MLCLAW_SESSION_SECRET", "SESSION_SECRET", "OAUTH_CLIENT_SECRET"];
+    const keys = [...secretKeys, "HOME", "USER", "LOGNAME"];
     const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     for (const key of keys) {
       process.env[key] = `secret-${key}`;
@@ -1057,7 +1058,8 @@ describe("ML Claw Space runtime", () => {
 
     await waitFor(async () => fileExists(envFile));
     const env = JSON.parse(await fs.readFile(envFile, "utf8")) as Record<string, string>;
-    expect(env).toEqual({});
+    expect(secretKeys.every((key) => env[key] === undefined)).toBe(true);
+    expect(env).toMatchObject({ HOME: "/home/node", USER: "node", LOGNAME: "node" });
   });
 
   it("preserves legacy broad Hub tokens when no Router token exists", async () => {

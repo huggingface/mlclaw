@@ -9444,6 +9444,9 @@ var SpaceRuntimeServer = class {
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
       const env = {
         ...process.env,
+        HOME: "/home/node",
+        USER: "node",
+        LOGNAME: "node",
         OPENCLAW_GATEWAY_PORT: String(this.config.openclawPort),
         OPENCLAW_MODEL: this.config.model,
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
