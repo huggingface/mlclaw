@@ -127,6 +127,31 @@ describe("ML Claw Space runtime", () => {
     });
   });
 
+  it("reports trusted local Hub-token integrations as configured", async () => {
+    const config = await testConfig({
+      gatewayLocation: "local",
+      hfToken: "hf_local_wrapper",
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/status`, {
+      headers: { cookie: sessionCookie(config, "alice") },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      integrations: {
+        configured: true,
+        identity: null,
+        scope: [],
+        refreshable: false,
+        error: null,
+      },
+    });
+  });
+
   it("automatically requests MCP authorization for an admin entering the gateway", async () => {
     const config = await testConfig();
     const runtime = new SpaceRuntimeServer(config);

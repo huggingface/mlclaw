@@ -402,9 +402,10 @@ function isAdmin(config: SpaceRuntimeConfig, username: string): boolean {
 
 async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeControls): Promise<Record<string, unknown>> {
   const credentialSlot = integrationCredentialSlot(config) ?? "";
+  const localTokenConfigured = config.gatewayLocation === "local" && Boolean(config.hfToken);
   let mcpCredentials: McpCredentialStatus | undefined;
   let mcpCredentialError: string | undefined;
-  if (credentialSlot) {
+  if (!localTokenConfigured && credentialSlot) {
     try {
       mcpCredentials = await controls.mcpCredentialStatus(credentialSlot);
     } catch {
@@ -443,7 +444,7 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     integrations: {
       automatic: true,
       identity: mcpCredentials?.configured ? mcpCredentials.username : null,
-      configured: mcpCredentials?.configured ?? false,
+      configured: localTokenConfigured || (mcpCredentials?.configured ?? false),
       scope: mcpCredentials?.scope ?? [],
       expiresAt: mcpCredentials?.expiresAt ?? null,
       refreshable: mcpCredentials?.refreshable ?? false,

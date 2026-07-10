@@ -354,6 +354,11 @@ describe("automatic MCP integrations", () => {
       const tool = String(params?.name ?? "");
       calls.push(tool || method);
       const id = body.id ?? null;
+      if (method !== "initialize" && req.headers["mcp-protocol-version"] !== "2025-06-18") {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "missing negotiated MCP protocol version" }));
+        return;
+      }
       res.setHeader("content-type", "text/event-stream");
       res.setHeader("mcp-session-id", "research-session");
       if (method === "initialize") {
@@ -405,6 +410,7 @@ describe("automatic MCP integrations", () => {
     });
     const headers = {
       "content-type": "application/json",
+      "mcp-protocol-version": "2025-06-18",
       "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
     };
     const endpoint = `http://127.0.0.1:${fixture.config.mcpPort}/mcp/research`;

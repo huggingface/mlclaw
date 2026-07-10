@@ -154,6 +154,7 @@ export class McpIntegrationServer {
       return;
     }
     const sessionId = requestHeader(req.headers, "mcp-session-id");
+    const protocolVersion = requestHeader(req.headers, "mcp-protocol-version");
     if (!sessionId) {
       writeJson(res, 502, mcpError(request.id ?? null, -32603, "Research Agent did not establish an MCP session"));
       return;
@@ -165,6 +166,7 @@ export class McpIntegrationServer {
         arguments: { job_id: prefab.jobId },
         accessToken,
         id: `${String(request.id ?? "research")}:start`,
+        protocolVersion,
         signal,
       });
 
@@ -180,6 +182,7 @@ export class McpIntegrationServer {
           arguments: { job_id: prefab.jobId },
           accessToken,
           id: `${String(request.id ?? "research")}:status`,
+          protocolVersion,
           signal,
         });
         status = toolResultObject(result);
@@ -228,6 +231,7 @@ export class McpIntegrationServer {
     arguments: Record<string, unknown>;
     accessToken: string;
     id: string;
+    protocolVersion: string | undefined;
     signal: AbortSignal;
   }): Promise<Record<string, unknown>> {
     const response = await forwardBuffered({
@@ -236,6 +240,7 @@ export class McpIntegrationServer {
         accept: "application/json, text/event-stream",
         "content-type": "application/json",
         "mcp-session-id": params.sessionId,
+        ...(params.protocolVersion ? { "mcp-protocol-version": params.protocolVersion } : {}),
       },
       body: Buffer.from(JSON.stringify({
         jsonrpc: "2.0",

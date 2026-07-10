@@ -7260,6 +7260,7 @@ var McpIntegrationServer = class {
       return;
     }
     const sessionId = requestHeader(req.headers, "mcp-session-id");
+    const protocolVersion = requestHeader(req.headers, "mcp-protocol-version");
     if (!sessionId) {
       writeJson(res, 502, mcpError(request.id ?? null, -32603, "Research Agent did not establish an MCP session"));
       return;
@@ -7271,6 +7272,7 @@ var McpIntegrationServer = class {
         arguments: { job_id: prefab.jobId },
         accessToken,
         id: `${String(request.id ?? "research")}:start`,
+        protocolVersion,
         signal
       });
       const deadline = Date.now() + this.config.researchTimeoutMs;
@@ -7285,6 +7287,7 @@ var McpIntegrationServer = class {
           arguments: { job_id: prefab.jobId },
           accessToken,
           id: `${String(request.id ?? "research")}:status`,
+          protocolVersion,
           signal
         });
         status = toolResultObject(result);
@@ -7330,7 +7333,8 @@ var McpIntegrationServer = class {
       requestHeaders: {
         accept: "application/json, text/event-stream",
         "content-type": "application/json",
-        "mcp-session-id": params.sessionId
+        "mcp-session-id": params.sessionId,
+        ...params.protocolVersion ? { "mcp-protocol-version": params.protocolVersion } : {}
       },
       body: Buffer.from(JSON.stringify({
         jsonrpc: "2.0",
@@ -8704,9 +8708,10 @@ function isAdmin(config2, username) {
 }
 async function statusPayload(config2, controls) {
   const credentialSlot = integrationCredentialSlot(config2) ?? "";
+  const localTokenConfigured = config2.gatewayLocation === "local" && Boolean(config2.hfToken);
   let mcpCredentials;
   let mcpCredentialError;
-  if (credentialSlot) {
+  if (!localTokenConfigured && credentialSlot) {
     try {
       mcpCredentials = await controls.mcpCredentialStatus(credentialSlot);
     } catch {
@@ -8745,7 +8750,7 @@ async function statusPayload(config2, controls) {
     integrations: {
       automatic: true,
       identity: mcpCredentials?.configured ? mcpCredentials.username : null,
-      configured: mcpCredentials?.configured ?? false,
+      configured: localTokenConfigured || (mcpCredentials?.configured ?? false),
       scope: mcpCredentials?.scope ?? [],
       expiresAt: mcpCredentials?.expiresAt ?? null,
       refreshable: mcpCredentials?.refreshable ?? false,
