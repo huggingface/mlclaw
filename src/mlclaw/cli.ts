@@ -1811,7 +1811,8 @@ async function ensureUpdateRouterToken(params: {
     return;
   }
   const spaceSecrets = await params.hub.getSpaceSecrets(params.repoId);
-  if (hasRouterTokenSecretMap(spaceSecrets)) {
+  const hasExplicitOverride = params.opts.routerToken !== undefined || params.opts.routerTokenFile !== undefined;
+  if (hasRouterTokenSecretMap(spaceSecrets) && !hasExplicitOverride) {
     return;
   }
   const hasManifest = await manifestExists(params.runtime.configRoot, params.agentName);
@@ -2255,13 +2256,14 @@ async function resolveRouterToken(params: {
   existingSecrets?: Record<string, string>;
   model: string;
 }): Promise<string | undefined> {
-  const direct = params.opts.routerToken ??
+  const explicit = nonEmpty(params.opts.routerToken) ??
+    await readOptionalRouterTokenFile(params.opts.routerTokenFile);
+  const direct = explicit ??
     params.runtime.env.MLCLAW_ROUTER_TOKEN ??
     params.runtime.env.HF_ROUTER_TOKEN ??
     params.existingSecrets?.MLCLAW_ROUTER_TOKEN ??
     params.existingSecrets?.HF_ROUTER_TOKEN;
-  const fromFile = direct ? undefined : await readOptionalRouterTokenFile(params.opts.routerTokenFile);
-  const existing = nonEmpty(direct) ?? fromFile;
+  const existing = nonEmpty(direct);
   if (existing) {
     return existing;
   }

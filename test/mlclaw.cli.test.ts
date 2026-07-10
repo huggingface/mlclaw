@@ -1385,6 +1385,49 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "deleteSpaceSecret")).toBe(false);
   });
 
+  it("replaces an existing Router token when update receives an explicit override", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", DEFAULT_MODEL);
+    await hub.addSpaceSecret("alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_revoked");
+    hub.calls.length = 0;
+    const { prompt } = createPrompt([], false);
+    const runtime = await createRuntime(hub, prompt);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "space",
+      model: DEFAULT_MODEL,
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+    await writeSecretEnv(runtime.configRoot, "research", {
+      MLCLAW_ROUTER_TOKEN: "hf_router_revoked",
+    });
+
+    const code = await main([
+      "update",
+      "alice/research",
+      "--router-token",
+      "hf_router_replacement",
+    ], runtime);
+
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_replacement"],
+    });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      MLCLAW_ROUTER_TOKEN: "hf_router_replacement",
+    });
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(true);
+  });
+
   it("can bundle the current Space runtime during update when requested", async () => {
     const hub = createFakeHub();
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");

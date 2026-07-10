@@ -16529,7 +16529,8 @@ async function ensureUpdateRouterToken(params) {
     return;
   }
   const spaceSecrets = await params.hub.getSpaceSecrets(params.repoId);
-  if (hasRouterTokenSecretMap(spaceSecrets)) {
+  const hasExplicitOverride = params.opts.routerToken !== void 0 || params.opts.routerTokenFile !== void 0;
+  if (hasRouterTokenSecretMap(spaceSecrets) && !hasExplicitOverride) {
     return;
   }
   const hasManifest = await manifestExists(params.runtime.configRoot, params.agentName);
@@ -16915,9 +16916,9 @@ async function readOptionalTelegramToken(opts, runtime) {
   return void 0;
 }
 async function resolveRouterToken(params) {
-  const direct = params.opts.routerToken ?? params.runtime.env.MLCLAW_ROUTER_TOKEN ?? params.runtime.env.HF_ROUTER_TOKEN ?? params.existingSecrets?.MLCLAW_ROUTER_TOKEN ?? params.existingSecrets?.HF_ROUTER_TOKEN;
-  const fromFile = direct ? void 0 : await readOptionalRouterTokenFile(params.opts.routerTokenFile);
-  const existing = nonEmpty(direct) ?? fromFile;
+  const explicit = nonEmpty(params.opts.routerToken) ?? await readOptionalRouterTokenFile(params.opts.routerTokenFile);
+  const direct = explicit ?? params.runtime.env.MLCLAW_ROUTER_TOKEN ?? params.runtime.env.HF_ROUTER_TOKEN ?? params.existingSecrets?.MLCLAW_ROUTER_TOKEN ?? params.existingSecrets?.HF_ROUTER_TOKEN;
+  const existing = nonEmpty(direct);
   if (existing) {
     return existing;
   }
