@@ -87,6 +87,90 @@ describe("automatic MCP integrations", () => {
     }).status("alice")).rejects.toThrow("cannot be decrypted");
   });
 
+  it("serializes first load and keeps one deployment identity across admins", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "mcp-oauth.enc");
+    const writer = new McpCredentialStore({
+      file,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+    });
+    await writer.save({
+      username: "bob",
+      accessToken: "hf_bob",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+    }, "primary-admin");
+
+    const reader = new McpCredentialStore({
+      file,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+    });
+    const [status, token] = await Promise.all([
+      reader.status("primary-admin"),
+      reader.accessToken("primary-admin"),
+    ]);
+    expect(status).toMatchObject({ configured: true, username: "bob" });
+    expect(token).toBe("hf_bob");
+  });
+
+  it("reports expired unrefreshable credentials disconnected and clears stale expiry after refresh", async () => {
+    const root = await temporaryDirectory();
+    const expiredFile = path.join(root, "expired.enc");
+    const expired = new McpCredentialStore({
+      file: expiredFile,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      now: () => 2_000_000,
+    });
+    await expired.save({
+      username: "alice",
+      accessToken: "hf_expired",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+    await expect(expired.status("alice")).resolves.toMatchObject({ configured: false });
+
+    let refreshCalls = 0;
+    const refreshFile = path.join(root, "refresh.enc");
+    const refreshing = new McpCredentialStore({
+      file: refreshFile,
+      secret: "credential-secret",
+      providerUrl: "https://huggingface.test",
+      clientId: "client",
+      clientSecret: "client-secret",
+      now: () => 2_000_000,
+      fetchImpl: async () => {
+        refreshCalls += 1;
+        return Response.json({ access_token: "hf_refreshed", token_type: "Bearer" });
+      },
+    });
+    await refreshing.save({
+      username: "alice",
+      accessToken: "hf_old",
+      refreshToken: "refresh",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 1_000_000,
+    });
+    await expect(refreshing.accessToken("alice")).resolves.toBe("hf_refreshed");
+    await expect(refreshing.accessToken("alice")).resolves.toBe("hf_refreshed");
+    expect(refreshCalls).toBe(1);
+  });
+
+  it("scopes the credential file to the configured bucket prefix", () => {
+    const config = loadConfig({
+      SPACE_ID: "alice/mlclaw-test",
+      MLCLAW_SESSION_SECRET: "m".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
+      MLCLAW_STATE_MOUNT_DIR: "/data/mlclaw-state",
+      OPENCLAW_HF_STATE_PREFIX: "teams/alice",
+    });
+    expect(config.mcpCredentialFile).toBe("/data/mlclaw-state/teams/alice/.mlclaw/mcp-oauth.enc");
+  });
+
   it("forwards Hugging Face MCP with OAuth while hiding the token from OpenClaw", async () => {
     let upstreamAuthorization: string | undefined;
     const upstream = http.createServer(async (req, res) => {

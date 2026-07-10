@@ -48,7 +48,7 @@ export class McpCredentialStore {
   private readonly key: Buffer;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
-  private loaded = false;
+  private loadPromise: Promise<void> | undefined;
   private document: CredentialDocument = { version: 1, credentials: {} };
   private refreshes = new Map<string, Promise<string>>();
 
@@ -64,9 +64,9 @@ export class McpCredentialStore {
     this.now = options.now ?? Date.now;
   }
 
-  async save(identity: OAuthIdentity): Promise<void> {
+  async save(identity: OAuthIdentity, slot = identity.username): Promise<void> {
     await this.load();
-    this.document.credentials[identity.username] = {
+    this.document.credentials[slot] = {
       username: identity.username,
       accessToken: identity.accessToken,
       ...(identity.refreshToken ? { refreshToken: identity.refreshToken } : {}),
@@ -87,51 +87,61 @@ export class McpCredentialStore {
     await this.persist();
   }
 
-  async status(username: string): Promise<McpCredentialStatus> {
+  async status(slot: string): Promise<McpCredentialStatus> {
     await this.load();
-    const credential = this.document.credentials[username];
+    const credential = this.document.credentials[slot];
+    const refreshable = Boolean(credential?.refreshToken);
+    const configured = Boolean(credential && (
+      !credential.expiresAt || credential.expiresAt > this.now() + 60_000 || refreshable
+    ));
     return credential
       ? {
-          configured: true,
-          username,
+          configured,
+          username: credential.username,
           scope: [...credential.scope],
           expiresAt: credential.expiresAt ? new Date(credential.expiresAt).toISOString() : null,
-          refreshable: Boolean(credential.refreshToken),
+          refreshable,
         }
       : {
           configured: false,
-          username,
+          username: slot,
           scope: [],
           expiresAt: null,
           refreshable: false,
         };
   }
 
-  async accessToken(username: string): Promise<string> {
+  async accessToken(slot: string): Promise<string> {
     await this.load();
-    const credential = this.document.credentials[username];
+    const credential = this.document.credentials[slot];
     if (!credential) {
-      throw new Error(`Hugging Face MCP authorization is not configured for ${username}`);
+      throw new Error("Hugging Face MCP authorization is not configured");
     }
     if (!credential.expiresAt || credential.expiresAt > this.now() + 60_000) {
       return credential.accessToken;
     }
-    const existing = this.refreshes.get(username);
+    const existing = this.refreshes.get(slot);
     if (existing) {
       return existing;
     }
-    const refreshing = this.refresh(username, credential).finally(() => {
-      this.refreshes.delete(username);
+    const refreshing = this.refresh(slot, credential).finally(() => {
+      this.refreshes.delete(slot);
     });
-    this.refreshes.set(username, refreshing);
+    this.refreshes.set(slot, refreshing);
     return refreshing;
   }
 
   private async load(): Promise<void> {
-    if (this.loaded) {
-      return;
+    if (!this.loadPromise) {
+      this.loadPromise = this.loadFromDisk().catch((err) => {
+        this.loadPromise = undefined;
+        throw err;
+      });
     }
-    this.loaded = true;
+    await this.loadPromise;
+  }
+
+  private async loadFromDisk(): Promise<void> {
     let raw: string;
     try {
       raw = await fs.readFile(this.options.file, "utf8");
@@ -139,13 +149,11 @@ export class McpCredentialStore {
       if (isNotFound(err)) {
         return;
       }
-      this.loaded = false;
       throw new Error("Could not read encrypted MCP credentials");
     }
     try {
       this.document = decodeDocument(decryptEnvelope(raw, this.key));
     } catch {
-      this.loaded = false;
       throw new Error("Encrypted MCP credentials are invalid or cannot be decrypted");
     }
   }
@@ -165,7 +173,7 @@ export class McpCredentialStore {
     }
   }
 
-  private async refresh(username: string, credential: StoredCredential): Promise<string> {
+  private async refresh(slot: string, credential: StoredCredential): Promise<string> {
     if (!credential.refreshToken || !this.options.clientId || !this.options.clientSecret) {
       throw new Error("Hugging Face MCP authorization expired; sign in again");
     }
@@ -192,8 +200,9 @@ export class McpCredentialStore {
       throw new Error("Hugging Face MCP token refresh returned an invalid response");
     }
     const expiresIn = numberValue(body.expires_in);
+    const { expiresAt: _expired, ...credentialWithoutExpiry } = credential;
     const refreshed: StoredCredential = {
-      ...credential,
+      ...credentialWithoutExpiry,
       accessToken,
       refreshToken: stringValue(body.refresh_token) ?? credential.refreshToken,
       tokenType: stringValue(body.token_type) ?? credential.tokenType,
@@ -201,7 +210,7 @@ export class McpCredentialStore {
       ...(expiresIn ? { expiresAt: this.now() + expiresIn * 1000 } : {}),
       updatedAt: this.now(),
     };
-    this.document.credentials[username] = refreshed;
+    this.document.credentials[slot] = refreshed;
     await this.persist();
     return accessToken;
   }
@@ -253,11 +262,12 @@ function decodeDocument(value: unknown): CredentialDocument {
     const accessToken = stringValue(item.accessToken);
     const refreshToken = stringValue(item.refreshToken);
     const expiresAt = numberValue(item.expiresAt);
-    if (!accessToken || stringValue(item.username) !== username) {
+    const credentialUsername = stringValue(item.username);
+    if (!accessToken || !credentialUsername) {
       throw new Error("invalid credential");
     }
     credentials[username] = {
-      username,
+      username: credentialUsername,
       accessToken,
       ...(refreshToken ? { refreshToken } : {}),
       tokenType: stringValue(item.tokenType) ?? "Bearer",

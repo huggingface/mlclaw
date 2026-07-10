@@ -36,6 +36,22 @@ export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Prom
   }
 }
 
+export async function managedMcpServerStatus(config: SpaceRuntimeConfig): Promise<Array<{
+  id: string;
+  name: string;
+  enabled: boolean;
+}>> {
+  const raw = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8")) as Record<string, unknown>;
+  const servers = object(object(raw, "mcp"), "servers");
+  return [
+    { id: "huggingface", name: "Hugging Face MCP" },
+    { id: "research-agent", name: "Research Agent" },
+  ].map((server) => ({
+    ...server,
+    enabled: objectValue(servers[server.id])?.enabled !== false,
+  }));
+}
+
 function configureManagedMcpServers(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
   const mcp = object(openclawConfig, "mcp");
   const servers = object(mcp, "servers");
@@ -160,4 +176,10 @@ function object(parent: Record<string, unknown>, key: string): Record<string, un
   const created: Record<string, unknown> = {};
   parent[key] = created;
   return created;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }

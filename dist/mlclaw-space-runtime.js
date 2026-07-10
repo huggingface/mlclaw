@@ -299,6 +299,13 @@ function isMissingFileError(err) {
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 
+// src/hf-state-sync/paths.ts
+var DEFAULT_BUCKET_PREFIX = "openclaw-state";
+function normalizeBucketPrefix(prefix) {
+  const normalized = (prefix?.trim() || DEFAULT_BUCKET_PREFIX).replace(/^\/+|\/+$/g, "");
+  return normalized || DEFAULT_BUCKET_PREFIX;
+}
+
 // src/mlclaw-space-runtime/branding.ts
 var DEFAULT_BRAND_NAME = "ML Claw";
 var DEFAULT_THEME_COLOR = "#111827";
@@ -937,12 +944,17 @@ function loadConfig(env = process.env) {
   ]);
   const publicUrl = publicUrlFromEnv(env, port);
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
-  const credentialKey = trim(env.MLCLAW_CREDENTIAL_KEY) ?? randomBytes(32).toString("base64url");
+  const configuredCredentialKey = trim(env.MLCLAW_CREDENTIAL_KEY);
+  if (mode === "app" && !configuredCredentialKey) {
+    throw new Error("MLCLAW_CREDENTIAL_KEY is required in app mode; run mlclaw doctor --fix");
+  }
+  const credentialKey = configuredCredentialKey ?? randomBytes(32).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
   const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
   const stateMountDir = trim(env.MLCLAW_STATE_MOUNT_DIR);
-  const mcpCredentialFile = trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/.mlclaw/mcp-oauth.enc` : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
+  const statePrefix = trim(env.OPENCLAW_HF_STATE_PREFIX);
+  const mcpCredentialFile = trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc` : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
   const runtimeSettings2 = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings2.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
@@ -960,7 +972,7 @@ function loadConfig(env = process.env) {
     sessionSecret,
     sessionSecretGenerated: !trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET),
     credentialKey,
-    credentialKeyGenerated: !trim(env.MLCLAW_CREDENTIAL_KEY),
+    credentialKeyGenerated: !configuredCredentialKey,
     cookieSecure: env.MLCLAW_COOKIE_SECURE === "0" ? false : !publicUrl.startsWith("http://"),
     spaceId,
     canonicalSpaceId,
@@ -989,7 +1001,7 @@ function loadConfig(env = process.env) {
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
     stateMountDir,
-    statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
+    statePrefix,
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
@@ -997,6 +1009,9 @@ function loadConfig(env = process.env) {
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName)
   };
+}
+function integrationCredentialSlot(config2) {
+  return config2.adminUsers[0];
 }
 function pathDirname(file) {
   const slash = file.lastIndexOf("/");
@@ -7463,13 +7478,14 @@ var McpIntegrationServer = class {
       writeJson(res, 404, mcpError(null, -32601, "Not found"));
       return;
     }
-    if (!this.config.adminUsers[0]) {
+    const credentialSlot = integrationCredentialSlot(this.config);
+    if (!credentialSlot) {
       writeJson(res, 503, mcpError(null, -32002, "ML Claw has no primary admin"));
       return;
     }
     let accessToken;
     try {
-      accessToken = await this.credentials.accessToken(this.config.adminUsers[0]);
+      accessToken = await this.credentials.accessToken(credentialSlot);
     } catch (err) {
       writeJson(res, 503, mcpError(null, -32002, safeError(err)));
       return;
@@ -7866,6 +7882,17 @@ async function configureOpenClawGateway(config2) {
     await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
 }
+async function managedMcpServerStatus(config2) {
+  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
+  const servers = object(object(raw2, "mcp"), "servers");
+  return [
+    { id: "huggingface", name: "Hugging Face MCP" },
+    { id: "research-agent", name: "Research Agent" }
+  ].map((server2) => ({
+    ...server2,
+    enabled: objectValue2(servers[server2.id])?.enabled !== false
+  }));
+}
 function configureManagedMcpServers(openclawConfig, config2) {
   const mcp = object(openclawConfig, "mcp");
   const servers = object(mcp, "servers");
@@ -7964,6 +7991,9 @@ function object(parent, key) {
   const created = {};
   parent[key] = created;
   return created;
+}
+function objectValue2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
@@ -8622,8 +8652,8 @@ function createSpaceRuntimeApp(config2, controls) {
     if (csrf) {
       return csrf;
     }
-    const integrationUser = config2.adminUsers[0] ?? auth.username;
-    await controls.clearMcpCredentials(integrationUser);
+    const credentialSlot = integrationCredentialSlot(config2) ?? auth.username;
+    await controls.clearMcpCredentials(credentialSlot);
     return c.json({ ok: true, configured: false });
   });
   app.get("/mlclaw/api/settings", (c) => {
@@ -8875,12 +8905,12 @@ function isAdmin(config2, username) {
   return config2.adminUsers.includes(username);
 }
 async function statusPayload(config2, controls) {
-  const integrationUser = config2.adminUsers[0] ?? "";
+  const credentialSlot = integrationCredentialSlot(config2) ?? "";
   let mcpCredentials;
   let mcpCredentialError;
-  if (integrationUser) {
+  if (credentialSlot) {
     try {
-      mcpCredentials = await controls.mcpCredentialStatus(integrationUser);
+      mcpCredentials = await controls.mcpCredentialStatus(credentialSlot);
     } catch {
       mcpCredentialError = "Encrypted MCP credentials could not be loaded";
     }
@@ -8916,16 +8946,13 @@ async function statusPayload(config2, controls) {
     },
     integrations: {
       automatic: true,
-      identity: integrationUser || null,
+      identity: mcpCredentials?.configured ? mcpCredentials.username : null,
       configured: mcpCredentials?.configured ?? false,
       scope: mcpCredentials?.scope ?? [],
       expiresAt: mcpCredentials?.expiresAt ?? null,
       refreshable: mcpCredentials?.refreshable ?? false,
       error: mcpCredentialError ?? null,
-      servers: [
-        { id: "huggingface", name: "Hugging Face MCP", enabled: true },
-        { id: "research-agent", name: "Research Agent", enabled: true }
-      ]
+      servers: await controls.mcpServerStatus()
     },
     branding: publicBranding(config2.branding)
   };
@@ -9038,12 +9065,12 @@ var McpCredentialStore = class {
   key;
   fetchImpl;
   now;
-  loaded = false;
+  loadPromise;
   document = { version: 1, credentials: {} };
   refreshes = /* @__PURE__ */ new Map();
-  async save(identity) {
+  async save(identity, slot = identity.username) {
     await this.load();
-    this.document.credentials[identity.username] = {
+    this.document.credentials[slot] = {
       username: identity.username,
       accessToken: identity.accessToken,
       ...identity.refreshToken ? { refreshToken: identity.refreshToken } : {},
@@ -9062,47 +9089,54 @@ var McpCredentialStore = class {
     delete this.document.credentials[username];
     await this.persist();
   }
-  async status(username) {
+  async status(slot) {
     await this.load();
-    const credential = this.document.credentials[username];
+    const credential = this.document.credentials[slot];
+    const refreshable = Boolean(credential?.refreshToken);
+    const configured = Boolean(credential && (!credential.expiresAt || credential.expiresAt > this.now() + 6e4 || refreshable));
     return credential ? {
-      configured: true,
-      username,
+      configured,
+      username: credential.username,
       scope: [...credential.scope],
       expiresAt: credential.expiresAt ? new Date(credential.expiresAt).toISOString() : null,
-      refreshable: Boolean(credential.refreshToken)
+      refreshable
     } : {
       configured: false,
-      username,
+      username: slot,
       scope: [],
       expiresAt: null,
       refreshable: false
     };
   }
-  async accessToken(username) {
+  async accessToken(slot) {
     await this.load();
-    const credential = this.document.credentials[username];
+    const credential = this.document.credentials[slot];
     if (!credential) {
-      throw new Error(`Hugging Face MCP authorization is not configured for ${username}`);
+      throw new Error("Hugging Face MCP authorization is not configured");
     }
     if (!credential.expiresAt || credential.expiresAt > this.now() + 6e4) {
       return credential.accessToken;
     }
-    const existing = this.refreshes.get(username);
+    const existing = this.refreshes.get(slot);
     if (existing) {
       return existing;
     }
-    const refreshing = this.refresh(username, credential).finally(() => {
-      this.refreshes.delete(username);
+    const refreshing = this.refresh(slot, credential).finally(() => {
+      this.refreshes.delete(slot);
     });
-    this.refreshes.set(username, refreshing);
+    this.refreshes.set(slot, refreshing);
     return refreshing;
   }
   async load() {
-    if (this.loaded) {
-      return;
+    if (!this.loadPromise) {
+      this.loadPromise = this.loadFromDisk().catch((err) => {
+        this.loadPromise = void 0;
+        throw err;
+      });
     }
-    this.loaded = true;
+    await this.loadPromise;
+  }
+  async loadFromDisk() {
     let raw2;
     try {
       raw2 = await fs5.readFile(this.options.file, "utf8");
@@ -9110,13 +9144,11 @@ var McpCredentialStore = class {
       if (isNotFound(err)) {
         return;
       }
-      this.loaded = false;
       throw new Error("Could not read encrypted MCP credentials");
     }
     try {
       this.document = decodeDocument(decryptEnvelope(raw2, this.key));
     } catch {
-      this.loaded = false;
       throw new Error("Encrypted MCP credentials are invalid or cannot be decrypted");
     }
   }
@@ -9135,7 +9167,7 @@ var McpCredentialStore = class {
       await fs5.rm(temporary, { force: true });
     }
   }
-  async refresh(username, credential) {
+  async refresh(slot, credential) {
     if (!credential.refreshToken || !this.options.clientId || !this.options.clientSecret) {
       throw new Error("Hugging Face MCP authorization expired; sign in again");
     }
@@ -9162,8 +9194,9 @@ var McpCredentialStore = class {
       throw new Error("Hugging Face MCP token refresh returned an invalid response");
     }
     const expiresIn = numberValue(body.expires_in);
+    const { expiresAt: _expired, ...credentialWithoutExpiry } = credential;
     const refreshed = {
-      ...credential,
+      ...credentialWithoutExpiry,
       accessToken,
       refreshToken: stringValue4(body.refresh_token) ?? credential.refreshToken,
       tokenType: stringValue4(body.token_type) ?? credential.tokenType,
@@ -9171,7 +9204,7 @@ var McpCredentialStore = class {
       ...expiresIn ? { expiresAt: this.now() + expiresIn * 1e3 } : {},
       updatedAt: this.now()
     };
-    this.document.credentials[username] = refreshed;
+    this.document.credentials[slot] = refreshed;
     await this.persist();
     return accessToken;
   }
@@ -9219,11 +9252,12 @@ function decodeDocument(value) {
     const accessToken = stringValue4(item.accessToken);
     const refreshToken = stringValue4(item.refreshToken);
     const expiresAt = numberValue(item.expiresAt);
-    if (!accessToken || stringValue4(item.username) !== username) {
+    const credentialUsername = stringValue4(item.username);
+    if (!accessToken || !credentialUsername) {
       throw new Error("invalid credential");
     }
     credentials[username] = {
-      username,
+      username: credentialUsername,
       accessToken,
       ...refreshToken ? { refreshToken } : {},
       tokenType: stringValue4(item.tokenType) ?? "Bearer",
@@ -9421,6 +9455,7 @@ var SpaceRuntimeServer = class {
       ...config2.oauthClientSecret ? { clientSecret: config2.oauthClientSecret } : {}
     });
     this.mcpIntegrations = new McpIntegrationServer(config2, this.mcpCredentials);
+    const credentialSlot = integrationCredentialSlot(config2);
     this.app = createSpaceRuntimeApp(config2, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
       openAiConfigured: async () => openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
@@ -9430,9 +9465,15 @@ var SpaceRuntimeServer = class {
         this.config.model = model;
         this.config.modelChoices = choices;
       },
-      saveMcpCredentials: (identity) => this.mcpCredentials.save(identity),
-      clearMcpCredentials: (username) => this.mcpCredentials.clear(username),
-      mcpCredentialStatus: (username) => this.mcpCredentials.status(username)
+      saveMcpCredentials: async (identity) => {
+        if (!credentialSlot) {
+          throw new Error("ML Claw has no integration administrator");
+        }
+        await this.mcpCredentials.save(identity, credentialSlot);
+      },
+      clearMcpCredentials: (slot) => this.mcpCredentials.clear(slot),
+      mcpCredentialStatus: (slot) => this.mcpCredentials.status(slot),
+      mcpServerStatus: () => managedMcpServerStatus(this.config)
     });
   }
   openclaw;
@@ -9540,8 +9581,9 @@ var SpaceRuntimeServer = class {
       return;
     }
     if (this.isAdmin(session.username) && this.config.oauthClientId && this.config.oauthClientSecret && isBrowserNavigation2(req)) {
-      const authorization = await this.mcpCredentials.status(session.username);
-      if (!authorization.configured) {
+      const credentialSlot = integrationCredentialSlot(this.config);
+      const authorization = credentialSlot ? await this.mcpCredentials.status(credentialSlot) : void 0;
+      if (!authorization?.configured) {
         const next = normalizeNext(`${url.pathname}${url.search}`);
         this.sendRedirect(res, `/oauth/login?next=${encodeURIComponent(next)}`);
         return;
@@ -9710,9 +9752,6 @@ var server = new SpaceRuntimeServer(config);
 var toolingSeedAbort = new AbortController();
 if (config.sessionSecretGenerated && config.mode === "app") {
   process2.stderr.write("[mlclaw] MLCLAW_SESSION_SECRET is missing; generated an ephemeral session secret for this boot\n");
-}
-if (config.credentialKeyGenerated && config.mode === "app") {
-  process2.stderr.write("[mlclaw] MLCLAW_CREDENTIAL_KEY is missing; generated an ephemeral credential key for this boot\n");
 }
 var httpServer = await server.start();
 if (config.mode === "app") {

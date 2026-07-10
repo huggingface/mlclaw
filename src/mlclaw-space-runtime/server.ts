@@ -4,10 +4,10 @@ import type net from "node:net";
 import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { createSpaceRuntimeApp } from "./app.js";
-import type { SpaceRuntimeConfig } from "./config.js";
+import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import { McpCredentialStore } from "./mcp-credentials.js";
 import { McpIntegrationServer } from "./mcp-integrations.js";
-import { configureOpenClawGateway } from "./openclaw-config.js";
+import { configureOpenClawGateway, managedMcpServerStatus } from "./openclaw-config.js";
 import { loadOpenAiCredentialFile, openAiConfigured } from "./openai-credentials.js";
 import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
 import { proxyHttp, proxyWebSocket, rejectWebSocket } from "./proxy.js";
@@ -36,6 +36,7 @@ export class SpaceRuntimeServer {
       ...(config.oauthClientSecret ? { clientSecret: config.oauthClientSecret } : {}),
     });
     this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials);
+    const credentialSlot = integrationCredentialSlot(config);
     this.app = createSpaceRuntimeApp(config, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
       openAiConfigured: async () =>
@@ -46,9 +47,15 @@ export class SpaceRuntimeServer {
         this.config.model = model;
         this.config.modelChoices = choices;
       },
-      saveMcpCredentials: (identity) => this.mcpCredentials.save(identity),
-      clearMcpCredentials: (username) => this.mcpCredentials.clear(username),
-      mcpCredentialStatus: (username) => this.mcpCredentials.status(username),
+      saveMcpCredentials: async (identity) => {
+        if (!credentialSlot) {
+          throw new Error("ML Claw has no integration administrator");
+        }
+        await this.mcpCredentials.save(identity, credentialSlot);
+      },
+      clearMcpCredentials: (slot) => this.mcpCredentials.clear(slot),
+      mcpCredentialStatus: (slot) => this.mcpCredentials.status(slot),
+      mcpServerStatus: () => managedMcpServerStatus(this.config),
     });
   }
 
@@ -153,8 +160,9 @@ export class SpaceRuntimeServer {
       return;
     }
     if (this.isAdmin(session.username) && this.config.oauthClientId && this.config.oauthClientSecret && isBrowserNavigation(req)) {
-      const authorization = await this.mcpCredentials.status(session.username);
-      if (!authorization.configured) {
+      const credentialSlot = integrationCredentialSlot(this.config);
+      const authorization = credentialSlot ? await this.mcpCredentials.status(credentialSlot) : undefined;
+      if (!authorization?.configured) {
         const next = normalizeNext(`${url.pathname}${url.search}`);
         this.sendRedirect(res, `/oauth/login?next=${encodeURIComponent(next)}`);
         return;

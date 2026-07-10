@@ -3,7 +3,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { brandingManifest, publicBranding } from "./branding.js";
-import type { SpaceRuntimeConfig } from "./config.js";
+import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
@@ -39,6 +39,7 @@ export type RuntimeControls = {
   saveMcpCredentials(identity: OAuthIdentity): Promise<void>;
   clearMcpCredentials(username: string): Promise<void>;
   mcpCredentialStatus(username: string): Promise<McpCredentialStatus>;
+  mcpServerStatus(): Promise<Array<{ id: string; name: string; enabled: boolean }>>;
 };
 
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
@@ -113,8 +114,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (csrf) {
       return csrf;
     }
-    const integrationUser = config.adminUsers[0] ?? auth.username;
-    await controls.clearMcpCredentials(integrationUser);
+    const credentialSlot = integrationCredentialSlot(config) ?? auth.username;
+    await controls.clearMcpCredentials(credentialSlot);
     return c.json({ ok: true, configured: false });
   });
 
@@ -385,12 +386,12 @@ function isAdmin(config: SpaceRuntimeConfig, username: string): boolean {
 }
 
 async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeControls): Promise<Record<string, unknown>> {
-  const integrationUser = config.adminUsers[0] ?? "";
+  const credentialSlot = integrationCredentialSlot(config) ?? "";
   let mcpCredentials: McpCredentialStatus | undefined;
   let mcpCredentialError: string | undefined;
-  if (integrationUser) {
+  if (credentialSlot) {
     try {
-      mcpCredentials = await controls.mcpCredentialStatus(integrationUser);
+      mcpCredentials = await controls.mcpCredentialStatus(credentialSlot);
     } catch {
       mcpCredentialError = "Encrypted MCP credentials could not be loaded";
     }
@@ -426,16 +427,13 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     },
     integrations: {
       automatic: true,
-      identity: integrationUser || null,
+      identity: mcpCredentials?.configured ? mcpCredentials.username : null,
       configured: mcpCredentials?.configured ?? false,
       scope: mcpCredentials?.scope ?? [],
       expiresAt: mcpCredentials?.expiresAt ?? null,
       refreshable: mcpCredentials?.refreshable ?? false,
       error: mcpCredentialError ?? null,
-      servers: [
-        { id: "huggingface", name: "Hugging Face MCP", enabled: true },
-        { id: "research-agent", name: "Research Agent", enabled: true },
-      ],
+      servers: await controls.mcpServerStatus(),
     },
     branding: publicBranding(config.branding),
   };

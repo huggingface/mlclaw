@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
-import type { SpaceRuntimeConfig } from "./config.js";
+import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import type { McpCredentialStore } from "./mcp-credentials.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -80,13 +80,14 @@ export class McpIntegrationServer {
       writeJson(res, 404, mcpError(null, -32601, "Not found"));
       return;
     }
-    if (!this.config.adminUsers[0]) {
+    const credentialSlot = integrationCredentialSlot(this.config);
+    if (!credentialSlot) {
       writeJson(res, 503, mcpError(null, -32002, "ML Claw has no primary admin"));
       return;
     }
     let accessToken: string;
     try {
-      accessToken = await this.credentials.accessToken(this.config.adminUsers[0]);
+      accessToken = await this.credentials.accessToken(credentialSlot);
     } catch (err) {
       writeJson(res, 503, mcpError(null, -32002, safeError(err)));
       return;

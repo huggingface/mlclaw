@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 import { resolveBranding, type RuntimeBranding } from "./branding.js";
 import { DEFAULT_MODEL, normalizeModelChoices, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
 
@@ -85,13 +86,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   ]);
   const publicUrl = publicUrlFromEnv(env, port);
   const sessionSecret = trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET) ?? randomBytes(48).toString("base64url");
-  const credentialKey = trim(env.MLCLAW_CREDENTIAL_KEY) ?? randomBytes(32).toString("base64url");
+  const configuredCredentialKey = trim(env.MLCLAW_CREDENTIAL_KEY);
+  if (mode === "app" && !configuredCredentialKey) {
+    throw new Error("MLCLAW_CREDENTIAL_KEY is required in app mode; run mlclaw doctor --fix");
+  }
+  const credentialKey = configuredCredentialKey ?? randomBytes(32).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
   const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
   const stateMountDir = trim(env.MLCLAW_STATE_MOUNT_DIR);
+  const statePrefix = trim(env.OPENCLAW_HF_STATE_PREFIX);
   const mcpCredentialFile = trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ?? (stateMountDir
-    ? `${stateMountDir.replace(/\/+$/, "")}/.mlclaw/mcp-oauth.enc`
+    ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc`
     : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
   const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
@@ -111,7 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     sessionSecret,
     sessionSecretGenerated: !trim(env.MLCLAW_SESSION_SECRET ?? env.SESSION_SECRET),
     credentialKey,
-    credentialKeyGenerated: !trim(env.MLCLAW_CREDENTIAL_KEY),
+    credentialKeyGenerated: !configuredCredentialKey,
     cookieSecure: env.MLCLAW_COOKIE_SECURE === "0" ? false : !publicUrl.startsWith("http://"),
     spaceId,
     canonicalSpaceId,
@@ -140,7 +146,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket: trim(env.OPENCLAW_HF_STATE_BUCKET),
     stateMountDir,
-    statePrefix: trim(env.OPENCLAW_HF_STATE_PREFIX),
+    statePrefix,
     gatewayLocation: trim(env.MLCLAW_GATEWAY_LOCATION),
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
@@ -148,6 +154,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName),
   };
+}
+
+export function integrationCredentialSlot(config: Pick<SpaceRuntimeConfig, "adminUsers">): string | undefined {
+  return config.adminUsers[0];
 }
 
 function pathDirname(file: string): string {

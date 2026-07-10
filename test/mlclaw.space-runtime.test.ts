@@ -22,6 +22,13 @@ afterEach(async () => {
 });
 
 describe("ML Claw Space runtime", () => {
+  it("fails closed when an app deployment has no durable credential key", () => {
+    expect(() => loadConfig({
+      SPACE_ID: "alice/research",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+    })).toThrow("MLCLAW_CREDENTIAL_KEY is required");
+  });
+
   it("includes the curated Router model presets", () => {
     expect(PRESET_MODEL_CHOICES.map((choice) => choice.openclawModel)).toEqual(
       expect.arrayContaining([
@@ -75,6 +82,10 @@ describe("ML Claw Space runtime", () => {
 
   it("requires an authenticated allowed session before returning deployment status", async () => {
     const config = await testConfig();
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify({
+      gateway: {},
+      mcp: { servers: { "research-agent": { enabled: false } } },
+    }), "utf8");
     const runtime = new SpaceRuntimeServer(config);
     const server = await runtime.start();
     cleanups.push(() => closeServer(server), () => runtime.stop());
@@ -106,6 +117,12 @@ describe("ML Claw Space runtime", () => {
       auth: {
         allowedUsers: ["alice"],
         adminUsers: ["alice"],
+      },
+      integrations: {
+        servers: [
+          { id: "huggingface", enabled: true },
+          { id: "research-agent", enabled: false },
+        ],
       },
     });
   });
@@ -993,6 +1010,10 @@ describe("ML Claw Space runtime", () => {
         expiresAt: null,
         refreshable: false,
       }),
+      mcpServerStatus: async () => [
+        { id: "huggingface", name: "Hugging Face MCP", enabled: true },
+        { id: "research-agent", name: "Research Agent", enabled: true },
+      ],
     });
     const cookie = sessionCookie(config, "alice");
     const csrf = createCsrfToken({ username: "alice", sessionSecret: config.sessionSecret });
@@ -1109,6 +1130,7 @@ describe("ML Claw Space runtime", () => {
       SPACE_ID: "osolmaz/research",
       MLCLAW_ALLOWED_USERS: "alice,bob",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
     expect(config.adminUsers).toEqual(["osolmaz"]);
@@ -1121,6 +1143,7 @@ describe("ML Claw Space runtime", () => {
       MLCLAW_ALLOWED_USERS: "alice",
       MLCLAW_ADMINS: "bob",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
     expect(config.adminUsers).toEqual(["bob"]);
@@ -1133,6 +1156,7 @@ describe("ML Claw Space runtime", () => {
       SPACE_CREATOR_USER_ID: "42",
       MLCLAW_CANONICAL_CREATOR_USER_ID: "42",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
     expect(config.mode).toBe("template");
@@ -1144,6 +1168,7 @@ describe("ML Claw Space runtime", () => {
       SPACE_CREATOR_USER_ID: "42",
       MLCLAW_CANONICAL_CREATOR_USER_ID: "42",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
     expect(config.mode).toBe("app");
@@ -1154,6 +1179,7 @@ describe("ML Claw Space runtime", () => {
       SPACE_ID: "osolmaz/bob-lab",
       OPENCLAW_AGENT_NAME: "bob-lab",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
     expect(derived.branding).toMatchObject({
       name: "Bob Lab",
@@ -1174,6 +1200,7 @@ describe("ML Claw Space runtime", () => {
       MLCLAW_BRAND_THEME_COLOR: "#abc",
       MLCLAW_BRAND_LOGO: "/assets/custom/logo.svg",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
     expect(explicit.branding).toMatchObject({
       name: "Bob Research",

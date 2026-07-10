@@ -15925,6 +15925,7 @@ async function deploySpaceGateway(params) {
 }
 async function startLocalGateway(params) {
   const { manifest, runtime } = params;
+  await ensureDeploymentCredentialKey(runtime, manifest.agent);
   const containerName = containerNameFor(manifest.agent);
   const volumeName = volumeNameFor(manifest.agent);
   const dockerContext = dockerContextFor(manifest);
@@ -16064,7 +16065,7 @@ async function gatewayMigrate(agent, opts, runtime) {
   }
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
-  const secrets = await readSecretEnv(runtime.configRoot, agent);
+  const secrets = await ensureDeploymentCredentialKey(runtime, agent);
   const bucketPrefix = persistedBucketPrefix(secrets);
   const updated = {
     ...current,
@@ -16439,6 +16440,18 @@ function requiredSecret(secrets, key) {
   }
   return value;
 }
+async function ensureDeploymentCredentialKey(runtime, agent, existing) {
+  const secrets = existing ?? await readSecretEnv(runtime.configRoot, agent).catch(() => ({}));
+  if (secrets.MLCLAW_CREDENTIAL_KEY) {
+    return secrets;
+  }
+  const updated = {
+    ...secrets,
+    MLCLAW_CREDENTIAL_KEY: randomBytes(32).toString("base64url")
+  };
+  await writeSecretEnv(runtime.configRoot, agent, updated);
+  return updated;
+}
 function requiredOption(value, label) {
   if (!value) {
     throw new Error(`${label} is required`);
@@ -16603,7 +16616,9 @@ async function doctor(repoId, opts, hub, runtime) {
   }
   if (!secrets.has("MLCLAW_CREDENTIAL_KEY")) {
     if (fix) {
-      await hub.addSpaceSecret(repoId, "MLCLAW_CREDENTIAL_KEY", randomBytes(32).toString("base64url"));
+      const agent = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
+      const credentialKey = await manifestExists(runtime.configRoot, agent) ? requiredSecret(await ensureDeploymentCredentialKey(runtime, agent), "MLCLAW_CREDENTIAL_KEY") : randomBytes(32).toString("base64url");
+      await hub.addSpaceSecret(repoId, "MLCLAW_CREDENTIAL_KEY", credentialKey);
       fixed.push("set secret MLCLAW_CREDENTIAL_KEY");
     } else {
       issues.push("secret MLCLAW_CREDENTIAL_KEY is missing");

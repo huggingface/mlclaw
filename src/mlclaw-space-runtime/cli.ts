@@ -11,10 +11,6 @@ const toolingSeedAbort = new AbortController();
 if (config.sessionSecretGenerated && config.mode === "app") {
   process.stderr.write("[mlclaw] MLCLAW_SESSION_SECRET is missing; generated an ephemeral session secret for this boot\n");
 }
-if (config.credentialKeyGenerated && config.mode === "app") {
-  process.stderr.write("[mlclaw] MLCLAW_CREDENTIAL_KEY is missing; generated an ephemeral credential key for this boot\n");
-}
-
 const httpServer = await server.start();
 
 if (config.mode === "app") {

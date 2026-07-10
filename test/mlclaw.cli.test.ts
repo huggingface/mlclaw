@@ -904,7 +904,6 @@ describe("mlclaw CLI", () => {
       MLCLAW_RUNTIME_ID: "space-research",
       MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
       MLCLAW_SESSION_SECRET: "session-secret",
-      MLCLAW_CREDENTIAL_KEY: "credential-key",
       MLCLAW_ROUTER_TOKEN: "hf_router_saved",
     });
 
@@ -920,6 +919,10 @@ describe("mlclaw CLI", () => {
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
       args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_saved"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_CREDENTIAL_KEY", expect.any(String)],
     });
   });
 
@@ -1673,7 +1676,6 @@ describe("mlclaw CLI", () => {
       MLCLAW_RUNTIME_ID: "local-research-existing",
       MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
       MLCLAW_SESSION_SECRET: "session-secret",
-      MLCLAW_CREDENTIAL_KEY: "credential-key",
       MLCLAW_ROUTER_TOKEN: "hf_router_saved",
     });
 
@@ -1691,6 +1693,10 @@ describe("mlclaw CLI", () => {
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
       args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_saved"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_CREDENTIAL_KEY", expect.any(String)],
     });
   });
 
@@ -2437,7 +2443,6 @@ describe("mlclaw CLI", () => {
       MLCLAW_RUNTIME_ID: "space-research",
       MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
       MLCLAW_SESSION_SECRET: "session-secret",
-      MLCLAW_CREDENTIAL_KEY: "credential-key",
     });
 
     await expect(main(["gateway", "migrate", "research", "--to", "local", "--no-pull"], runtime)).resolves.toBe(0);
