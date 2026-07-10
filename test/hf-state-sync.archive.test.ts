@@ -40,6 +40,9 @@ async function buildFakeLiveDir(): Promise<string> {
   await fs.mkdir(path.join(state, "cache"), { recursive: true });
   await fs.mkdir(path.join(live, "workspace"), { recursive: true });
   await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker"), { recursive: true });
+  await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker/mirrors/dataset/example.git"), {
+    recursive: true,
+  });
   await fs.writeFile(path.join(state, "openclaw.json"), '{"agent":true}');
   await fs.writeFile(path.join(state, ".env"), "SECRET=topsecret");
   await fs.writeFile(path.join(state, "credentials/telegram.json"), '{"token":"secret"}');
@@ -47,6 +50,10 @@ async function buildFakeLiveDir(): Promise<string> {
   await fs.writeFile(path.join(state, "gateway.log"), "log line");
   await fs.writeFile(path.join(live, "workspace/draft.md"), "user work");
   await fs.writeFile(path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker/grants.json"), "protected grant state");
+  await fs.writeFile(
+    path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker/mirrors/dataset/example.git/HEAD"),
+    "ref: refs/heads/main\n",
+  );
   // Workspace content named like scratch must still survive (scoped excludes).
   await fs.mkdir(path.join(live, "workspace/logs"), { recursive: true });
   await fs.writeFile(path.join(live, "workspace/logs/research.log"), "durable user log");
@@ -118,6 +125,7 @@ describe("protected staging", () => {
     await expect(
       fs.readFile(path.join(extracted, PROTECTED_STATE_DIR_NAME, "hf-broker/grants.json"), "utf8"),
     ).resolves.toBe("protected grant state");
+    await expect(fs.access(path.join(extracted, PROTECTED_STATE_DIR_NAME, "hf-broker/mirrors"))).rejects.toThrow();
     expect((await fs.stat(path.join(extracted, PROTECTED_STATE_DIR_NAME))).mode & 0o777).toBe(0o700);
   });
 });

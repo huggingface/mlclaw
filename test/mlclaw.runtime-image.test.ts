@@ -56,13 +56,18 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain("node /app/hf-state-sync.js prepare-restore");
     expect(entrypoint).toContain('export MLCLAW_OPENCLAW_UID="$OPENCLAW_UID"');
     expect(entrypoint).toContain('export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"');
-    expect(entrypoint).toContain('PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"');
+    expect(entrypoint).toContain('RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"');
+    expect(entrypoint).toContain('PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"');
     expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"');
+    expect(entrypoint).toContain("MLCLAW_ROUTER_TOKEN:-${HF_ROUTER_TOKEN:-${HF_TOKEN:-");
     expect(entrypoint).toContain('export MLCLAW_PROTECTED_STATE_DIR="$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain('env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" timeout');
     expect(entrypoint).toContain('export MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN"');
     expect(entrypoint).toContain("! -name .mlclaw-protected");
     expect(entrypoint.indexOf("node /app/hf-state-sync.js prepare-restore")).toBeLessThan(
+      entrypoint.lastIndexOf("\nstart_hf_broker\n"),
+    );
+    expect(entrypoint.indexOf("\nrestore_protected_state\n")).toBeLessThan(
       entrypoint.lastIndexOf("\nstart_hf_broker\n"),
     );
     expect(entrypoint).toContain('if [ -z "${MLCLAW_OPERATOR_BROKERS_FILE:-}" ]; then');

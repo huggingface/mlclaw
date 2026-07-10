@@ -10,11 +10,12 @@ export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"
 HF_BROKER_ENABLED=0
 HF_BROKER_RUN_DIR="/run/mlclaw-hf-broker"
 STATE_HF_TOKEN=""
-PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
+RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
+PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"
 HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"
 
 prepare_hf_broker() {
-  local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
+  local broker_token="${MLCLAW_BROKER_HF_TOKEN:-${MLCLAW_ROUTER_TOKEN:-${HF_ROUTER_TOKEN:-${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}}}}"
   if [ -z "$broker_token" ]; then
     echo "[hf-broker] MLCLAW_BROKER_HF_TOKEN is not configured; broker disabled"
     return
@@ -41,7 +42,7 @@ prepare_hf_broker() {
   chmod 0600 "$token_file" "$agent_secret_file" "$operator_secret_file" "$broker_agent_secrets" "$broker_operator_secrets" "$operator_brokers_file"
 
   if [ -z "${MLCLAW_STATE_MOUNT_DIR:-}" ]; then
-    STATE_HF_TOKEN="$broker_token"
+    STATE_HF_TOKEN="${MLCLAW_BROKER_HF_TOKEN:-${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-$broker_token}}}"
   fi
 
   export MLCLAW_HF_BROKER_URL="http://127.0.0.1:7863"
@@ -50,6 +51,20 @@ prepare_hf_broker() {
     export MLCLAW_OPERATOR_BROKERS_FILE="$operator_brokers_file"
   fi
   HF_BROKER_ENABLED=1
+}
+
+restore_protected_state() {
+  install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR"
+  if [ -d "$RESTORED_PROTECTED_STATE_DIR" ]; then
+    find "$PROTECTED_STATE_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    cp -a "$RESTORED_PROTECTED_STATE_DIR/." "$PROTECTED_STATE_DIR/"
+    rm -rf "$RESTORED_PROTECTED_STATE_DIR"
+  fi
+  install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR/control"
+  install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
+  chown -R root:root "$PROTECTED_STATE_DIR/control"
+  chown -R hf-broker:hf-broker "$HF_BROKER_STATE_DIR"
+  chmod 0700 "$PROTECTED_STATE_DIR" "$PROTECTED_STATE_DIR/control" "$HF_BROKER_STATE_DIR"
 }
 
 start_hf_broker() {
@@ -107,7 +122,7 @@ export MLCLAW_OPENAI_CREDENTIAL_STORE_FILE="$PROTECTED_STATE_DIR/control/openai-
 # OpenClaw. The token is already in the broker-owned runtime file before the
 # environment is scrubbed; local bucket state sync receives a dedicated copy
 # only around trusted restore and supervisor execution.
-unset MLCLAW_BROKER_HF_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN
+unset MLCLAW_BROKER_HF_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN HF_TOKEN HUGGINGFACE_HUB_TOKEN
 
 # State, workspace, and config paths are ALWAYS derived from the live dir,
 # never inherited: older deployments set OPENCLAW_STATE_DIR=/data/... as Space
@@ -134,6 +149,7 @@ else
   env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" gosu "$OPENCLAW_IDENTITY" node /app/hf-state-sync.js restore
 fi
 echo "[hf-state-sync] restore complete"
+restore_protected_state
 
 if [ -n "${MLCLAW_STATE_MOUNT_DIR:-}" ]; then
   chown root:root "$MLCLAW_STATE_MOUNT_DIR"

@@ -55,7 +55,12 @@ export function protectedStageArchive(params: {
       const stagingDir = path.join(workDir, "stage");
       await extractTarZst(request.archivePath, stagingDir);
       const destination = path.join(stagingDir, params.archiveName);
-      await fs.cp(params.sourceDir, destination, { recursive: true, force: false, preserveTimestamps: true });
+      await fs.cp(params.sourceDir, destination, {
+        recursive: true,
+        force: false,
+        preserveTimestamps: true,
+        filter: (source) => includeProtectedSnapshotPath(params.sourceDir, source),
+      });
       await fs.chmod(destination, 0o700);
       await fs.rm(request.archivePath, { force: true });
       await createTarZst(stagingDir, request.archivePath);
@@ -65,6 +70,11 @@ export function protectedStageArchive(params: {
       await fs.rm(workDir, { recursive: true, force: true });
     }
   };
+}
+
+export function includeProtectedSnapshotPath(sourceDir: string, source: string): boolean {
+  const relative = path.relative(sourceDir, source);
+  return relative !== "hf-broker/mirrors" && !relative.startsWith(`hf-broker/mirrors${path.sep}`);
 }
 
 export function trustedStageArchive(config: SyncConfig, scriptPath: string | undefined): StageArchive | undefined {

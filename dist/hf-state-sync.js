@@ -9442,7 +9442,12 @@ function protectedStageArchive(params) {
       const stagingDir = path7.join(workDir, "stage");
       await extractTarZst(request.archivePath, stagingDir);
       const destination = path7.join(stagingDir, params.archiveName);
-      await fs7.cp(params.sourceDir, destination, { recursive: true, force: false, preserveTimestamps: true });
+      await fs7.cp(params.sourceDir, destination, {
+        recursive: true,
+        force: false,
+        preserveTimestamps: true,
+        filter: (source) => includeProtectedSnapshotPath(params.sourceDir, source)
+      });
       await fs7.chmod(destination, 448);
       await fs7.rm(request.archivePath, { force: true });
       await createTarZst(stagingDir, request.archivePath);
@@ -9452,6 +9457,10 @@ function protectedStageArchive(params) {
       await fs7.rm(workDir, { recursive: true, force: true });
     }
   };
+}
+function includeProtectedSnapshotPath(sourceDir, source) {
+  const relative = path7.relative(sourceDir, source);
+  return relative !== "hf-broker/mirrors" && !relative.startsWith(`hf-broker/mirrors${path7.sep}`);
 }
 function trustedStageArchive(config, scriptPath) {
   const canStageAsOpenClaw = process.getuid?.() === 0 && Boolean(scriptPath) && config.snapshotUid !== void 0 && config.snapshotGid !== void 0;

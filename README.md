@@ -277,10 +277,11 @@ Space does not use `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN` secrets. Its broad
 credential is stored as `MLCLAW_BROKER_HF_TOKEN`, written to a broker-owned
 `0600` file during startup, and removed from child-process environments.
 OpenClaw uses only the generated broker agent credential. Broker grant and
-event state and encrypted control credentials are included in the durable
-snapshot through a root-only `.mlclaw-protected` staging step, then restored
-with protected ownership before OpenClaw starts. The broad token and operator
-credentials remain ephemeral and are never included in snapshots.
+event state and encrypted control credentials live under the root-owned
+`/var/lib/mlclaw-protected` tree. They are included in the durable snapshot
+through a root-only `.mlclaw-protected` staging step, then restored outside the
+agent-owned live directory before OpenClaw starts. Rebuildable Git mirrors, the
+broad token, and operator credentials are never included in snapshots.
 Local gateways pass the broad credential only to the trusted state-sync
 supervisor for bucket I/O; the supervisor removes it before starting the web
 control process or OpenClaw.
