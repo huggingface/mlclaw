@@ -8835,6 +8835,9 @@ async function writeRuntimeSettingsFile(config2, model, choices) {
   }, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   await fs3.chmod(config2.runtimeSettingsFile, 384);
+  if (process.getuid?.() === 0) {
+    await fs3.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
+  }
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {

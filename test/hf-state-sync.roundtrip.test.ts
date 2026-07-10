@@ -7,6 +7,7 @@ import { parseManifest } from "../src/hf-state-sync/manifest.js";
 import type { SyncConfig } from "../src/hf-state-sync/paths.js";
 import { createMountedBucketHub } from "../src/hf-state-sync/hub.js";
 import { runRestore } from "../src/hf-state-sync/restore.js";
+import { prepareRestore } from "../src/hf-state-sync/prepare.js";
 import { runSnapshot } from "../src/hf-state-sync/snapshot.js";
 import { snapshotWorkerEnvironment, unprivilegedStageArchive } from "../src/hf-state-sync/stage-worker.js";
 import { createFakeHub } from "./fake-hub.js";
@@ -58,6 +59,39 @@ async function writeState(liveDir: string, marker: string): Promise<void> {
 const BOOT = "2026-06-11T00:00:00.000Z";
 
 describe("snapshot/restore round-trip", () => {
+  it("prepares only restore state and leaves mounted credentials private", async () => {
+    const uid = process.getuid?.();
+    const gid = process.getgid?.();
+    if (uid === undefined || gid === undefined) {
+      return;
+    }
+    const mountDir = path.join(dir, "prepare-mounted");
+    const prefixDir = path.join(mountDir, PREFIX);
+    const snapshotsDir = path.join(prefixDir, "snapshots");
+    const credentialDir = path.join(prefixDir, ".mlclaw");
+    await fs.mkdir(snapshotsDir, { recursive: true });
+    await fs.mkdir(credentialDir, { recursive: true });
+    const manifest = path.join(prefixDir, "manifest.json");
+    const archive = path.join(snapshotsDir, "state-test.tar.zst");
+    const credential = path.join(credentialDir, "mcp-oauth.enc");
+    await fs.writeFile(manifest, "{}");
+    await fs.writeFile(archive, "archive");
+    await fs.writeFile(credential, "encrypted");
+    await Promise.all([manifest, archive, credential].map((file) => fs.chmod(file, 0o600)));
+    const liveDir = path.join(dir, "new-volume", "openclaw-live");
+
+    await prepareRestore(configFor(liveDir, {
+      stateMountDir: mountDir,
+      snapshotUid: uid,
+      snapshotGid: gid,
+    }));
+
+    expect((await fs.stat(manifest)).mode & 0o777).toBe(0o644);
+    expect((await fs.stat(archive)).mode & 0o777).toBe(0o644);
+    expect((await fs.stat(credential)).mode & 0o777).toBe(0o600);
+    await expect(fs.access(path.dirname(liveDir))).resolves.toBeUndefined();
+  });
+
   it("stages snapshots in a secret-free unprivileged worker", async () => {
     const hub = createFakeHub();
     const live = path.join(dir, "live-worker");

@@ -48,6 +48,7 @@ describe("runtime image Dockerfile", () => {
       'gosu node node /app/openclaw.mjs setup --baseline --workspace "$WORKSPACE_DIR"',
     );
     expect(entrypoint).toContain('gosu node node /app/hf-state-sync.js restore');
+    expect(entrypoint).toContain('node /app/hf-state-sync.js prepare-restore');
     for (const secret of [
       "MLCLAW_CREDENTIAL_KEY",
       "MLCLAW_SESSION_SECRET",

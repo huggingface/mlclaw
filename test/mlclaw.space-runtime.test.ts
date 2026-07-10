@@ -760,6 +760,10 @@ describe("ML Claw Space runtime", () => {
         },
       },
     ]);
+    const runtimeSettings = await fs.stat(config.runtimeSettingsFile);
+    expect(runtimeSettings.mode & 0o777).toBe(0o600);
+    expect(runtimeSettings.uid).toBe(config.openclawUid);
+    expect(runtimeSettings.gid).toBe(config.openclawGid);
   });
 
   it("reports a saved model when the restart request fails", async () => {

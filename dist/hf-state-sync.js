@@ -3829,10 +3829,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path8, processedBytes]) => ({
-        path: path8,
-        progress: processedBytes / this.fileSize[path8],
-        lastSentProgress: ((this.fileUploadedBytes[path8] ?? 0) + (processedBytes - (this.fileUploadedBytes[path8] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path8]
+      files: Object.entries(this.fileProcessedBytes).map(([path9, processedBytes]) => ({
+        path: path9,
+        progress: processedBytes / this.fileSize[path9],
+        lastSentProgress: ((this.fileUploadedBytes[path9] ?? 0) + (processedBytes - (this.fileUploadedBytes[path9] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path9]
       }))
     };
   }
@@ -4705,7 +4705,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path8) => ({ type: "deleteFile", path: path8 })));
+    await this.batch(paths.map((path9) => ({ type: "deleteFile", path: path9 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -4721,8 +4721,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path8) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path8)}`;
+  async downloadFile(path9) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path9)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -5562,8 +5562,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path8, errorMaps, issueData } = params;
-  const fullPath = [...path8, ...issueData.path || []];
+  const { data, path: path9, errorMaps, issueData } = params;
+  const fullPath = [...path9, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -5679,11 +5679,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path8, key) {
+  constructor(parent, value, path9, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path8;
+    this._path = path9;
     this._key = key;
   }
   get path() {
@@ -9239,10 +9239,65 @@ async function runRestore(params) {
   }
 }
 
-// src/hf-state-sync/snapshot.ts
+// src/hf-state-sync/prepare.ts
 import fs5 from "node:fs/promises";
-import os2 from "node:os";
 import path5 from "node:path";
+async function prepareRestore(config) {
+  if (config.snapshotUid === void 0 || config.snapshotGid === void 0) {
+    throw new Error("restore preparation requires MLCLAW_OPENCLAW_UID and MLCLAW_OPENCLAW_GID");
+  }
+  const liveParent = path5.dirname(config.liveDir);
+  await fs5.mkdir(liveParent, { recursive: true });
+  await fs5.chown(liveParent, config.snapshotUid, config.snapshotGid);
+  if (!config.stateMountDir) {
+    return;
+  }
+  const prefixRoot = confinedPath(config.stateMountDir, config.bucketPrefix);
+  await makeReadableIfFile(path5.join(prefixRoot, "manifest.json"));
+  const snapshotsDir = path5.join(prefixRoot, "snapshots");
+  let entries;
+  try {
+    entries = await fs5.readdir(snapshotsDir, { withFileTypes: true });
+  } catch (err) {
+    if (isNotFound2(err)) {
+      return;
+    }
+    throw err;
+  }
+  for (const entry of entries) {
+    if (entry.isFile()) {
+      await fs5.chmod(path5.join(snapshotsDir, entry.name), 420);
+    }
+  }
+}
+function confinedPath(root, relative) {
+  const resolvedRoot = path5.resolve(root);
+  const resolved = path5.resolve(resolvedRoot, relative);
+  if (resolved !== resolvedRoot && !resolved.startsWith(`${resolvedRoot}${path5.sep}`)) {
+    throw new Error(`invalid state prefix outside mounted bucket: ${relative}`);
+  }
+  return resolved;
+}
+async function makeReadableIfFile(file) {
+  try {
+    const stat = await fs5.lstat(file);
+    if (stat.isFile()) {
+      await fs5.chmod(file, 420);
+    }
+  } catch (err) {
+    if (!isNotFound2(err)) {
+      throw err;
+    }
+  }
+}
+function isNotFound2(err) {
+  return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
+
+// src/hf-state-sync/snapshot.ts
+import fs6 from "node:fs/promises";
+import os2 from "node:os";
+import path6 from "node:path";
 var snapshotCounter = 0;
 function snapshotId(now, runId) {
   snapshotCounter += 1;
@@ -9250,12 +9305,12 @@ function snapshotId(now, runId) {
   return `${stamp}-${runId.slice(0, 8)}-${snapshotCounter}`;
 }
 async function fetchManifest(config, hub, workDir) {
-  const localPath = path5.join(workDir, "manifest.remote.json");
+  const localPath = path6.join(workDir, "manifest.remote.json");
   const result = await hub.download(remotePath(config, MANIFEST_REMOTE_NAME), localPath);
   if (result === "not-found") {
     return { kind: "none" };
   }
-  const parsed = parseManifest(await fs5.readFile(localPath, "utf8"));
+  const parsed = parseManifest(await fs6.readFile(localPath, "utf8"));
   return parsed.kind === "ok" ? { kind: "ok", manifest: parsed.manifest } : { kind: "invalid", reason: parsed.reason };
 }
 async function runSnapshot(params) {
@@ -9264,17 +9319,17 @@ async function runSnapshot(params) {
     return { kind: "skipped", reason: "no-bucket" };
   }
   try {
-    await fs5.access(config.liveDir);
+    await fs6.access(config.liveDir);
   } catch {
     return { kind: "skipped", reason: "empty-state" };
   }
-  const workDir = await fs5.mkdtemp(path5.join(os2.tmpdir(), "hf-state-snapshot-"));
+  const workDir = await fs6.mkdtemp(path6.join(os2.tmpdir(), "hf-state-snapshot-"));
   try {
     const now = (params.now ?? (() => /* @__PURE__ */ new Date()))();
     const id = snapshotId(now, config.runId);
     const archiveName = `state-${id}.tar.zst`;
-    const archivePath = path5.join(workDir, archiveName);
-    const staged = params.stageArchive ? await params.stageArchive({ liveDir: config.liveDir, archivePath }) : await stageArchiveInProcess(config.liveDir, path5.join(workDir, "stage"), archivePath);
+    const archivePath = path6.join(workDir, archiveName);
+    const staged = params.stageArchive ? await params.stageArchive({ liveDir: config.liveDir, archivePath }) : await stageArchiveInProcess(config.liveDir, path6.join(workDir, "stage"), archivePath);
     if (staged.kind === "corrupt-database") {
       return {
         kind: "failed",
@@ -9286,7 +9341,7 @@ async function runSnapshot(params) {
       path: remotePath(config, `snapshots/${archiveName}`),
       createdAt: now.toISOString(),
       sha256: await sha256File(archivePath),
-      sizeBytes: (await fs5.stat(archivePath)).size,
+      sizeBytes: (await fs6.stat(archivePath)).size,
       runId: config.runId,
       bootTime: params.bootTime
     };
@@ -9303,8 +9358,8 @@ async function runSnapshot(params) {
       entry,
       keep: config.keepSnapshots
     });
-    const manifestPath = path5.join(workDir, "manifest.json");
-    await fs5.writeFile(manifestPath, serializeManifest(manifest));
+    const manifestPath = path6.join(workDir, "manifest.json");
+    await fs6.writeFile(manifestPath, serializeManifest(manifest));
     await hub.upload(manifestPath, remotePath(config, MANIFEST_REMOTE_NAME));
     if (expired.length > 0) {
       await hub.delete(expired.map((e) => e.path));
@@ -9314,7 +9369,7 @@ async function runSnapshot(params) {
   } catch (err) {
     return { kind: "failed", detail: err instanceof Error ? err.message : String(err) };
   } finally {
-    await fs5.rm(workDir, { recursive: true, force: true });
+    await fs6.rm(workDir, { recursive: true, force: true });
   }
 }
 async function stageArchiveInProcess(liveDir, stagingDir, archivePath) {
@@ -9328,17 +9383,17 @@ async function stageArchiveInProcess(liveDir, stagingDir, archivePath) {
 
 // src/hf-state-sync/supervise.ts
 import { spawn as spawn2 } from "node:child_process";
-import fs7 from "node:fs/promises";
+import fs8 from "node:fs/promises";
 import os4 from "node:os";
-import path7 from "node:path";
+import path8 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 // src/hf-state-sync/stage-worker.ts
 import { spawn } from "node:child_process";
 import { createReadStream as createReadStream2, createWriteStream, writeFileSync } from "node:fs";
-import fs6 from "node:fs/promises";
+import fs7 from "node:fs/promises";
 import os3 from "node:os";
-import path6 from "node:path";
+import path7 from "node:path";
 import { pipeline as pipeline2 } from "node:stream/promises";
 function unprivilegedStageArchive(params) {
   return async ({ liveDir, archivePath }) => {
@@ -9368,10 +9423,10 @@ function unprivilegedStageArchive(params) {
   };
 }
 async function runStageWorker(liveDir) {
-  const workDir = await fs6.mkdtemp(path6.join(os3.tmpdir(), "hf-state-stage-worker-"));
+  const workDir = await fs7.mkdtemp(path7.join(os3.tmpdir(), "hf-state-stage-worker-"));
   try {
-    const stagingDir = path6.join(workDir, "stage");
-    const archivePath = path6.join(workDir, "snapshot.tar.zst");
+    const stagingDir = path7.join(workDir, "stage");
+    const archivePath = path7.join(workDir, "snapshot.tar.zst");
     const staged = await stageLiveDir(liveDir, stagingDir);
     if (staged.kind === "corrupt-database") {
       writeWorkerMessage(staged);
@@ -9385,7 +9440,7 @@ async function runStageWorker(liveDir) {
     writeWorkerMessage({ kind: "failed", detail: err instanceof Error ? err.message : String(err) });
     return 1;
   } finally {
-    await fs6.rm(workDir, { recursive: true, force: true });
+    await fs7.rm(workDir, { recursive: true, force: true });
   }
 }
 function snapshotWorkerEnvironment(env) {
@@ -9452,24 +9507,24 @@ async function supervise(params) {
       lastHeartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...lastSnapshotId ? { lastSnapshotId } : {}
     };
-    const tmpDir = await fs7.mkdtemp(path7.join(os4.tmpdir(), "hf-state-lease-"));
+    const tmpDir = await fs8.mkdtemp(path8.join(os4.tmpdir(), "hf-state-lease-"));
     try {
-      const file = path7.join(tmpDir, "status.json");
-      await fs7.writeFile(file, JSON.stringify(status, null, 2) + "\n");
+      const file = path8.join(tmpDir, "status.json");
+      await fs8.writeFile(file, JSON.stringify(status, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/status.json"));
     } finally {
-      await fs7.rm(tmpDir, { recursive: true, force: true });
+      await fs8.rm(tmpDir, { recursive: true, force: true });
     }
   };
   const readHandoffRequest = async () => {
-    const tmpDir = await fs7.mkdtemp(path7.join(os4.tmpdir(), "hf-state-handoff-"));
+    const tmpDir = await fs8.mkdtemp(path8.join(os4.tmpdir(), "hf-state-handoff-"));
     try {
-      const file = path7.join(tmpDir, "request.json");
+      const file = path8.join(tmpDir, "request.json");
       const result = await hub.download(remotePath(config, "runtime/handoff-request.json"), file);
       if (result === "not-found") {
         return null;
       }
-      const parsed = JSON.parse(await fs7.readFile(file, "utf8"));
+      const parsed = JSON.parse(await fs8.readFile(file, "utf8"));
       if (parsed?.schemaVersion !== 1 || parsed.agent !== config.agentName || parsed.runtimeId !== config.runtimeId || typeof parsed.requestedAt !== "string" || typeof parsed.requestId !== "string" || !parsed.requestId) {
         return null;
       }
@@ -9483,7 +9538,7 @@ async function supervise(params) {
       }
       return parsed;
     } finally {
-      await fs7.rm(tmpDir, { recursive: true, force: true });
+      await fs8.rm(tmpDir, { recursive: true, force: true });
     }
   };
   const writeHandoffAck = async (request) => {
@@ -9496,14 +9551,14 @@ async function supervise(params) {
       completedAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...lastSnapshotId ? { lastSnapshotId } : {}
     };
-    const tmpDir = await fs7.mkdtemp(path7.join(os4.tmpdir(), "hf-state-handoff-ack-"));
+    const tmpDir = await fs8.mkdtemp(path8.join(os4.tmpdir(), "hf-state-handoff-ack-"));
     try {
-      const file = path7.join(tmpDir, "ack.json");
-      await fs7.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
+      const file = path8.join(tmpDir, "ack.json");
+      await fs8.writeFile(file, JSON.stringify(ack, null, 2) + "\n");
       await hub.upload(file, remotePath(config, "runtime/handoff-ack.json"));
       await hub.delete([remotePath(config, "runtime/handoff-request.json")]);
     } finally {
-      await fs7.rm(tmpDir, { recursive: true, force: true });
+      await fs8.rm(tmpDir, { recursive: true, force: true });
     }
   };
   const child = spawn2(binary, args, { stdio: "inherit" });
@@ -9673,6 +9728,9 @@ async function main(argv) {
   }
   const mode = argv[0];
   switch (mode) {
+    case "prepare-restore":
+      await prepareRestore(config);
+      return 0;
     case "restore": {
       if (!hub) {
         return 0;

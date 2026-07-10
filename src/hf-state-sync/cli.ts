@@ -2,6 +2,7 @@ import { createHfBucketHub, createMountedBucketHub } from "./hub.js";
 import type { BucketHub } from "./hub.js";
 import { type SyncConfig, log, logError, resolveSyncConfig } from "./paths.js";
 import { runRestore } from "./restore.js";
+import { prepareRestore } from "./prepare.js";
 import { runSnapshot } from "./snapshot.js";
 import { supervise } from "./supervise.js";
 import { runStageWorker } from "./stage-worker.js";
@@ -39,6 +40,9 @@ async function main(argv: string[]): Promise<number> {
   const mode = argv[0];
 
   switch (mode) {
+    case "prepare-restore":
+      await prepareRestore(config);
+      return 0;
     case "restore": {
       if (!hub) {
         return 0;

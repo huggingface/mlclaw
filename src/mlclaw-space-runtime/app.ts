@@ -496,6 +496,9 @@ async function writeRuntimeSettingsFile(
     updatedAt: new Date().toISOString(),
   }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   await fs.chmod(config.runtimeSettingsFile, 0o600);
+  if (process.getuid?.() === 0) {
+    await fs.chown(config.runtimeSettingsFile, config.openclawUid, config.openclawGid);
+  }
 }
 
 async function serveFile(file: string, contentTypeHeader: string, immutable = false): Promise<Response> {
