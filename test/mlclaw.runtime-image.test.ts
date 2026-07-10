@@ -48,6 +48,7 @@ describe("runtime image Dockerfile", () => {
       'gosu node node /app/openclaw.mjs setup --baseline --workspace "$WORKSPACE_DIR"',
     );
     expect(entrypoint).not.toContain("node /app/hf-tooling-seed.js");
-    expect(runtimeCli).toContain("waitForBootstrapAndSeedHuggingFaceTooling");
+    expect(runtimeCli).toContain("--wait-for-bootstrap");
+    expect(runtimeCli).toContain("toolingSeedEnvironment");
   });
 });
