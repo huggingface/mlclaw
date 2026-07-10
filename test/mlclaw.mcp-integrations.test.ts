@@ -511,6 +511,173 @@ describe("automatic MCP integrations", () => {
     expect(calls).toEqual(["initialize", "research", "abc_start_research", "xyz_research_status"]);
   });
 
+  it("refreshes OAuth credentials between Research Agent polls", async () => {
+    let now = 0;
+    const authorizations: Array<string | undefined> = [];
+    const upstream = http.createServer(async (req, res) => {
+      authorizations.push(req.headers.authorization);
+      const body = JSON.parse(await text(req)) as Record<string, unknown>;
+      const params = object(body.params);
+      const tool = String(params?.name ?? "");
+      const id = body.id ?? null;
+      res.setHeader("content-type", "text/event-stream");
+      res.setHeader("mcp-session-id", "research-refresh-session");
+      if (tool === "research") {
+        now = 10_000;
+        sse(res, {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            structuredContent: {
+              $prefab: {
+                state: { job_id: "research-refresh" },
+                view: {
+                  onMount: [
+                    { action: "toolCall", tool: "abc_start_research" },
+                    { action: "setInterval", onTick: { action: "toolCall", tool: "xyz_research_status" } },
+                  ],
+                },
+              },
+            },
+          },
+        });
+        return;
+      }
+      sse(res, {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          structuredContent: tool === "abc_start_research"
+            ? { status: "running", done: false }
+            : { status: "completed", result: "Fresh token result", done: true },
+        },
+      });
+    });
+    const upstreamPort = await listen(upstream);
+    cleanups.push(() => closeServer(upstream));
+
+    const fixture = await integrationFixture({
+      researchMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+      researchPollMs: 1,
+    }, {
+      skipCredential: true,
+      createStore: (config) => new McpCredentialStore({
+        file: config.mcpCredentialFile,
+        secret: config.credentialKey,
+        providerUrl: config.providerUrl,
+        clientId: "client",
+        clientSecret: "secret",
+        now: () => now,
+        fetchImpl: async () => Response.json({
+          access_token: "hf_mcp_refreshed",
+          refresh_token: "refresh-new",
+          token_type: "Bearer",
+          expires_in: 3600,
+        }),
+      }),
+    });
+    await fixture.store.save({
+      username: "alice",
+      accessToken: "hf_mcp_expiring",
+      refreshToken: "refresh-old",
+      tokenType: "Bearer",
+      scope: ["read-mcp"],
+      expiresAt: 65_000,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/research`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-session-id": "research-refresh-session",
+        "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 9,
+        method: "tools/call",
+        params: { name: "research", arguments: { topic: "refresh" } },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ result: { content: [{ text: "Fresh token result" }] } });
+    expect(authorizations).toEqual([
+      "Bearer hf_mcp_expiring",
+      "Bearer hf_mcp_refreshed",
+      "Bearer hf_mcp_refreshed",
+    ]);
+  });
+
+  it("returns a running Research Agent job when the final status poll reaches the deadline", async () => {
+    const upstream = http.createServer(async (req, res) => {
+      const body = JSON.parse(await text(req)) as Record<string, unknown>;
+      const params = object(body.params);
+      const tool = String(params?.name ?? "");
+      const id = body.id ?? null;
+      res.setHeader("content-type", "text/event-stream");
+      res.setHeader("mcp-session-id", "research-deadline-session");
+      if (tool === "research") {
+        sse(res, {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            structuredContent: {
+              $prefab: {
+                state: { job_id: "research-deadline" },
+                view: {
+                  onMount: [
+                    { action: "toolCall", tool: "abc_start_research" },
+                    { action: "setInterval", onTick: { action: "toolCall", tool: "xyz_research_status" } },
+                  ],
+                },
+              },
+            },
+          },
+        });
+        return;
+      }
+      if (tool === "abc_start_research") {
+        sse(res, { jsonrpc: "2.0", id, result: { structuredContent: { status: "running", done: false } } });
+        return;
+      }
+      await new Promise<void>((resolve) => req.once("close", resolve));
+    });
+    const upstreamPort = await listen(upstream);
+    cleanups.push(() => closeServer(upstream));
+
+    const fixture = await integrationFixture({
+      researchMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+      researchPollMs: 1,
+      researchTimeoutMs: 40,
+    });
+    const startedAt = Date.now();
+    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/research`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-session-id": "research-deadline-session",
+        "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: { name: "research", arguments: { topic: "deadline" } },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(await response.json()).toMatchObject({
+      result: {
+        content: [{ text: "Research is still running. Job: research-deadline" }],
+        structuredContent: { job_id: "research-deadline", done: false },
+        isError: false,
+      },
+    });
+  });
+
   it("returns a Research Agent JSON-RPC error without polling again", async () => {
     const calls: string[] = [];
     const upstream = http.createServer(async (req, res) => {
@@ -681,7 +848,10 @@ describe("automatic MCP integrations", () => {
 
 async function integrationFixture(
   overrides: Partial<SpaceRuntimeConfig> = {},
-  options: { skipCredential?: boolean } = {},
+  options: {
+    skipCredential?: boolean;
+    createStore?: (config: SpaceRuntimeConfig) => McpCredentialStore;
+  } = {},
 ): Promise<{
   config: SpaceRuntimeConfig;
   store: McpCredentialStore;
@@ -699,7 +869,7 @@ async function integrationFixture(
     }),
     ...overrides,
   };
-  const store = new McpCredentialStore({
+  const store = options.createStore?.(config) ?? new McpCredentialStore({
     file: config.mcpCredentialFile,
     secret: config.credentialKey,
     providerUrl: config.providerUrl,

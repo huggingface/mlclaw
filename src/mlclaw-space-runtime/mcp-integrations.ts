@@ -99,19 +99,12 @@ export class McpIntegrationServer {
       writeJson(res, 404, mcpError(null, -32601, "Not found"));
       return;
     }
-    let accessToken = this.config.gatewayLocation === "local" ? this.config.hfToken : undefined;
-    if (!accessToken) {
-      const credentialSlot = integrationCredentialSlot(this.config);
-      if (!credentialSlot) {
-        writeJson(res, 503, mcpError(null, -32002, "ML Claw has no primary admin"));
-        return;
-      }
-      try {
-        accessToken = await this.credentials.accessToken(credentialSlot);
-      } catch (err) {
-        writeJson(res, 503, mcpError(null, -32002, safeError(err)));
-        return;
-      }
+    let accessToken: string;
+    try {
+      accessToken = await this.integrationAccessToken();
+    } catch (err) {
+      writeJson(res, 503, mcpError(null, -32002, safeError(err)));
+      return;
     }
     const body = await readBody(req, MAX_REQUEST_BYTES);
     if (pathname === "/mcp/research" && req.method === "POST") {
@@ -164,7 +157,7 @@ export class McpIntegrationServer {
         sessionId,
         tool: prefab.startTool,
         arguments: { job_id: prefab.jobId },
-        accessToken,
+        accessToken: await this.integrationAccessToken(),
         id: `${String(request.id ?? "research")}:start`,
         protocolVersion,
         signal,
@@ -176,15 +169,30 @@ export class McpIntegrationServer {
         if (res.destroyed) {
           return;
         }
-        const result = await this.callResearchBackend({
-          sessionId,
-          tool: prefab.statusTool,
-          arguments: { job_id: prefab.jobId },
-          accessToken,
-          id: `${String(request.id ?? "research")}:status`,
-          protocolVersion,
-          signal,
-        });
+        const pollToken = await this.integrationAccessToken();
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        const deadlineBound = remainingMs <= UPSTREAM_TIMEOUT_MS;
+        let result: Record<string, unknown>;
+        try {
+          result = await this.callResearchBackend({
+            sessionId,
+            tool: prefab.statusTool,
+            arguments: { job_id: prefab.jobId },
+            accessToken: pollToken,
+            id: `${String(request.id ?? "research")}:status`,
+            protocolVersion,
+            timeoutMs: Math.min(UPSTREAM_TIMEOUT_MS, remainingMs),
+            signal,
+          });
+        } catch (err) {
+          if (deadlineBound && isTimeoutError(err) && !signal.aborted) {
+            break;
+          }
+          throw err;
+        }
         status = toolResultObject(result);
         if (status?.done === true) {
           const error = stringValue(status.error);
@@ -205,7 +213,7 @@ export class McpIntegrationServer {
           });
           return;
         }
-        await delay(this.config.researchPollMs, signal);
+        await delay(Math.min(this.config.researchPollMs, Math.max(0, deadline - Date.now())), signal);
       }
       writeJson(res, 200, {
         jsonrpc: "2.0",
@@ -232,6 +240,7 @@ export class McpIntegrationServer {
     accessToken: string;
     id: string;
     protocolVersion: string | undefined;
+    timeoutMs?: number;
     signal: AbortSignal;
   }): Promise<Record<string, unknown>> {
     const response = await forwardBuffered({
@@ -250,6 +259,7 @@ export class McpIntegrationServer {
       })),
       url: this.config.researchMcpUrl,
       accessToken: params.accessToken,
+      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
       signal: params.signal,
     });
     if (response.status < 200 || response.status >= 300) {
@@ -271,6 +281,17 @@ export class McpIntegrationServer {
       throw new ResearchRpcError(-32003, toolError);
     }
     return parsed;
+  }
+
+  private async integrationAccessToken(): Promise<string> {
+    if (this.config.gatewayLocation === "local" && this.config.hfToken) {
+      return this.config.hfToken;
+    }
+    const credentialSlot = integrationCredentialSlot(this.config);
+    if (!credentialSlot) {
+      throw new Error("ML Claw has no primary admin");
+    }
+    return this.credentials.accessToken(credentialSlot);
   }
 }
 
@@ -347,9 +368,10 @@ async function forwardBuffered(params: {
   body: Uint8Array;
   url: string;
   accessToken: string;
+  timeoutMs?: number;
   signal: AbortSignal;
 }): Promise<BufferedResponse> {
-  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
+  const timed = timedAbortSignal(params.signal, params.timeoutMs ?? UPSTREAM_TIMEOUT_MS);
   try {
     const response = await fetch(params.url, {
       method: params.method,
@@ -609,7 +631,7 @@ function timedAbortSignal(parent: AbortSignal, timeoutMs: number): {
   } else {
     parent.addEventListener("abort", abort, { once: true });
   }
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), timeoutMs);
   return {
     signal: controller.signal,
     dispose: () => {
@@ -617,4 +639,8 @@ function timedAbortSignal(parent: AbortSignal, timeoutMs: number): {
       parent.removeEventListener("abort", abort);
     },
   };
+}
+
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && err.name === "TimeoutError";
 }
