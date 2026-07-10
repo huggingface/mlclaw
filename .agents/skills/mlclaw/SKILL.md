@@ -59,7 +59,7 @@ Collect or confirm:
 
 - Hugging Face token access: `HF_TOKEN`, `HF_TOKEN_PATH`, `$HF_HOME/token`, or
   `hf auth login`.
-- Hugging Face Router inference token for Space gateway mode when using
+- Dedicated Hugging Face Router inference token for any gateway mode using
   `huggingface/` models: `MLCLAW_ROUTER_TOKEN`, `HF_ROUTER_TOKEN`, or
   `--router-token-file`.
 - Agent name, unless a Telegram bot token is supplied and the user wants the
@@ -261,7 +261,8 @@ header; never place the OAuth token in OpenClaw config or environment.
 After migrating to a local gateway, the MCP proxy uses the local deployment's
 Hugging Face token inside the trusted wrapper instead of requiring the Space's
 OAuth client. Migrating back resumes the encrypted OAuth credential retained
-in the private bucket.
+in the private bucket. OpenClaw receives only the separate Router inference
+token; it never receives the broader local Hub token.
 
 The OpenAI key is stored as a 0600 runtime file for immediate use. For
 restart-durable OpenAI credentials, use the local `mlclaw` CLI or Space

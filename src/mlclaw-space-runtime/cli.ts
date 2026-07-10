@@ -31,6 +31,10 @@ if (config.mode === "app") {
     }
     toolingSeeder = undefined;
   });
+  toolingSeeder.once("error", (err) => {
+    process.stderr.write(`[hf-tooling] delayed seeder failed to start: ${err.message}\n`);
+    toolingSeeder = undefined;
+  });
 }
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {

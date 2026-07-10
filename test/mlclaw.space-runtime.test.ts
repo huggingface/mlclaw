@@ -144,11 +144,25 @@ describe("ML Claw Space runtime", () => {
     await expect(response.json()).resolves.toMatchObject({
       integrations: {
         configured: true,
+        source: "local",
         identity: null,
         scope: [],
         refreshable: false,
         error: null,
       },
+    });
+
+    const disconnect = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/integrations/huggingface/disconnect`, {
+      method: "POST",
+      headers: {
+        cookie: sessionCookie(config, "alice"),
+        "x-mlclaw-csrf": createCsrfToken({ username: "alice", sessionSecret: config.sessionSecret }),
+      },
+    });
+    expect(disconnect.status).toBe(409);
+    await expect(disconnect.json()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("ML Claw CLI"),
     });
   });
 
@@ -1062,7 +1076,7 @@ describe("ML Claw Space runtime", () => {
     expect(env).toMatchObject({ HOME: "/home/node", USER: "node", LOGNAME: "node" });
   });
 
-  it("preserves legacy broad Hub tokens when no Router token exists", async () => {
+  it("scrubs broad Hub tokens when no Router token exists", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-legacy-hub-token-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
     const envFile = path.join(root, "env.json");
@@ -1094,10 +1108,7 @@ describe("ML Claw Space runtime", () => {
 
     await waitFor(async () => fileExists(envFile));
     const env = JSON.parse(await fs.readFile(envFile, "utf8")) as Record<string, string>;
-    expect(env).toEqual({
-      HF_TOKEN: "hf_legacy",
-      HUGGINGFACE_HUB_TOKEN: "hf_legacy",
-    });
+    expect(env).toEqual({});
   });
 
   it("restarts only the OpenClaw child when runtime restart has no Hub token", async () => {

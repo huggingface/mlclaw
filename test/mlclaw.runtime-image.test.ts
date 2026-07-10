@@ -50,5 +50,6 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).not.toContain("node /app/hf-tooling-seed.js");
     expect(runtimeCli).toContain("--wait-for-bootstrap");
     expect(runtimeCli).toContain("toolingSeedEnvironment");
+    expect(runtimeCli).toContain('toolingSeeder.once("error"');
   });
 });

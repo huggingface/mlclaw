@@ -93,6 +93,7 @@ type Status = {
   };
   integrations: {
     automatic: boolean;
+    source: "local" | "oauth" | null;
     identity: string | null;
     configured: boolean;
     scope: string[];
@@ -541,13 +542,15 @@ function CredentialsPage(props: {
         </div>
         {props.status.integrations.error ? <p className="statusWarn">{props.status.integrations.error}</p> : null}
         <div className="buttonRow">
-          <a className="primaryButton" href="/oauth/login?intent=integrations&next=%2Fmlclaw%2Fcredentials">
-            {props.status.integrations.configured ? "Reconnect" : "Connect"}
-          </a>
+          {props.status.integrations.source !== "local" ? (
+            <a className="primaryButton" href="/oauth/login?intent=integrations&next=%2Fmlclaw%2Fcredentials">
+              {props.status.integrations.configured ? "Reconnect" : "Connect"}
+            </a>
+          ) : null}
           <button
             className="secondaryButton"
             type="button"
-            disabled={disconnecting || !props.session.admin || !props.status.integrations.configured}
+            disabled={disconnecting || !props.session.admin || !props.status.integrations.configured || props.status.integrations.source === "local"}
             onClick={disconnectHuggingFace}
           >
             {disconnecting ? "Disconnecting" : "Disconnect"}

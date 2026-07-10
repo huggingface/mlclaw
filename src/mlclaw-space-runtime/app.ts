@@ -119,6 +119,12 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (csrf) {
       return csrf;
     }
+    if (config.gatewayLocation === "local") {
+      return c.json({
+        ok: false,
+        error: "Local integrations use the local Hugging Face token; manage that credential with the ML Claw CLI",
+      }, 409);
+    }
     const credentialSlot = integrationCredentialSlot(config) ?? auth.username;
     await controls.clearMcpCredentials(credentialSlot);
     return c.json({ ok: true, configured: false });
@@ -443,6 +449,7 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     },
     integrations: {
       automatic: true,
+      source: localTokenConfigured ? "local" : mcpCredentials?.configured ? "oauth" : null,
       identity: mcpCredentials?.configured ? mcpCredentials.username : null,
       configured: localTokenConfigured || (mcpCredentials?.configured ?? false),
       scope: mcpCredentials?.scope ?? [],

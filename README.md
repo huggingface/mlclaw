@@ -43,11 +43,12 @@ You need a Hugging Face account and a token available through `HF_TOKEN`,
 `HF_TOKEN_PATH`, `$HF_HOME/token`, or `hf auth login`. You never paste that
 token into someone else's app; the bootstrapper runs locally.
 
-For the default Hugging Face Router model in Space gateway mode, provide an
-inference token through `MLCLAW_ROUTER_TOKEN`, `HF_ROUTER_TOKEN`, or
-`--router-token-file`. That token is stored in the Space as
-`MLCLAW_ROUTER_TOKEN` for model calls. It is separate from the local token used
-to create buckets and Spaces.
+For any Hugging Face Router model, provide a dedicated inference token through
+`MLCLAW_ROUTER_TOKEN`, `HF_ROUTER_TOKEN`, or `--router-token-file`. The token
+is stored separately from the local Hub token used to create and synchronize
+resources. Only this dedicated inference token is passed to OpenClaw; the
+broader local Hub token stays in the trusted wrapper. In Space mode, the
+inference token is stored as the `MLCLAW_ROUTER_TOKEN` Space secret.
 
 ## Default Flow
 

@@ -37,6 +37,9 @@ per-MCP login is required.
   the trusted wrapper when Space OAuth credentials are unavailable. This keeps
   both integrations working after Space-to-local migration without copying a
   Space OAuth client secret or changing the credential stored in the bucket.
+- Treat the local Hub token as wrapper-only. Require a separate Router
+  inference token for `huggingface/` models and pass only that restricted token
+  to the OpenClaw child.
 - Preserve user-defined MCP servers, explicit disablement, and tool filters
   when reconciling the two managed server entries.
 

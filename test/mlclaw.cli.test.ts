@@ -866,7 +866,7 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "addSpaceSecret" && call.args[1] === "TELEGRAM_BOT_TOKEN")).toBe(false);
   });
 
-  it("requires a Router token for non-interactive Space bootstrap with Hugging Face Router models", async () => {
+  it("requires a Router token for non-interactive bootstrap with Hugging Face Router models", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
@@ -885,6 +885,32 @@ describe("mlclaw CLI", () => {
     expect(code).toBe(1);
     expect(stderr.join("\n")).toContain("set MLCLAW_ROUTER_TOKEN or pass --router-token-file");
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
+  });
+
+  it("requires a dedicated Router token for a non-interactive local gateway", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = {
+      ...await createRuntime(hub, prompt, stderr),
+      env: {},
+    };
+
+    const code = await main([
+      "bootstrap",
+      "--gateway",
+      "local",
+      "--name",
+      "research",
+      "--gateway-token",
+      "gateway-token",
+      "--no-pull",
+      "--yes",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("dedicated inference token");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
 
   it("reuses a persisted Router token for non-interactive Space bootstrap", async () => {

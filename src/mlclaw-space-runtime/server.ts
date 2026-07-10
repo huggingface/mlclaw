@@ -213,12 +213,12 @@ export class SpaceRuntimeServer {
         ...(persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {}),
         ...extraEnv,
       };
+      for (const key of WRAPPER_ONLY_ENV) {
+        delete env[key];
+      }
       if (this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
-      }
-      for (const key of WRAPPER_ONLY_ENV) {
-        delete env[key];
       }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
@@ -292,6 +292,8 @@ const WRAPPER_ONLY_ENV = [
   "MLCLAW_SESSION_SECRET",
   "SESSION_SECRET",
   "OAUTH_CLIENT_SECRET",
+  "HF_TOKEN",
+  "HUGGINGFACE_HUB_TOKEN",
 ] as const;
 
 function nodeRequestToWebRequest(req: http.IncomingMessage, publicUrl: string): Request {

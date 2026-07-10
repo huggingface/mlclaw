@@ -8446,6 +8446,12 @@ function createSpaceRuntimeApp(config2, controls) {
     if (csrf) {
       return csrf;
     }
+    if (config2.gatewayLocation === "local") {
+      return c.json({
+        ok: false,
+        error: "Local integrations use the local Hugging Face token; manage that credential with the ML Claw CLI"
+      }, 409);
+    }
     const credentialSlot = integrationCredentialSlot(config2) ?? auth.username;
     await controls.clearMcpCredentials(credentialSlot);
     return c.json({ ok: true, configured: false });
@@ -8749,6 +8755,7 @@ async function statusPayload(config2, controls) {
     },
     integrations: {
       automatic: true,
+      source: localTokenConfigured ? "local" : mcpCredentials?.configured ? "oauth" : null,
       identity: mcpCredentials?.configured ? mcpCredentials.username : null,
       configured: localTokenConfigured || (mcpCredentials?.configured ?? false),
       scope: mcpCredentials?.scope ?? [],
@@ -9452,12 +9459,12 @@ var SpaceRuntimeServer = class {
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
         ...extraEnv
       };
+      for (const key of WRAPPER_ONLY_ENV) {
+        delete env[key];
+      }
       if (this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
-      }
-      for (const key of WRAPPER_ONLY_ENV) {
-        delete env[key];
       }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
@@ -9522,7 +9529,9 @@ var WRAPPER_ONLY_ENV = [
   "MLCLAW_CREDENTIAL_KEY",
   "MLCLAW_SESSION_SECRET",
   "SESSION_SECRET",
-  "OAUTH_CLIENT_SECRET"
+  "OAUTH_CLIENT_SECRET",
+  "HF_TOKEN",
+  "HUGGINGFACE_HUB_TOKEN"
 ];
 function nodeRequestToWebRequest(req, publicUrl) {
   const headers = new Headers();
@@ -9612,6 +9621,11 @@ if (config.mode === "app") {
       process2.stderr.write(`[hf-tooling] delayed seeder exited code=${code} signal=${signal ?? "null"}
 `);
     }
+    toolingSeeder = void 0;
+  });
+  toolingSeeder.once("error", (err) => {
+    process2.stderr.write(`[hf-tooling] delayed seeder failed to start: ${err.message}
+`);
     toolingSeeder = void 0;
   });
 }

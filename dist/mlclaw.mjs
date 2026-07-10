@@ -15557,7 +15557,6 @@ async function resolveBootstrapPlan(params) {
     opts,
     runtime,
     existingSecrets,
-    gatewayLocation,
     model
   });
   const spacePlan = gatewayLocation === "space" ? {
@@ -15925,7 +15924,8 @@ async function deploySpaceGateway(params) {
 }
 async function startLocalGateway(params) {
   const { manifest, runtime } = params;
-  await ensureDeploymentCredentialKey(runtime, manifest.agent);
+  const secrets = await ensureDeploymentCredentialKey(runtime, manifest.agent);
+  assertDedicatedRouterToken(manifest.model, secrets);
   const containerName = containerNameFor(manifest.agent);
   const volumeName = volumeNameFor(manifest.agent);
   const dockerContext = dockerContextFor(manifest);
@@ -16073,14 +16073,13 @@ async function gatewayMigrate(agent, opts, runtime) {
     runtimeImage: resolveRuntimeImage(opts.runtimeImage ?? current.runtimeImage, runtime.env),
     updatedAt: runtime.now().toISOString()
   };
+  const routerToken = await resolveRouterToken({
+    opts,
+    runtime,
+    existingSecrets: secrets,
+    model: updated.model
+  });
   if (target === "space") {
-    const routerToken = await resolveRouterToken({
-      opts,
-      runtime,
-      existingSecrets: secrets,
-      gatewayLocation: "space",
-      model: updated.model
-    });
     const deploymentSecrets2 = {
       ...secrets,
       MLCLAW_GATEWAY_LOCATION: "space",
@@ -16152,6 +16151,7 @@ async function gatewayMigrate(agent, opts, runtime) {
     });
     await writeSecretEnv(runtime.configRoot, agent, {
       ...secrets,
+      ...routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {},
       MLCLAW_GATEWAY_LOCATION: "local",
       MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
       MLCLAW_RUNTIME_ID: updated.localRuntimeId
@@ -16167,6 +16167,10 @@ async function gatewayRebind(agent, opts, runtime) {
   if (current.gatewayLocation !== "local") {
     throw new Error("Docker context rebind only applies to local gateway deployments");
   }
+  assertDedicatedRouterToken(
+    current.model,
+    await readSecretEnv(runtime.configRoot, agent).catch(() => ({}))
+  );
   const targetBinding = await resolveLocalGatewayBinding({
     manifest: void 0,
     requestedContext: targetContext,
@@ -16786,6 +16790,13 @@ function hasRouterTokenSecretRecord(secrets) {
 function hasRouterTokenSecretMap(secrets) {
   return secrets.has("MLCLAW_ROUTER_TOKEN") || secrets.has("HF_ROUTER_TOKEN");
 }
+function assertDedicatedRouterToken(model, secrets) {
+  if (isHuggingFaceRouterModel(model) && !hasRouterTokenSecretRecord(secrets)) {
+    throw new Error(
+      "Hugging Face Router models require a dedicated inference token; rerun bootstrap or migration with --router-token-file"
+    );
+  }
+}
 async function ensureSpaceStateVolume(hub, repoId, bucket, opts = {}) {
   const runtime = await hub.getSpaceRuntime(repoId);
   const volumes = Array.isArray(runtime.volumes) ? runtime.volumes : opts.allowMissingVolumes ? [] : requireRuntimeVolumes(runtime, repoId);
@@ -16860,11 +16871,11 @@ async function resolveRouterToken(params) {
   if (existing) {
     return existing;
   }
-  if (params.gatewayLocation !== "space" || !isHuggingFaceRouterModel(params.model)) {
+  if (!isHuggingFaceRouterModel(params.model)) {
     return void 0;
   }
   if (!params.runtime.prompt.isInteractive()) {
-    throw new Error("Space gateway model uses the Hugging Face Router; set MLCLAW_ROUTER_TOKEN or pass --router-token-file for inference.");
+    throw new Error("Hugging Face Router models require a dedicated inference token; set MLCLAW_ROUTER_TOKEN or pass --router-token-file.");
   }
   const value = await params.runtime.prompt.password({
     message: "Hugging Face Router token",
@@ -16876,7 +16887,7 @@ async function resolveRouterToken(params) {
   }
   const token = typeof value === "string" ? nonEmpty(value) : void 0;
   if (!token) {
-    throw new Error("Hugging Face Router token is required for Space gateway inference with huggingface/ models.");
+    throw new Error("A dedicated Hugging Face Router token is required for huggingface/ models.");
   }
   return token;
 }
