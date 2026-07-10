@@ -33,6 +33,10 @@ per-MCP login is required.
 - Forward Research Agent traffic to its hosted MCP endpoint. While the service
   exposes its current Prefab MCP App flow, translate its queued start/poll UI
   sequence into one ordinary `research` tool result for OpenClaw.
+- In local gateway mode, use the local deployment's Hugging Face token inside
+  the trusted wrapper when Space OAuth credentials are unavailable. This keeps
+  both integrations working after Space-to-local migration without copying a
+  Space OAuth client secret or changing the credential stored in the bucket.
 - Preserve user-defined MCP servers, explicit disablement, and tool filters
   when reconciling the two managed server entries.
 
@@ -48,6 +52,9 @@ per-MCP login is required.
   durable encrypted integration credential.
 - Non-admin users cannot replace or disconnect the deployment-wide integration
   identity.
+- Gateway migration works in both directions: local mode uses its local Hub
+  credential, while returning to Space resumes the bucket-backed OAuth
+  credential.
 
 ## Ownership
 

@@ -144,6 +144,10 @@ mlclaw gateway migrate mlclaw --to local
 mlclaw gateway migrate mlclaw --to space
 ```
 
+The local MCP proxy uses the Hugging Face token kept in the local deployment
+environment. The trusted wrapper does not need the Space OAuth client, and the
+encrypted Space OAuth credential remains in the bucket for migration back.
+
 Useful operations:
 
 ```bash

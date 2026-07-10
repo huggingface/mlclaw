@@ -311,6 +311,37 @@ describe("automatic MCP integrations", () => {
     expect(upstreamAuthorization).toBe("Bearer hf_mcp_access");
   });
 
+  it("uses the trusted local Hub token after migrating away from Space OAuth", async () => {
+    let upstreamAuthorization: string | undefined;
+    const upstream = http.createServer(async (req, res) => {
+      upstreamAuthorization = req.headers.authorization;
+      await drain(req);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools: [] } }));
+    });
+    const upstreamPort = await listen(upstream);
+    cleanups.push(() => closeServer(upstream));
+
+    const fixture = await integrationFixture({
+      gatewayLocation: "local",
+      hfToken: "hf_local_wrapper",
+      hfMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+    }, { skipCredential: true });
+    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/huggingface`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ result: { tools: [] } });
+    expect(upstreamAuthorization).toBe("Bearer hf_local_wrapper");
+    await expect(fixture.store.status("alice")).resolves.toMatchObject({ configured: false });
+  });
+
   it("turns the Research Agent MCP App into a completed research tool call", async () => {
     const calls: string[] = [];
     const upstream = http.createServer(async (req, res) => {
@@ -507,7 +538,10 @@ describe("automatic MCP integrations", () => {
   });
 });
 
-async function integrationFixture(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<{
+async function integrationFixture(
+  overrides: Partial<SpaceRuntimeConfig> = {},
+  options: { skipCredential?: boolean } = {},
+): Promise<{
   config: SpaceRuntimeConfig;
   store: McpCredentialStore;
   server: McpIntegrationServer;
@@ -529,12 +563,14 @@ async function integrationFixture(overrides: Partial<SpaceRuntimeConfig> = {}): 
     secret: config.credentialKey,
     providerUrl: config.providerUrl,
   });
-  await store.save({
-    username: "alice",
-    accessToken: "hf_mcp_access",
-    tokenType: "Bearer",
-    scope: ["openid", "profile", "read-mcp"],
-  });
+  if (!options.skipCredential) {
+    await store.save({
+      username: "alice",
+      accessToken: "hf_mcp_access",
+      tokenType: "Bearer",
+      scope: ["openid", "profile", "read-mcp"],
+    });
+  }
   const server = new McpIntegrationServer(config, store);
   await server.start();
   cleanups.push(() => server.stop());

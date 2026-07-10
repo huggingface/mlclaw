@@ -7507,8 +7507,12 @@ var McpIntegrationServer = class {
     try {
       accessToken = await this.credentials.accessToken(credentialSlot);
     } catch (err) {
-      writeJson(res, 503, mcpError(null, -32002, safeError(err)));
-      return;
+      const localToken = this.config.gatewayLocation === "local" ? this.config.hfToken : void 0;
+      if (!localToken) {
+        writeJson(res, 503, mcpError(null, -32002, safeError(err)));
+        return;
+      }
+      accessToken = localToken;
     }
     const body = await readBody(req, MAX_REQUEST_BYTES);
     if (pathname === "/mcp/research" && req.method === "POST") {

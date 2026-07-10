@@ -258,6 +258,11 @@ mounted private state volume. OpenClaw runs as a separate unprivileged Unix
 user and receives only local MCP server URLs plus an internal capability
 header; never place the OAuth token in OpenClaw config or environment.
 
+After migrating to a local gateway, the MCP proxy uses the local deployment's
+Hugging Face token inside the trusted wrapper instead of requiring the Space's
+OAuth client. Migrating back resumes the encrypted OAuth credential retained
+in the private bucket.
+
 The OpenAI key is stored as a 0600 runtime file for immediate use. For
 restart-durable OpenAI credentials, use the local `mlclaw` CLI or Space
 settings to set a Space Secret; do not put the user's broad Hub token into the
