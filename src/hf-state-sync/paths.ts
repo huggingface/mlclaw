@@ -27,8 +27,8 @@ export type SyncConfig = {
   /** UID/GID used by the secret-free snapshot traversal worker. */
   snapshotUid?: number;
   snapshotGid?: number;
-  /** Root-owned broker state overlaid by the trusted snapshot supervisor. */
-  brokerStateDir?: string;
+  /** Root-owned runtime state overlaid by the trusted snapshot supervisor. */
+  protectedStateDir?: string;
 };
 
 const DEFAULT_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
@@ -64,7 +64,7 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
     runtimeImage: env.MLCLAW_RUNTIME_IMAGE?.trim() || "unknown",
     ...(snapshotUid !== undefined ? { snapshotUid } : {}),
     ...(snapshotGid !== undefined ? { snapshotGid } : {}),
-    ...(env.MLCLAW_HF_BROKER_STATE_DIR?.trim() ? { brokerStateDir: env.MLCLAW_HF_BROKER_STATE_DIR.trim() } : {}),
+    ...(env.MLCLAW_PROTECTED_STATE_DIR?.trim() ? { protectedStateDir: env.MLCLAW_PROTECTED_STATE_DIR.trim() } : {}),
   };
 }
 

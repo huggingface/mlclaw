@@ -4917,7 +4917,7 @@ function resolveSyncConfig(env = process.env) {
     runtimeImage: env.MLCLAW_RUNTIME_IMAGE?.trim() || "unknown",
     ...snapshotUid !== void 0 ? { snapshotUid } : {},
     ...snapshotGid !== void 0 ? { snapshotGid } : {},
-    ...env.MLCLAW_HF_BROKER_STATE_DIR?.trim() ? { brokerStateDir: env.MLCLAW_HF_BROKER_STATE_DIR.trim() } : {}
+    ...env.MLCLAW_PROTECTED_STATE_DIR?.trim() ? { protectedStateDir: env.MLCLAW_PROTECTED_STATE_DIR.trim() } : {}
   };
 }
 function nonNegativeIntFromEnv(value) {
@@ -5002,7 +5002,7 @@ var STATE_EXCLUDED_NAMES = /* @__PURE__ */ new Set([".env", "credentials", "tmp"
 var STATE_EXCLUDED_SUFFIXES = [".log"];
 var SIDECAR_SUFFIXES = [".sqlite-wal", ".sqlite-shm"];
 var STATE_DIR_NAME = ".openclaw";
-var BROKER_STATE_DIR_NAME = ".mlclaw-broker";
+var PROTECTED_STATE_DIR_NAME = ".mlclaw-protected";
 function isExcluded(name, inStateDir) {
   if (SIDECAR_SUFFIXES.some((suffix) => name.endsWith(suffix))) {
     return true;
@@ -5013,11 +5013,11 @@ function isExcluded(name, inStateDir) {
   return STATE_EXCLUDED_NAMES.has(name) || STATE_EXCLUDED_SUFFIXES.some((suffix) => name.endsWith(suffix));
 }
 async function copyTreeFiltered(params) {
-  const { sourceDir, destDir, databases, rootDir, inStateDir, depth, excludeBrokerState } = params;
+  const { sourceDir, destDir, databases, rootDir, inStateDir, depth, excludeProtectedState } = params;
   await fs3.mkdir(destDir, { recursive: true });
   const entries = await fs3.readdir(sourceDir, { withFileTypes: true });
   for (const entry of entries) {
-    if (excludeBrokerState && depth === 0 && entry.name === BROKER_STATE_DIR_NAME) {
+    if (excludeProtectedState && depth === 0 && entry.name === PROTECTED_STATE_DIR_NAME) {
       continue;
     }
     if (isExcluded(entry.name, inStateDir)) {
@@ -5035,7 +5035,7 @@ async function copyTreeFiltered(params) {
         // project may legitimately contain its own .openclaw directory.
         inStateDir: inStateDir || depth === 0 && entry.name === STATE_DIR_NAME,
         depth: depth + 1,
-        excludeBrokerState
+        excludeProtectedState
       });
     } else if (entry.isFile()) {
       if (entry.name.endsWith(".sqlite")) {
@@ -5057,7 +5057,7 @@ async function stageLiveDir(liveDir, stagingDir, options = {}) {
     rootDir: liveDir,
     inStateDir: false,
     depth: 0,
-    excludeBrokerState: options.excludeBrokerState ?? false
+    excludeProtectedState: options.excludeProtectedState ?? false
   });
   for (const relative of databases) {
     const staged = path3.join(stagingDir, relative);
@@ -9456,8 +9456,8 @@ function protectedStageArchive(params) {
 function trustedStageArchive(config, scriptPath) {
   const canStageAsOpenClaw = process.getuid?.() === 0 && Boolean(scriptPath) && config.snapshotUid !== void 0 && config.snapshotGid !== void 0;
   if (!canStageAsOpenClaw) {
-    if (config.brokerStateDir) {
-      throw new Error("protected broker state requires root snapshot staging with an OpenClaw UID and GID");
+    if (config.protectedStateDir) {
+      throw new Error("protected runtime state requires root snapshot staging with an OpenClaw UID and GID");
     }
     return void 0;
   }
@@ -9466,11 +9466,11 @@ function trustedStageArchive(config, scriptPath) {
     gid: config.snapshotGid,
     scriptPath
   });
-  if (config.brokerStateDir) {
+  if (config.protectedStateDir) {
     stageArchive = protectedStageArchive({
       base: stageArchive,
-      sourceDir: config.brokerStateDir,
-      archiveName: BROKER_STATE_DIR_NAME
+      sourceDir: config.protectedStateDir,
+      archiveName: PROTECTED_STATE_DIR_NAME
     });
   }
   return stageArchive;
@@ -9480,7 +9480,7 @@ async function runStageWorker(liveDir) {
   try {
     const stagingDir = path7.join(workDir, "stage");
     const archivePath = path7.join(workDir, "snapshot.tar.zst");
-    const staged = await stageLiveDir(liveDir, stagingDir, { excludeBrokerState: true });
+    const staged = await stageLiveDir(liveDir, stagingDir, { excludeProtectedState: true });
     if (staged.kind === "corrupt-database") {
       writeWorkerMessage(staged);
       return 0;

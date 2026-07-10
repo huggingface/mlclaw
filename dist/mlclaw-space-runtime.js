@@ -5018,6 +5018,7 @@ function loadConfig(env = process.env) {
   const stateMountDir = trim(env.MLCLAW_STATE_MOUNT_DIR);
   const statePrefix = trim(env.OPENCLAW_HF_STATE_PREFIX);
   const mcpCredentialFile = trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc` : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
+  const openaiCredentialStoreFile = trim(env.MLCLAW_OPENAI_CREDENTIAL_STORE_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/openai-api-key.enc` : `${pathDirname(pathDirname(runtimeSettingsFile))}/.mlclaw-protected/control/openai-api-key.enc`);
   const runtimeSettings2 = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings2.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
@@ -5052,6 +5053,7 @@ function loadConfig(env = process.env) {
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
+    openaiCredentialStoreFile,
     mcpCredentialFile,
     hfMcpUrl: trim(env.MLCLAW_HF_MCP_URL) ?? "https://huggingface.co/mcp?bouquet=hf",
     researchMcpUrl: trim(env.MLCLAW_RESEARCH_MCP_URL) ?? "https://evalstate-research-agent-two.hf.space/mcp",
@@ -8157,6 +8159,7 @@ function objectValue2(value) {
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes3 } from "node:crypto";
 import fs2 from "node:fs/promises";
 import path2 from "node:path";
 function openAiConfigured(env = process.env) {
@@ -8177,6 +8180,78 @@ async function writeEphemeralOpenAiCredential(file, apiKey) {
 `, { encoding: "utf8", mode: 384 });
   await fs2.chmod(file, 384);
 }
+var OpenAiCredentialStore = class {
+  constructor(file, secret) {
+    this.file = file;
+    this.key = Buffer.from(
+      hkdfSync(
+        "sha256",
+        Buffer.from(secret, "utf8"),
+        Buffer.alloc(0),
+        Buffer.from("mlclaw:openai-api-key:v1", "utf8"),
+        32
+      )
+    );
+  }
+  key;
+  async load() {
+    let raw2;
+    try {
+      raw2 = await fs2.readFile(this.file, "utf8");
+    } catch (err) {
+      if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+        return void 0;
+      }
+      throw new Error("Could not read encrypted OpenAI credential");
+    }
+    try {
+      const envelope = JSON.parse(raw2);
+      if (envelope.version !== 1 || envelope.algorithm !== "aes-256-gcm") {
+        throw new Error("unsupported envelope");
+      }
+      const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(envelope.iv, "base64url"));
+      decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+      const apiKey = Buffer.concat([
+        decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
+        decipher.final()
+      ]).toString("utf8");
+      if (!validateOpenAiApiKey(apiKey)) {
+        throw new Error("invalid key");
+      }
+      return apiKey;
+    } catch {
+      throw new Error("Encrypted OpenAI credential is invalid or cannot be decrypted");
+    }
+  }
+  async save(apiKey) {
+    const normalized = validateOpenAiApiKey(apiKey);
+    if (!normalized) {
+      throw new Error("valid OpenAI API key is required");
+    }
+    const iv = randomBytes3(12);
+    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    const ciphertext = Buffer.concat([cipher.update(normalized, "utf8"), cipher.final()]);
+    const envelope = {
+      version: 1,
+      algorithm: "aes-256-gcm",
+      iv: iv.toString("base64url"),
+      tag: cipher.getAuthTag().toString("base64url"),
+      ciphertext: ciphertext.toString("base64url")
+    };
+    const directory = path2.dirname(this.file);
+    const temporary = `${this.file}.${process.pid}.${randomBytes3(6).toString("hex")}.tmp`;
+    await fs2.mkdir(directory, { recursive: true, mode: 448 });
+    try {
+      await fs2.writeFile(temporary, `${JSON.stringify(envelope)}
+`, { encoding: "utf8", mode: 384 });
+      await fs2.chmod(temporary, 384);
+      await fs2.rename(temporary, this.file);
+      await fs2.chmod(this.file, 384);
+    } finally {
+      await fs2.rm(temporary, { force: true });
+    }
+  }
+};
 function validateOpenAiApiKey(value) {
   if (typeof value !== "string") {
     return void 0;
@@ -8450,7 +8525,7 @@ function positiveNumber2(value) {
 }
 
 // src/mlclaw-space-runtime/cookies.ts
-import { createHmac as createHmac3, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHmac as createHmac3, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 function createSignedCookie(options, payload) {
   const body = Buffer.from(JSON.stringify({
     ...payload,
@@ -8499,7 +8574,7 @@ function clearCookie(name, secure) {
   });
 }
 function randomState() {
-  return randomBytes3(24).toString("base64url");
+  return randomBytes4(24).toString("base64url");
 }
 function sign2(value, secret) {
   return createHmac3("sha256", secret).update(value).digest("base64url");
@@ -8807,6 +8882,7 @@ function escapeHtml2(value) {
 function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
   const operatorBrokers = new OperatorBrokerRegistry(config2.operatorBrokers);
+  const openAiCredentials = new OpenAiCredentialStore(config2.openaiCredentialStoreFile, config2.credentialKey);
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get(
@@ -8968,14 +9044,19 @@ function createSpaceRuntimeApp(config2, controls) {
       if (!expectedRevision) {
         return c.json({ ok: false, error: "expectedRevision is required" }, 400);
       }
+      const durationSeconds = optionalPositiveInteger(body?.durationSeconds, 86400);
+      const maxUses = optionalPositiveInteger(body?.maxUses, 100);
+      if (browserAction === "approve" && (durationSeconds === "invalid" || maxUses === "invalid")) {
+        return c.json({ ok: false, error: "approval bounds are invalid" }, 400);
+      }
       try {
         const item = await broker.decide(c.req.param("id"), brokerAction, {
           expectedRevision,
           ...typeof body?.expectedStatus === "string" ? { expectedStatus: body.expectedStatus } : {},
           ...typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2e3) } : {},
           ...browserAction === "approve" ? {
-            durationSeconds: boundedInteger(body?.durationSeconds, 0, 86400),
-            maxUses: boundedInteger(body?.maxUses, 0, 100)
+            ...typeof durationSeconds === "number" ? { durationSeconds } : {},
+            ...typeof maxUses === "number" ? { maxUses } : {}
           } : {}
         });
         return c.json({ broker: broker.summary(), item });
@@ -9098,6 +9179,15 @@ function createSpaceRuntimeApp(config2, controls) {
       } catch {
         process.stderr.write("[mlclaw] failed to persist OpenAI key as Space Secret\n");
       }
+    }
+    try {
+      await openAiCredentials.save(apiKey);
+      persistent = true;
+    } catch (err) {
+      if (!persistent) {
+        throw err;
+      }
+      process.stderr.write("[mlclaw] failed to persist encrypted OpenAI credential\n");
     }
     await writeEphemeralOpenAiCredential(config2.openaiCredentialFile, apiKey);
     await controls.restartOpenClawWithOpenAi(apiKey);
@@ -9283,6 +9373,13 @@ function boundedInteger(value, fallback, maximum) {
     return fallback;
   }
   return parsed;
+}
+function optionalPositiveInteger(value, maximum) {
+  if (value === void 0 || value === null || value === "") {
+    return void 0;
+  }
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= maximum ? parsed : "invalid";
 }
 function selectedOperatorBroker(c, registry) {
   const id = c.req.query("broker");
@@ -9513,14 +9610,14 @@ function contentType(file) {
 }
 
 // src/mlclaw-space-runtime/mcp-credentials.ts
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes4 } from "node:crypto";
+import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes5 } from "node:crypto";
 import fs4 from "node:fs/promises";
 import path4 from "node:path";
 var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
 var McpCredentialStore = class {
   constructor(options) {
     this.options = options;
-    this.key = Buffer.from(hkdfSync(
+    this.key = Buffer.from(hkdfSync2(
       "sha256",
       Buffer.from(options.secret, "utf8"),
       Buffer.alloc(0),
@@ -9646,7 +9743,7 @@ var McpCredentialStore = class {
   async persist() {
     const directory = path4.dirname(this.options.file);
     await fs4.mkdir(directory, { recursive: true, mode: 448 });
-    const temporary = `${this.options.file}.${process.pid}.${randomBytes4(6).toString("hex")}.tmp`;
+    const temporary = `${this.options.file}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
     const encrypted = encryptDocument(this.document, this.key);
     try {
       await fs4.writeFile(temporary, `${JSON.stringify(encrypted)}
@@ -9724,8 +9821,8 @@ var InvalidCredentialFileError = class extends Error {
   }
 };
 function encryptDocument(document, key) {
-  const iv = randomBytes4(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const iv = randomBytes5(12);
+  const cipher = createCipheriv2("aes-256-gcm", key, iv);
   const plaintext = Buffer.from(JSON.stringify(document), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   return {
@@ -9741,7 +9838,7 @@ function decryptEnvelope(raw2, key) {
   if (envelope.version !== 1 || envelope.algorithm !== "aes-256-gcm" || !envelope.iv || !envelope.tag || !envelope.ciphertext) {
     throw new Error("invalid envelope");
   }
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64url"));
+  const decipher = createDecipheriv2("aes-256-gcm", key, Buffer.from(envelope.iv, "base64url"));
   decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
   const plaintext = Buffer.concat([
     decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
@@ -9968,11 +10065,12 @@ var SpaceRuntimeServer = class {
       ...config2.oauthClientId ? { clientId: config2.oauthClientId } : {},
       ...config2.oauthClientSecret ? { clientSecret: config2.oauthClientSecret } : {}
     });
+    this.openAiCredentials = new OpenAiCredentialStore(config2.openaiCredentialStoreFile, config2.credentialKey);
     this.mcpIntegrations = new McpIntegrationServer(config2, this.mcpCredentials);
     const credentialSlot = integrationCredentialSlot(config2);
     this.app = createSpaceRuntimeApp(config2, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
-      openAiConfigured: async () => openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
+      openAiConfigured: async () => openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) || Boolean(await this.openAiCredentials.load()),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
       restartOpenClaw: () => this.restartOpenClaw(),
       setModelSettings: (model, choices) => {
@@ -9997,6 +10095,7 @@ var SpaceRuntimeServer = class {
   exitProcess;
   mcpCredentials;
   mcpIntegrations;
+  openAiCredentials;
   async start() {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
@@ -10126,7 +10225,7 @@ var SpaceRuntimeServer = class {
     this.openclawStarting = true;
     try {
       await configureOpenClawGateway(this.config);
-      const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
+      const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile) ?? process.env.OPENAI_API_KEY?.trim() ?? await this.openAiCredentials.load();
       const env = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",

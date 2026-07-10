@@ -11,6 +11,7 @@ import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import { configureOpenClawGateway } from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
+import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -214,6 +215,18 @@ describe("ML Claw Space runtime", () => {
       headers: { cookie: adminCookie, "content-type": "application/json" },
       body: JSON.stringify({ expectedRevision: 1 }),
     });
+    const invalidBounds = await fetch(
+      `http://127.0.0.1:${config.port}/mlclaw/api/approvals/hf-broker/grant-1/approve`,
+      {
+        method: "POST",
+        headers: {
+          cookie: adminCookie,
+          "content-type": "application/json",
+          "x-mlclaw-csrf": createCsrfToken({ username: "alice", sessionSecret: config.sessionSecret }),
+        },
+        body: JSON.stringify({ expectedRevision: 1, durationSeconds: 86_401, maxUses: 101 }),
+      },
+    );
     const approve = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals/hf-broker/grant-1/approve`, {
       method: "POST",
       headers: {
@@ -230,6 +243,8 @@ describe("ML Claw Space runtime", () => {
     expect(await directory.json()).toEqual({ brokers: [{ id: "hf-broker", label: "Hugging Face" }] });
     expect(list.status).toBe(200);
     expect(missingCsrf.status).toBe(403);
+    expect(invalidBounds.status).toBe(400);
+    await expect(invalidBounds.json()).resolves.toMatchObject({ ok: false, error: "approval bounds are invalid" });
     expect(approve.status).toBe(200);
     expect(brokerRequests).toEqual([
       {
@@ -928,7 +943,7 @@ describe("ML Claw Space runtime", () => {
       });
 
       expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({ ok: true, configured: true, persistent: false });
+      await expect(response.json()).resolves.toMatchObject({ ok: true, configured: true, persistent: true });
     } finally {
       process.stderr.write = writeStderr;
     }
@@ -937,6 +952,11 @@ describe("ML Claw Space runtime", () => {
     expect(log).toContain("failed to persist OpenAI key as Space Secret");
     expect(log).not.toContain(apiKey);
     await expect(fs.readFile(config.openaiCredentialFile, "utf8")).resolves.toBe(`OPENAI_API_KEY=${apiKey}\n`);
+    const encrypted = await fs.readFile(config.openaiCredentialStoreFile, "utf8");
+    expect(encrypted).not.toContain(apiKey);
+    await expect(
+      new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey).load(),
+    ).resolves.toBe(apiKey);
   });
 
   it("requires an admin session before storing OpenAI credentials", async () => {
@@ -1499,6 +1519,37 @@ describe("ML Claw Space runtime", () => {
     expect(env).toMatchObject({ HOME: "/home/node", USER: "node", LOGNAME: "node" });
   });
 
+  it("forwards a persisted OpenAI Space secret to the OpenClaw child", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openai-secret-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const envFile = path.join(root, "env.json");
+    const apiKey = `sk-${"p".repeat(32)}`;
+    const previous = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = apiKey;
+    cleanups.push(() => {
+      if (previous === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previous;
+      }
+    });
+    const config = await testConfig({
+      openclawArgs: [
+        "-e",
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({OPENAI_API_KEY:process.env.OPENAI_API_KEY}));setInterval(()=>undefined,100000)`,
+      ],
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(async () => fileExists(envFile));
+    await expect(fs.readFile(envFile, "utf8")).resolves.toBe(JSON.stringify({ OPENAI_API_KEY: apiKey }));
+  });
+
   it("scrubs broad Hub tokens when no Router token exists", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-legacy-hub-token-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -1853,6 +1904,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     operatorBrokers: [],
     hubUrl: "https://huggingface.co",
     openaiCredentialFile: path.join(root, "secrets", "openai.env"),
+    openaiCredentialStoreFile: path.join(root, "durable", "openai-api-key.enc"),
     mcpCredentialFile: path.join(root, "secrets", "mcp-oauth.enc"),
     hfMcpUrl: "https://huggingface.co/mcp?bouquet=hf",
     researchMcpUrl: "https://evalstate-research-agent-two.hf.space/mcp",

@@ -9,7 +9,8 @@ export MLCLAW_OPENCLAW_UID="$OPENCLAW_UID"
 export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"
 HF_BROKER_ENABLED=0
 HF_BROKER_RUN_DIR="/run/mlclaw-hf-broker"
-HF_BROKER_STATE_DIR="$LIVE_DIR/.mlclaw-broker"
+PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
+HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"
 
 prepare_hf_broker() {
   local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
@@ -43,7 +44,6 @@ prepare_hf_broker() {
   if [ -z "${MLCLAW_OPERATOR_BROKERS_FILE:-}" ]; then
     export MLCLAW_OPERATOR_BROKERS_FILE="$operator_brokers_file"
   fi
-  export MLCLAW_HF_BROKER_STATE_DIR="$HF_BROKER_STATE_DIR"
   HF_BROKER_ENABLED=1
 }
 
@@ -87,7 +87,7 @@ start_hf_broker() {
 
 chown_openclaw_live() {
   chown "$OPENCLAW_IDENTITY" "$LIVE_DIR"
-  find "$LIVE_DIR" -mindepth 1 -maxdepth 1 ! -name .mlclaw-broker -exec chown -R "$OPENCLAW_IDENTITY" {} +
+  find "$LIVE_DIR" -mindepth 1 -maxdepth 1 ! -name .mlclaw-protected -exec chown -R "$OPENCLAW_IDENTITY" {} +
 }
 
 if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
@@ -96,6 +96,8 @@ if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
 fi
 
 prepare_hf_broker
+export MLCLAW_PROTECTED_STATE_DIR="$PROTECTED_STATE_DIR"
+export MLCLAW_OPENAI_CREDENTIAL_STORE_FILE="$PROTECTED_STATE_DIR/control/openai-api-key.enc"
 # The broad token and legacy Router token must not enter the trusted wrapper or
 # any restore, control-plane, or OpenClaw child. The token is already in the
 # broker-owned runtime file before the environment is scrubbed.
@@ -134,6 +136,7 @@ fi
 
 mkdir -p "$LIVE_DIR" "$WORKSPACE_DIR" "$STATE_DIR"
 chown_openclaw_live
+install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR" "$PROTECTED_STATE_DIR/control"
 start_hf_broker
 
 if [ -n "${OPENCLAW_AGENT_NAME:-}" ]; then

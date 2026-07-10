@@ -178,7 +178,8 @@ At container startup, before OpenClaw exists:
 1. The root initializer writes the secret to a broker-owned runtime file.
 2. The initializer clears the secret from the environment inherited by all
    later ML Claw and OpenClaw processes.
-3. It restores the durable live tree, including protected broker grant state.
+3. It restores the durable live tree, including `.mlclaw-protected` broker and
+   encrypted control state.
 4. It reasserts broker-only ownership and starts `hf-broker` under the broker
    user with the token-file path.
 5. It starts the trusted ML Claw control plane under its own user.

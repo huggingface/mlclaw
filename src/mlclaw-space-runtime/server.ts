@@ -8,7 +8,7 @@ import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js"
 import { McpCredentialStore } from "./mcp-credentials.js";
 import { McpIntegrationServer } from "./mcp-integrations.js";
 import { configureOpenClawGateway, managedMcpServerStatus } from "./openclaw-config.js";
-import { loadOpenAiCredentialFile, openAiConfigured } from "./openai-credentials.js";
+import { loadOpenAiCredentialFile, openAiConfigured, OpenAiCredentialStore } from "./openai-credentials.js";
 import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
 import { proxyHttp, proxyWebSocket, rejectWebSocket } from "./proxy.js";
 import { normalizeNext, readSession } from "./session.js";
@@ -25,6 +25,7 @@ export class SpaceRuntimeServer {
   private readonly exitProcess: (code: number) => void;
   private readonly mcpCredentials: McpCredentialStore;
   private readonly mcpIntegrations: McpIntegrationServer;
+  private readonly openAiCredentials: OpenAiCredentialStore;
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
@@ -38,12 +39,15 @@ export class SpaceRuntimeServer {
       ...(config.oauthClientId ? { clientId: config.oauthClientId } : {}),
       ...(config.oauthClientSecret ? { clientSecret: config.oauthClientSecret } : {}),
     });
+    this.openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
     this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials);
     const credentialSlot = integrationCredentialSlot(config);
     this.app = createSpaceRuntimeApp(config, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
       openAiConfigured: async () =>
-        openAiConfigured() || Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)),
+        openAiConfigured() ||
+        Boolean(await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ||
+        Boolean(await this.openAiCredentials.load()),
       restartOpenClawWithOpenAi: (apiKey) => this.restartOpenClawWithOpenAi(apiKey),
       restartOpenClaw: () => this.restartOpenClaw(),
       setModelSettings: (model, choices) => {
@@ -222,7 +226,10 @@ export class SpaceRuntimeServer {
     this.openclawStarting = true;
     try {
       await configureOpenClawGateway(this.config);
-      const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
+      const persistedOpenAiKey =
+        (await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ??
+        process.env.OPENAI_API_KEY?.trim() ??
+        (await this.openAiCredentials.load());
       const env: NodeJS.ProcessEnv = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",

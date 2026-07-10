@@ -946,8 +946,8 @@ function CredentialsPage(props: {
       setApiKey("");
       props.onNotice(
         result.persistent
-          ? "OpenAI key saved as a Space Secret and loaded into the runtime."
-          : "OpenAI key loaded into the runtime. Space Secret persistence was not confirmed.",
+          ? "OpenAI key saved durably and loaded into the runtime."
+          : "OpenAI key loaded into the runtime. Durable persistence was not confirmed.",
       );
       await props.onRefresh();
     } catch (err) {

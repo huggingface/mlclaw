@@ -255,11 +255,13 @@ After signing into the Space, open:
 ```
 
 Submit an OpenAI API key there if you want OpenClaw to use OpenAI-compatible
-models. ML Claw writes a 0600 runtime file for immediate use and restarts the
-internal OpenClaw gateway with `OPENAI_API_KEY` set. The key is never returned
-to the browser. For restart-durable credentials, use the local `mlclaw` CLI to
-set Space secrets; app Spaces do not keep your broad Hugging Face token inside
-the runtime.
+models. ML Claw writes a `0600` runtime file for immediate use and an encrypted
+durable credential protected by `MLCLAW_CREDENTIAL_KEY`, then restarts the
+internal OpenClaw gateway with `OPENAI_API_KEY` set. When trusted Hub authority
+is available, it also stores the key as a write-only Space secret. The key is
+never returned to the browser, exposed to the agent except as its intended
+OpenAI credential, or stored as plaintext in the state bucket. App Spaces do
+not keep broad Hugging Face authority in the web control process.
 
 ## How State Works
 
@@ -275,10 +277,10 @@ Space does not use `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN` secrets. Its broad
 credential is stored as `MLCLAW_BROKER_HF_TOKEN`, written to a broker-owned
 `0600` file during startup, and removed from child-process environments.
 OpenClaw uses only the generated broker agent credential. Broker grant and
-event state is included in the durable snapshot through a root-only staging
-step, then restored with broker-only ownership before OpenClaw starts. The
-broad token and operator credentials remain ephemeral and are never included
-in snapshots.
+event state and encrypted control credentials are included in the durable
+snapshot through a root-only `.mlclaw-protected` staging step, then restored
+with protected ownership before OpenClaw starts. The broad token and operator
+credentials remain ephemeral and are never included in snapshots.
 
 ## Costs
 

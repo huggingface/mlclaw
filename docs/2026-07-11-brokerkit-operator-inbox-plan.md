@@ -36,14 +36,16 @@ already bounded operator projections.
 - support approve, deny, cancel, and revoke with optimistic revisions;
 - use the same inbox in the control UI and gateway overlay;
 - keep the bundled HF Broker entry as one generated registry record;
-- persist broker grant and event state in a protected directory inside the
-  durable snapshot unit; ordinary OpenClaw-owned staging excludes that
-  directory and the trusted root supervisor overlays it before upload;
+- persist broker grant/event state and encrypted control credentials under
+  `.mlclaw-protected` inside the durable snapshot unit; ordinary
+  OpenClaw-owned staging excludes that directory and the trusted root
+  supervisor overlays it before upload;
 - restore durable state before starting HF Broker, then reassert broker-only
   ownership before OpenClaw starts;
 - fail health checks when an HF model is configured without a healthy typed
   inference broker;
 - validate bounded Brokerkit response bodies at the backend network boundary;
+- reject invalid approval duration and use bounds rather than omitting them;
 - add Slophammer TypeScript gates locally and in CI.
 
 ## Acceptance

@@ -38,6 +38,7 @@ export type SpaceRuntimeConfig = {
   operatorBrokers: OperatorBrokerConfig[];
   hubUrl: string;
   openaiCredentialFile: string;
+  openaiCredentialStoreFile: string;
   mcpCredentialFile: string;
   hfMcpUrl: string;
   researchMcpUrl: string;
@@ -102,6 +103,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     (stateMountDir
       ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc`
       : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
+  const openaiCredentialStoreFile =
+    trim(env.MLCLAW_OPENAI_CREDENTIAL_STORE_FILE) ??
+    (stateMountDir
+      ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/openai-api-key.enc`
+      : `${pathDirname(pathDirname(runtimeSettingsFile))}/.mlclaw-protected/control/openai-api-key.enc`);
   const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
@@ -137,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
+    openaiCredentialStoreFile,
     mcpCredentialFile,
     hfMcpUrl: trim(env.MLCLAW_HF_MCP_URL) ?? "https://huggingface.co/mcp?bouquet=hf",
     researchMcpUrl: trim(env.MLCLAW_RESEARCH_MCP_URL) ?? "https://evalstate-research-agent-two.hf.space/mcp",

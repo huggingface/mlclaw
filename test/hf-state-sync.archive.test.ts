@@ -4,7 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  BROKER_STATE_DIR_NAME,
+  PROTECTED_STATE_DIR_NAME,
   createTarZst,
   extractTarZst,
   sha256File,
@@ -39,14 +39,14 @@ async function buildFakeLiveDir(): Promise<string> {
   await fs.mkdir(path.join(state, "tmp"), { recursive: true });
   await fs.mkdir(path.join(state, "cache"), { recursive: true });
   await fs.mkdir(path.join(live, "workspace"), { recursive: true });
-  await fs.mkdir(path.join(live, BROKER_STATE_DIR_NAME), { recursive: true });
+  await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker"), { recursive: true });
   await fs.writeFile(path.join(state, "openclaw.json"), '{"agent":true}');
   await fs.writeFile(path.join(state, ".env"), "SECRET=topsecret");
   await fs.writeFile(path.join(state, "credentials/telegram.json"), '{"token":"secret"}');
   await fs.writeFile(path.join(state, "tmp/scratch.txt"), "scratch");
   await fs.writeFile(path.join(state, "gateway.log"), "log line");
   await fs.writeFile(path.join(live, "workspace/draft.md"), "user work");
-  await fs.writeFile(path.join(live, BROKER_STATE_DIR_NAME, "grants.json"), "protected grant state");
+  await fs.writeFile(path.join(live, PROTECTED_STATE_DIR_NAME, "hf-broker/grants.json"), "protected grant state");
   // Workspace content named like scratch must still survive (scoped excludes).
   await fs.mkdir(path.join(live, "workspace/logs"), { recursive: true });
   await fs.writeFile(path.join(live, "workspace/logs/research.log"), "durable user log");
@@ -61,7 +61,7 @@ describe("staging", () => {
   it("excludes secrets/scratch, keeps workspace, vacuums only non-excluded dbs", async () => {
     const live = await buildFakeLiveDir();
     const staging = path.join(dir, "staging");
-    const result = await stageLiveDir(live, staging, { excludeBrokerState: true });
+    const result = await stageLiveDir(live, staging, { excludeProtectedState: true });
     expect(result).toEqual({
       kind: "staged",
       databases: [".openclaw/agents/main/agent/agent.sqlite"],
@@ -77,7 +77,7 @@ describe("staging", () => {
     await expect(fs.access(path.join(staging, ".openclaw/tmp"))).rejects.toThrow();
     await expect(fs.access(path.join(staging, ".openclaw/cache"))).rejects.toThrow();
     await expect(fs.access(path.join(staging, ".openclaw/gateway.log"))).rejects.toThrow();
-    await expect(fs.access(path.join(staging, BROKER_STATE_DIR_NAME))).rejects.toThrow();
+    await expect(fs.access(path.join(staging, PROTECTED_STATE_DIR_NAME))).rejects.toThrow();
     await expect(fs.access(path.join(staging, ".openclaw/agents/main/agent/agent.sqlite-wal"))).rejects.toThrow();
   });
 
@@ -86,9 +86,9 @@ describe("staging", () => {
     const staging = path.join(dir, "ordinary-stage");
 
     await expect(stageLiveDir(live, staging)).resolves.toMatchObject({ kind: "staged" });
-    await expect(fs.readFile(path.join(staging, BROKER_STATE_DIR_NAME, "grants.json"), "utf8")).resolves.toBe(
-      "protected grant state",
-    );
+    await expect(
+      fs.readFile(path.join(staging, PROTECTED_STATE_DIR_NAME, "hf-broker/grants.json"), "utf8"),
+    ).resolves.toBe("protected grant state");
   });
 });
 
@@ -98,7 +98,7 @@ describe("protected staging", () => {
     const archive = path.join(dir, "protected.tar.zst");
     const base: StageArchive = async ({ liveDir, archivePath }) => {
       const staging = path.join(dir, "base-stage");
-      const result = await stageLiveDir(liveDir, staging, { excludeBrokerState: true });
+      const result = await stageLiveDir(liveDir, staging, { excludeProtectedState: true });
       if (result.kind !== "staged") {
         return result;
       }
@@ -107,18 +107,18 @@ describe("protected staging", () => {
     };
     const stage = protectedStageArchive({
       base,
-      sourceDir: path.join(live, BROKER_STATE_DIR_NAME),
-      archiveName: BROKER_STATE_DIR_NAME,
+      sourceDir: path.join(live, PROTECTED_STATE_DIR_NAME),
+      archiveName: PROTECTED_STATE_DIR_NAME,
     });
 
     await expect(stage({ liveDir: live, archivePath: archive })).resolves.toMatchObject({ kind: "staged" });
     const extracted = path.join(dir, "protected-extracted");
     await extractTarZst(archive, extracted);
     await expect(fs.readFile(path.join(extracted, "workspace/draft.md"), "utf8")).resolves.toBe("user work");
-    await expect(fs.readFile(path.join(extracted, BROKER_STATE_DIR_NAME, "grants.json"), "utf8")).resolves.toBe(
-      "protected grant state",
-    );
-    expect((await fs.stat(path.join(extracted, BROKER_STATE_DIR_NAME))).mode & 0o777).toBe(0o700);
+    await expect(
+      fs.readFile(path.join(extracted, PROTECTED_STATE_DIR_NAME, "hf-broker/grants.json"), "utf8"),
+    ).resolves.toBe("protected grant state");
+    expect((await fs.stat(path.join(extracted, PROTECTED_STATE_DIR_NAME))).mode & 0o777).toBe(0o700);
   });
 });
 

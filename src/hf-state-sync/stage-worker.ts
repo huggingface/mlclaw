@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { BROKER_STATE_DIR_NAME, createTarZst, extractTarZst, stageLiveDir } from "./archive.js";
+import { PROTECTED_STATE_DIR_NAME, createTarZst, extractTarZst, stageLiveDir } from "./archive.js";
 import type { SyncConfig } from "./paths.js";
 import type { StageArchive, StagedArchiveOutcome } from "./snapshot.js";
 
@@ -74,8 +74,8 @@ export function trustedStageArchive(config: SyncConfig, scriptPath: string | und
     config.snapshotUid !== undefined &&
     config.snapshotGid !== undefined;
   if (!canStageAsOpenClaw) {
-    if (config.brokerStateDir) {
-      throw new Error("protected broker state requires root snapshot staging with an OpenClaw UID and GID");
+    if (config.protectedStateDir) {
+      throw new Error("protected runtime state requires root snapshot staging with an OpenClaw UID and GID");
     }
     return undefined;
   }
@@ -85,11 +85,11 @@ export function trustedStageArchive(config: SyncConfig, scriptPath: string | und
     gid: config.snapshotGid as number,
     scriptPath: scriptPath as string,
   });
-  if (config.brokerStateDir) {
+  if (config.protectedStateDir) {
     stageArchive = protectedStageArchive({
       base: stageArchive,
-      sourceDir: config.brokerStateDir,
-      archiveName: BROKER_STATE_DIR_NAME,
+      sourceDir: config.protectedStateDir,
+      archiveName: PROTECTED_STATE_DIR_NAME,
     });
   }
   return stageArchive;
@@ -100,7 +100,7 @@ export async function runStageWorker(liveDir: string): Promise<number> {
   try {
     const stagingDir = path.join(workDir, "stage");
     const archivePath = path.join(workDir, "snapshot.tar.zst");
-    const staged = await stageLiveDir(liveDir, stagingDir, { excludeBrokerState: true });
+    const staged = await stageLiveDir(liveDir, stagingDir, { excludeProtectedState: true });
     if (staged.kind === "corrupt-database") {
       writeWorkerMessage(staged);
       return 0;

@@ -19,7 +19,7 @@ const STATE_EXCLUDED_SUFFIXES = [".log"];
 // are replaced by VACUUM INTO copies during staging.
 const SIDECAR_SUFFIXES = [".sqlite-wal", ".sqlite-shm"];
 const STATE_DIR_NAME = ".openclaw";
-export const BROKER_STATE_DIR_NAME = ".mlclaw-broker";
+export const PROTECTED_STATE_DIR_NAME = ".mlclaw-protected";
 
 function isExcluded(name: string, inStateDir: boolean): boolean {
   if (SIDECAR_SUFFIXES.some((suffix) => name.endsWith(suffix))) {
@@ -44,13 +44,13 @@ async function copyTreeFiltered(params: {
   rootDir: string;
   inStateDir: boolean;
   depth: number;
-  excludeBrokerState: boolean;
+  excludeProtectedState: boolean;
 }): Promise<void> {
-  const { sourceDir, destDir, databases, rootDir, inStateDir, depth, excludeBrokerState } = params;
+  const { sourceDir, destDir, databases, rootDir, inStateDir, depth, excludeProtectedState } = params;
   await fs.mkdir(destDir, { recursive: true });
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
   for (const entry of entries) {
-    if (excludeBrokerState && depth === 0 && entry.name === BROKER_STATE_DIR_NAME) {
+    if (excludeProtectedState && depth === 0 && entry.name === PROTECTED_STATE_DIR_NAME) {
       continue;
     }
     if (isExcluded(entry.name, inStateDir)) {
@@ -68,7 +68,7 @@ async function copyTreeFiltered(params: {
         // project may legitimately contain its own .openclaw directory.
         inStateDir: inStateDir || (depth === 0 && entry.name === STATE_DIR_NAME),
         depth: depth + 1,
-        excludeBrokerState,
+        excludeProtectedState,
       });
     } else if (entry.isFile()) {
       if (entry.name.endsWith(".sqlite")) {
@@ -94,7 +94,7 @@ export type StageResult =
 export async function stageLiveDir(
   liveDir: string,
   stagingDir: string,
-  options: { excludeBrokerState?: boolean } = {},
+  options: { excludeProtectedState?: boolean } = {},
 ): Promise<StageResult> {
   const databases: string[] = [];
   await copyTreeFiltered({
@@ -104,7 +104,7 @@ export async function stageLiveDir(
     rootDir: liveDir,
     inStateDir: false,
     depth: 0,
-    excludeBrokerState: options.excludeBrokerState ?? false,
+    excludeProtectedState: options.excludeProtectedState ?? false,
   });
   for (const relative of databases) {
     const staged = path.join(stagingDir, relative);

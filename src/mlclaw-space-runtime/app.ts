@@ -30,6 +30,7 @@ import { configureOpenClawGateway } from "./openclaw-config.js";
 import {
   loadOpenAiCredentialFile,
   openAiConfigured,
+  OpenAiCredentialStore,
   validateOpenAiApiKey,
   writeEphemeralOpenAiCredential,
 } from "./openai-credentials.js";
@@ -62,6 +63,7 @@ export type RuntimeControls = {
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
   const app = new Hono();
   const operatorBrokers = new OperatorBrokerRegistry(config.operatorBrokers);
+  const openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
 
   app.get("/health", (c) => health(c, config, controls));
   app.get("/healthz", (c) => health(c, config, controls));
@@ -233,6 +235,11 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       if (!expectedRevision) {
         return c.json({ ok: false, error: "expectedRevision is required" }, 400);
       }
+      const durationSeconds = optionalPositiveInteger(body?.durationSeconds, 86_400);
+      const maxUses = optionalPositiveInteger(body?.maxUses, 100);
+      if (browserAction === "approve" && (durationSeconds === "invalid" || maxUses === "invalid")) {
+        return c.json({ ok: false, error: "approval bounds are invalid" }, 400);
+      }
       try {
         const item = await broker.decide(c.req.param("id"), brokerAction, {
           expectedRevision,
@@ -240,8 +247,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
           ...(typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2_000) } : {}),
           ...(browserAction === "approve"
             ? {
-                durationSeconds: boundedInteger(body?.durationSeconds, 0, 86_400),
-                maxUses: boundedInteger(body?.maxUses, 0, 100),
+                ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
+                ...(typeof maxUses === "number" ? { maxUses } : {}),
               }
             : {}),
         });
@@ -369,6 +376,15 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       } catch {
         process.stderr.write("[mlclaw] failed to persist OpenAI key as Space Secret\n");
       }
+    }
+    try {
+      await openAiCredentials.save(apiKey);
+      persistent = true;
+    } catch (err) {
+      if (!persistent) {
+        throw err;
+      }
+      process.stderr.write("[mlclaw] failed to persist encrypted OpenAI credential\n");
     }
     await writeEphemeralOpenAiCredential(config.openaiCredentialFile, apiKey);
     await controls.restartOpenClawWithOpenAi(apiKey);
@@ -578,6 +594,14 @@ function boundedInteger(value: unknown, fallback: number, maximum: number): numb
     return fallback;
   }
   return parsed;
+}
+
+function optionalPositiveInteger(value: unknown, maximum: number): number | "invalid" | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const parsed = typeof value === "number" ? value : Number(String(value));
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= maximum ? parsed : "invalid";
 }
 
 function selectedOperatorBroker(c: Context, registry: OperatorBrokerRegistry): BrokerOperatorClient | Response {
