@@ -8,10 +8,78 @@ OPENCLAW_IDENTITY="${OPENCLAW_UID}:${OPENCLAW_GID}"
 export MLCLAW_OPENCLAW_UID="$OPENCLAW_UID"
 export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"
 
+start_hf_broker() {
+  local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
+  if [ -z "$broker_token" ]; then
+    echo "[hf-broker] MLCLAW_BROKER_HF_TOKEN is not configured; broker disabled"
+    return
+  fi
+
+  local run_dir="/run/mlclaw-hf-broker"
+  local state_dir="/var/lib/hf-broker/state"
+  local token_file="$run_dir/hf-token"
+  local agent_secret_file="$run_dir/agent-secret"
+  local operator_secret_file="$run_dir/operator-secret"
+  local broker_agent_secrets="$run_dir/agent-secrets.conf"
+  local broker_operator_secrets="$run_dir/operator-secrets.conf"
+  local agent_secret operator_secret
+
+  install -d -m 0750 -o root -g hf-broker "$run_dir"
+  install -d -m 0700 -o hf-broker -g hf-broker "$state_dir"
+  agent_secret="$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n')"
+  operator_secret="$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n')"
+  printf '%s\n' "$broker_token" > "$token_file"
+  printf '%s\n' "$agent_secret" > "$agent_secret_file"
+  printf '%s\n' "$operator_secret" > "$operator_secret_file"
+  printf 'default = %s\n' "$agent_secret" > "$broker_agent_secrets"
+  printf 'mlclaw-control = %s\n' "$operator_secret" > "$broker_operator_secrets"
+  chown hf-broker:hf-broker "$token_file" "$broker_agent_secrets" "$broker_operator_secrets"
+  chmod 0600 "$token_file" "$agent_secret_file" "$operator_secret_file" "$broker_agent_secrets" "$broker_operator_secrets"
+
+  HF_BROKER_HF_TOKEN_FILE="$token_file" \
+  HF_BROKER_SECRETS_FILE="$broker_agent_secrets" \
+  HF_BROKER_OPERATOR_SECRETS_FILE="$broker_operator_secrets" \
+  HF_BROKER_BIND_ADDR=127.0.0.1 \
+  HF_BROKER_PORT=7863 \
+  HF_BROKER_OPERATOR_BIND_ADDR=127.0.0.1 \
+  HF_BROKER_OPERATOR_PORT=7864 \
+  HF_BROKER_SCOPE_FILE=/app/hf-broker.scope.json \
+  HF_BROKER_STATE_DIR="$state_dir" \
+  gosu hf-broker:hf-broker /usr/local/bin/hf-broker &
+  HF_BROKER_PID=$!
+
+  export MLCLAW_HF_BROKER_URL="http://127.0.0.1:7863"
+  export MLCLAW_HF_BROKER_OPERATOR_URL="http://127.0.0.1:7864"
+  export MLCLAW_HF_BROKER_AGENT_SECRET_FILE="$agent_secret_file"
+  export MLCLAW_HF_BROKER_OPERATOR_SECRET_FILE="$operator_secret_file"
+
+  for _ in $(seq 1 50); do
+    if ! kill -0 "$HF_BROKER_PID" 2>/dev/null; then
+      echo "[hf-broker] process exited during startup" >&2
+      wait "$HF_BROKER_PID"
+      return 1
+    fi
+    if node -e "fetch('http://127.0.0.1:7863/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+      echo "[hf-broker] agent and operator listeners ready"
+      return
+    fi
+    sleep 0.1
+  done
+  echo "[hf-broker] startup timed out" >&2
+  kill "$HF_BROKER_PID" 2>/dev/null || true
+  return 1
+}
+
 if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
   echo "[mlclaw] gateway disabled"
   exit 0
 fi
+
+start_hf_broker
+# The broad token and legacy Router token must not enter the trusted wrapper or
+# any OpenClaw descendant. The broker already holds the broad token through its
+# private file descriptor and runtime file.
+unset MLCLAW_BROKER_HF_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN
 
 # State, workspace, and config paths are ALWAYS derived from the live dir,
 # never inherited: older deployments set OPENCLAW_STATE_DIR=/data/... as Space

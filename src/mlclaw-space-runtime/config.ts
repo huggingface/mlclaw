@@ -32,6 +32,10 @@ export type SpaceRuntimeConfig = {
   mode: RuntimeMode;
   hfToken: string | undefined;
   routerToken: string | undefined;
+  brokerAgentUrl: string | undefined;
+  brokerAgentSecret: string | undefined;
+  brokerOperatorUrl: string | undefined;
+  brokerOperatorToken: string | undefined;
   hubUrl: string;
   openaiCredentialFile: string;
   mcpCredentialFile: string;
@@ -129,6 +133,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     mode,
     hfToken: trim(env.HF_TOKEN ?? env.HUGGINGFACE_HUB_TOKEN),
     routerToken: trim(env.MLCLAW_ROUTER_TOKEN ?? env.HF_ROUTER_TOKEN),
+    brokerAgentUrl: trim(env.MLCLAW_HF_BROKER_URL),
+    brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
+    brokerOperatorUrl: trim(env.MLCLAW_HF_BROKER_OPERATOR_URL),
+    brokerOperatorToken: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_OPERATOR_SECRET_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
     mcpCredentialFile,
@@ -154,6 +162,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName),
   };
+}
+
+function readOptionalSecret(file: string | undefined): string | undefined {
+  if (!file) {
+    return undefined;
+  }
+  try {
+    return trim(readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
 }
 
 export function integrationCredentialSlot(config: Pick<SpaceRuntimeConfig, "adminUsers">): string | undefined {

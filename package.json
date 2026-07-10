@@ -28,6 +28,7 @@
     "dist/mlclaw-space-runtime.js",
     "Dockerfile",
     "entrypoint.sh",
+    "hf-broker.scope.json",
     "mlclaw.ps1",
     "mlclaw.sh",
     "LICENSE",

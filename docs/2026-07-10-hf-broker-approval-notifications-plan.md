@@ -2,7 +2,11 @@
 
 Date: 2026-07-10
 
-Status: planned, not implemented
+Status: ML Claw integration implemented and under validation. The verified
+hf-broker operator surface is integrated, but live rollout remains blocked on
+the broker's typed `/v1/models` and `/v1/chat/completions` inference routes.
+ML Claw deliberately reports unhealthy until those routes exist rather than
+falling back to a directly exposed Hugging Face token.
 
 ## Goal
 

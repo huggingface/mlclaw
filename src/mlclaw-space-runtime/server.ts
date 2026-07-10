@@ -204,7 +204,7 @@ export class SpaceRuntimeServer {
       await configureOpenClawGateway(this.config);
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
       const env: NodeJS.ProcessEnv = {
-        ...process.env,
+        ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",
         USER: "node",
         LOGNAME: "node",
@@ -213,10 +213,7 @@ export class SpaceRuntimeServer {
         ...(persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {}),
         ...extraEnv,
       };
-      for (const key of WRAPPER_ONLY_ENV) {
-        delete env[key];
-      }
-      if (this.config.routerToken) {
+      if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }
@@ -287,14 +284,33 @@ export class SpaceRuntimeServer {
   }
 }
 
-const WRAPPER_ONLY_ENV = [
-  "MLCLAW_CREDENTIAL_KEY",
-  "MLCLAW_SESSION_SECRET",
-  "SESSION_SECRET",
-  "OAUTH_CLIENT_SECRET",
-  "HF_TOKEN",
-  "HUGGINGFACE_HUB_TOKEN",
+const OPENCLAW_ENV_ALLOWLIST = [
+  "PATH",
+  "NODE_ENV",
+  "TZ",
+  "LANG",
+  "LC_ALL",
+  "OPENCLAW_AGENT_NAME",
+  "OPENCLAW_CONFIG_PATH",
+  "OPENCLAW_DISABLE_BONJOUR",
+  "OPENCLAW_LIVE_DIR",
+  "OPENCLAW_STATE_DIR",
+  "OPENCLAW_WORKSPACE_DIR",
+  "TELEGRAM_API_ROOT",
+  "TELEGRAM_ALLOWED_USERS",
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_PROXY",
 ] as const;
+
+function allowedOpenClawEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of OPENCLAW_ENV_ALLOWLIST) {
+    if (source[key] !== undefined) {
+      env[key] = source[key];
+    }
+  }
+  return env;
+}
 
 function nodeRequestToWebRequest(req: http.IncomingMessage, publicUrl: string): Request {
   const headers = new Headers();

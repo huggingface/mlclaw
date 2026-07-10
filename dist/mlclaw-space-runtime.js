@@ -699,6 +699,10 @@ function loadConfig(env = process.env) {
     mode,
     hfToken: trim(env.HF_TOKEN ?? env.HUGGINGFACE_HUB_TOKEN),
     routerToken: trim(env.MLCLAW_ROUTER_TOKEN ?? env.HF_ROUTER_TOKEN),
+    brokerAgentUrl: trim(env.MLCLAW_HF_BROKER_URL),
+    brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
+    brokerOperatorUrl: trim(env.MLCLAW_HF_BROKER_OPERATOR_URL),
+    brokerOperatorToken: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_OPERATOR_SECRET_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
     mcpCredentialFile,
@@ -724,6 +728,16 @@ function loadConfig(env = process.env) {
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName)
   };
+}
+function readOptionalSecret(file) {
+  if (!file) {
+    return void 0;
+  }
+  try {
+    return trim(readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
 }
 function integrationCredentialSlot(config2) {
   return config2.adminUsers[0];
@@ -2897,6 +2911,99 @@ var Hono2 = class extends Hono {
     });
   }
 };
+
+// src/mlclaw-space-runtime/hf-broker.ts
+var HfBrokerOperatorClient = class {
+  constructor(options) {
+    this.options = options;
+    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.fetchImpl = options.fetch ?? fetch;
+  }
+  fetchImpl;
+  baseUrl;
+  list(params = {}) {
+    const query = new URLSearchParams();
+    if (params.status) {
+      query.set("status", params.status);
+    }
+    if (params.cursor) {
+      query.set("cursor", params.cursor);
+    }
+    if (params.limit) {
+      query.set("limit", String(params.limit));
+    }
+    const suffix = query.size > 0 ? `?${query}` : "";
+    return this.request(`/api/grants${suffix}`);
+  }
+  get(id) {
+    return this.request(`/api/grants/${approvalId(id)}`);
+  }
+  decide(id, action, decision) {
+    return this.request(`/api/grants/${approvalId(id)}/${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        expected_revision: decision.expectedRevision,
+        ...decision.expectedStatus ? { expected_status: decision.expectedStatus } : {},
+        ...decision.reason ? { reason: decision.reason } : {},
+        ...decision.durationSeconds ? { duration_seconds: decision.durationSeconds } : {},
+        ...decision.maxUses ? { max_uses: decision.maxUses } : {}
+      })
+    });
+  }
+  async events(lastEventId) {
+    const headers = {
+      accept: "text/event-stream",
+      authorization: `Bearer ${this.options.token}`
+    };
+    if (lastEventId) {
+      headers["last-event-id"] = lastEventId;
+    }
+    const response = await this.fetchImpl(`${this.baseUrl}/api/grants/events`, {
+      headers,
+      redirect: "error"
+    });
+    if (!response.ok) {
+      throw await brokerError(response);
+    }
+    return response;
+  }
+  async request(pathname, init = {}) {
+    const headers = new Headers(init.headers);
+    headers.set("accept", "application/json");
+    headers.set("authorization", `Bearer ${this.options.token}`);
+    const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
+      ...init,
+      headers,
+      redirect: "error"
+    });
+    if (!response.ok) {
+      throw await brokerError(response);
+    }
+    return await response.json();
+  }
+};
+function brokerOperatorConfigured(config2) {
+  return Boolean(config2.brokerOperatorUrl && config2.brokerOperatorToken);
+}
+function approvalId(id) {
+  const normalized = id.trim();
+  if (!normalized || normalized.length > 200 || normalized.includes("/") || normalized.includes("\\")) {
+    throw new Error("invalid approval request id");
+  }
+  return encodeURIComponent(normalized);
+}
+async function brokerError(response) {
+  const fallback = `HF Broker request failed with HTTP ${response.status}`;
+  try {
+    const value = await response.json();
+    const message = value.error?.message?.trim() || fallback;
+    const code = value.error?.code?.trim();
+    return new Error(code ? `${message} (${code})` : message);
+  } catch {
+    return new Error(fallback);
+  }
+}
 
 // src/mlclaw-space-runtime/csrf.ts
 import { createHmac, randomBytes as randomBytes2, timingSafeEqual } from "node:crypto";
@@ -7761,7 +7868,12 @@ function configureOpenClawModels(openclawConfig, config2) {
   const models = object(openclawConfig, "models");
   const providers = object(models, "providers");
   const huggingface = object(providers, "huggingface");
-  huggingface.baseUrl = "https://router.huggingface.co/v1";
+  huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
+  if (config2.brokerAgentSecret) {
+    huggingface.apiKey = config2.brokerAgentSecret;
+  } else {
+    delete huggingface.apiKey;
+  }
   huggingface.api = "openai-completions";
   huggingface.models = config2.modelChoices.map(modelDefinitionFromChoice);
 }
@@ -8335,6 +8447,41 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
+  function installApprovals() {
+    var button = document.querySelector("[data-mlclaw-approvals-button]");
+    var frame = document.querySelector("[data-mlclaw-approvals-frame]");
+    var badge = document.querySelector("[data-mlclaw-approvals-badge]");
+    if (!button || !frame || button.getAttribute("data-ready") === "1") return;
+    button.setAttribute("data-ready", "1");
+    button.addEventListener("click", function () {
+      var open = frame.style.display !== "none";
+      frame.style.display = open ? "none" : "block";
+      button.setAttribute("aria-expanded", open ? "false" : "true");
+    });
+    window.addEventListener("message", function (event) {
+      if (event.origin === window.location.origin && event.data && event.data.type === "mlclaw-approvals-close") {
+        frame.style.display = "none";
+        button.setAttribute("aria-expanded", "false");
+      }
+    });
+    function refresh() {
+      fetch("/mlclaw/api/approvals?status=pending&limit=100", { credentials: "same-origin" })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (page) {
+          var count = page && Array.isArray(page.items) ? page.items.length : 0;
+          if (!badge) return;
+          badge.textContent = count > 99 ? "99" : String(count);
+          badge.style.display = count > 0 ? "grid" : "none";
+        }).catch(function () {});
+    }
+    refresh();
+    var events = new EventSource("/mlclaw/api/approvals/events", { withCredentials: true });
+    events.onmessage = refresh;
+    ["request.created", "request.updated", "request.decided"].forEach(function (kind) {
+      events.addEventListener(kind, refresh);
+    });
+    events.onerror = function () { events.close(); };
+  }
   if (!document.documentElement.hasAttribute(marker)) {
     document.documentElement.setAttribute(marker, "1");
     var attachShadow = Element.prototype.attachShadow;
@@ -8348,6 +8495,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
     requestAnimationFrame(function () {
       observeExistingShadowRoots(document);
       scan(document);
+      installApprovals();
     });
   }
 })();
@@ -8380,13 +8528,17 @@ function rewriteOpenClawHtml(html, branding) {
 function injectMlClawShell(html, branding) {
   const shell = `
 <div ${SHELL_MARKER} style="position:fixed;left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));z-index:2147483647;">
+  <div style="display:flex;gap:8px;align-items:center;">
   <a href="/mlclaw" aria-label="Open ${escapeHtml2(branding.name)} settings" title="${escapeHtml2(branding.name)}" style="box-sizing:border-box;display:flex;width:34px;height:34px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;text-decoration:none;">
     <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;width:18px;height:18px;">
       <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path>
       <circle cx="12" cy="12" r="3"></circle>
     </svg>
   </a>
+  <button data-mlclaw-approvals-button type="button" aria-label="Open approval requests" aria-expanded="false" style="position:relative;box-sizing:border-box;display:grid;width:34px;height:34px;place-items:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;cursor:pointer;font-size:19px;">\u2662<span data-mlclaw-approvals-badge style="position:absolute;display:none;place-items:center;min-width:17px;height:17px;right:-6px;top:-7px;padding:0 4px;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:700 9px system-ui;"></span></button>
+  </div>
 </div>
+<iframe data-mlclaw-approvals-frame src="/mlclaw?embed=approvals" title="Approval requests" style="display:none;position:fixed;z-index:2147483646;right:0;top:0;width:min(460px,100vw);height:100dvh;border:0;background:white;box-shadow:-12px 0 36px rgba(15,23,42,.22);"></iframe>
 `;
   const brandingScript = `<script ${CONTROL_BRANDING_MARKER} src="${CONTROL_BRANDING_SCRIPT_PATH}"></script>
 `;
@@ -8424,6 +8576,10 @@ function escapeHtml2(value) {
 // src/mlclaw-space-runtime/app.ts
 function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
+  const broker = brokerOperatorConfigured(config2) ? new HfBrokerOperatorClient({
+    baseUrl: config2.brokerOperatorUrl,
+    token: config2.brokerOperatorToken
+  }) : void 0;
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get("/assets/mlclaw.svg", async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8"));
@@ -8478,6 +8634,104 @@ function createSpaceRuntimeApp(config2, controls) {
     }
     return c.json(await statusPayload(config2, controls));
   });
+  app.get("/mlclaw/api/approvals", async (c) => {
+    const auth = requireAdmin(c, config2);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    const rawStatus = c.req.query("status");
+    if (rawStatus && rawStatus !== "pending" && rawStatus !== "history") {
+      return c.json({ ok: false, error: "status must be pending or history" }, 400);
+    }
+    const status = rawStatus === "pending" || rawStatus === "history" ? rawStatus : void 0;
+    const cursor = c.req.query("cursor");
+    try {
+      const page2 = await broker.list({
+        ...status ? { status } : {},
+        ...cursor ? { cursor } : {},
+        limit: boundedInteger(c.req.query("limit"), 50, 100)
+      });
+      return c.json(page2);
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+  app.get("/mlclaw/api/approvals/events", async (c) => {
+    const auth = requireAdmin(c, config2);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    try {
+      const upstream = await broker.events(c.req.header("last-event-id"));
+      return new Response(upstream.body, {
+        status: 200,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "text/event-stream",
+          "x-accel-buffering": "no"
+        }
+      });
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+  app.get("/mlclaw/api/approvals/:id", async (c) => {
+    const auth = requireAdmin(c, config2);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    try {
+      return c.json(await broker.get(c.req.param("id")));
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+  for (const [browserAction, brokerAction] of [
+    ["approve", "approve"],
+    ["reject", "deny"],
+    ["revoke", "revoke"]
+  ]) {
+    app.post(`/mlclaw/api/approvals/:id/${browserAction}`, async (c) => {
+      const auth = requireAdmin(c, config2);
+      if (auth instanceof Response) {
+        return auth;
+      }
+      const csrf = requireCsrf(c, config2, auth.username);
+      if (csrf) {
+        return csrf;
+      }
+      if (!broker) {
+        return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+      }
+      const body = await readJson(c);
+      const expectedRevision = boundedInteger(body?.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
+      if (!expectedRevision) {
+        return c.json({ ok: false, error: "expectedRevision is required" }, 400);
+      }
+      try {
+        return c.json(await broker.decide(c.req.param("id"), brokerAction, {
+          expectedRevision,
+          ...typeof body?.expectedStatus === "string" ? { expectedStatus: body.expectedStatus } : {},
+          ...typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2e3) } : {},
+          ...browserAction === "approve" ? {
+            durationSeconds: boundedInteger(body?.durationSeconds, 0, 86400),
+            maxUses: boundedInteger(body?.maxUses, 0, 100)
+          } : {}
+        }));
+      } catch (err) {
+        return brokerUnavailable(c, err);
+      }
+    });
+  }
   app.post("/mlclaw/api/integrations/huggingface/disconnect", async (c) => {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) {
@@ -8536,8 +8790,8 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
     }
-    if (parseOpenClawModelRef(model) && !config2.routerToken && !config2.hfToken) {
-      return c.json({ ok: false, error: "Hugging Face Router token is required before selecting a Hugging Face Router model" }, 400);
+    if (parseOpenClawModelRef(model) && !config2.brokerAgentSecret && !config2.routerToken && !config2.hfToken) {
+      return c.json({ ok: false, error: "Hugging Face broker credential is required before selecting a Hugging Face Router model" }, 400);
     }
     let persistent = false;
     if (config2.spaceId && config2.hfToken) {
@@ -8619,9 +8873,21 @@ function createSpaceRuntimeApp(config2, controls) {
   });
   return app;
 }
-function health(c, config2, controls) {
-  const healthy = config2.mode !== "app" || controls.openclawRunning();
-  return c.text(healthy ? "ok\n" : "openclaw is not running\n", healthy ? 200 : 503);
+async function health(c, config2, controls) {
+  if (config2.mode !== "app") {
+    return c.text("ok\n");
+  }
+  if (!controls.openclawRunning()) {
+    return c.text("openclaw is not running\n", 503);
+  }
+  const broker = await brokerStatus(config2);
+  if (broker.configured && !broker.agentHealthy) {
+    return c.text("HF Broker agent listener is not healthy\n", 503);
+  }
+  if (broker.configured && parseOpenClawModelRef(config2.model) && !broker.inferenceReady) {
+    return c.text("HF Broker inference routes are not ready\n", 503);
+  }
+  return c.text("ok\n");
 }
 function handleOauthLogin(c, config2) {
   const next = normalizeNext(c.req.query("next") ?? "/");
@@ -8733,6 +8999,18 @@ function requireCsrf(c, config2, username) {
   }
   return c.json({ ok: false, error: "csrf token is invalid or missing" }, 403);
 }
+function boundedInteger(value, fallback, maximum) {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+    return fallback;
+  }
+  return parsed;
+}
+function brokerUnavailable(c, err) {
+  process.stderr.write(`[mlclaw] HF Broker operator request failed: ${formatError(err)}
+`);
+  return c.json({ ok: false, error: "HF Broker operator request failed" }, 502);
+}
 function unauthenticated(c, config2) {
   const next = normalizeNext(c.req.path + new URL(c.req.url).search);
   if (c.req.path.startsWith("/mlclaw/api/")) {
@@ -8775,6 +9053,7 @@ async function statusPayload(config2, controls) {
     stateMountDir: config2.stateMountDir ?? null,
     statePrefix: config2.statePrefix ?? null,
     gatewayLocation: config2.gatewayLocation ?? null,
+    broker: await brokerStatus(config2),
     runtimeImage: config2.runtimeImage ?? null,
     runtimeId: config2.runtimeId ?? null,
     templateRev: config2.templateRev ?? null,
@@ -8807,6 +9086,42 @@ async function statusPayload(config2, controls) {
     },
     branding: publicBranding(config2.branding)
   };
+}
+async function brokerStatus(config2) {
+  const configured = Boolean(config2.brokerAgentUrl && config2.brokerAgentSecret);
+  if (!configured) {
+    return {
+      configured: false,
+      agentHealthy: false,
+      inferenceReady: false,
+      operatorConfigured: brokerOperatorConfigured(config2)
+    };
+  }
+  const baseUrl = config2.brokerAgentUrl.replace(/\/+$/, "");
+  const token = config2.brokerAgentSecret;
+  const [agentHealthy, inferenceReady] = await Promise.all([
+    brokerProbe(`${baseUrl}/healthz`),
+    brokerProbe(`${baseUrl}/v1/models`, token)
+  ]);
+  return {
+    configured: true,
+    agentHealthy,
+    inferenceReady,
+    operatorConfigured: brokerOperatorConfigured(config2)
+  };
+}
+async function brokerProbe(url, token) {
+  try {
+    const response = await fetch(url, {
+      ...token ? { headers: { authorization: `Bearer ${token}` } } : {},
+      redirect: "error",
+      signal: AbortSignal.timeout(2e3)
+    });
+    await response.body?.cancel();
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 function staticScript(body) {
   return new Response(body, {
@@ -9505,7 +9820,7 @@ var SpaceRuntimeServer = class {
       await configureOpenClawGateway(this.config);
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile);
       const env = {
-        ...process.env,
+        ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",
         USER: "node",
         LOGNAME: "node",
@@ -9514,10 +9829,7 @@ var SpaceRuntimeServer = class {
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
         ...extraEnv
       };
-      for (const key of WRAPPER_ONLY_ENV) {
-        delete env[key];
-      }
-      if (this.config.routerToken) {
+      if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }
@@ -9580,14 +9892,32 @@ var SpaceRuntimeServer = class {
     res.end(body);
   }
 };
-var WRAPPER_ONLY_ENV = [
-  "MLCLAW_CREDENTIAL_KEY",
-  "MLCLAW_SESSION_SECRET",
-  "SESSION_SECRET",
-  "OAUTH_CLIENT_SECRET",
-  "HF_TOKEN",
-  "HUGGINGFACE_HUB_TOKEN"
+var OPENCLAW_ENV_ALLOWLIST = [
+  "PATH",
+  "NODE_ENV",
+  "TZ",
+  "LANG",
+  "LC_ALL",
+  "OPENCLAW_AGENT_NAME",
+  "OPENCLAW_CONFIG_PATH",
+  "OPENCLAW_DISABLE_BONJOUR",
+  "OPENCLAW_LIVE_DIR",
+  "OPENCLAW_STATE_DIR",
+  "OPENCLAW_WORKSPACE_DIR",
+  "TELEGRAM_API_ROOT",
+  "TELEGRAM_ALLOWED_USERS",
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_PROXY"
 ];
+function allowedOpenClawEnvironment(source) {
+  const env = {};
+  for (const key of OPENCLAW_ENV_ALLOWLIST) {
+    if (source[key] !== void 0) {
+      env[key] = source[key];
+    }
+  }
+  return env;
+}
 function nodeRequestToWebRequest(req, publicUrl) {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {

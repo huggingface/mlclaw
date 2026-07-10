@@ -75,6 +75,12 @@ type Status = {
   runtimeImage: string | null;
   runtimeId: string | null;
   templateRev: string | null;
+  broker: {
+    configured: boolean;
+    agentHealthy: boolean;
+    inferenceReady: boolean;
+    operatorConfigured: boolean;
+  };
   openclaw: {
     running: boolean;
     host: string;
@@ -105,6 +111,37 @@ type Status = {
   branding: Branding;
 };
 
+type Approval = {
+  id: string;
+  revision: number;
+  client: string;
+  operation: string;
+  status: string;
+  requested_at: string;
+  pending_expires_at: string;
+  active_expires_at?: string;
+  requested_duration_seconds: number;
+  max_uses: number;
+  used_count: number;
+  reason?: string;
+  decision_reason?: string;
+  presentation: {
+    risk: "unknown" | "low" | "medium" | "high" | "critical";
+    title: string;
+    summary?: string;
+    target: string;
+    fields?: Array<{ label: string; value: string }>;
+    plan_hash?: string;
+    audit?: Array<{ label: string; value: string }>;
+  };
+};
+
+type ApprovalPage = {
+  items: Approval[];
+  next_cursor?: string;
+  has_more: boolean;
+};
+
 type View = "overview" | "settings" | "credentials" | "status";
 
 type LoadState =
@@ -120,6 +157,7 @@ const routes: Record<View, string> = {
 };
 
 function App() {
+  const approvalEmbed = new URLSearchParams(window.location.search).get("embed") === "approvals";
   const [view, setView] = useState<View>(viewFromPath(window.location.pathname));
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | undefined>();
@@ -164,6 +202,11 @@ function App() {
   }
   if (state.kind === "error") {
     return <Frame view={view} onNavigate={navigate}><ScreenMessage title="Could not load ML Claw" body={state.error} /></Frame>;
+  }
+  if (approvalEmbed) {
+    return state.session.admin
+      ? <ApprovalCenter session={state.session} embedded />
+      : <ScreenMessage title="Approvals unavailable" body="Administrator access is required." />;
   }
 
   return (
@@ -235,7 +278,198 @@ function Frame(props: {
         </div>
       </aside>
       <main className="content">{props.children}</main>
+      {props.session?.admin ? <ApprovalCenter session={props.session} /> : null}
     </div>
+  );
+}
+
+function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
+  const [open, setOpen] = useState(Boolean(props.embedded));
+  const [view, setView] = useState<"pending" | "history">("pending");
+  const [page, setPage] = useState<ApprovalPage>({ items: [], has_more: false });
+  const [expanded, setExpanded] = useState<string | undefined>();
+  const [seen, setSeen] = useState(() => new Set<string>());
+  const [toast, setToast] = useState<Approval | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState<string | undefined>();
+
+  const load = async (status = view) => {
+    try {
+      const next = await apiGet<ApprovalPage>(`/mlclaw/api/approvals?status=${status}&limit=100`);
+      if (status === "pending") {
+        const newest = next.items.find((item) => !seen.has(item.id));
+        if (newest && page.items.length > 0) {
+          setToast(newest);
+        }
+      }
+      setPage(next);
+      setError(undefined);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  useEffect(() => {
+    void load(view);
+    const timer = window.setInterval(() => void load(view), 15_000);
+    return () => window.clearInterval(timer);
+  }, [view]);
+
+  useEffect(() => {
+    const events = new EventSource("/mlclaw/api/approvals/events", { withCredentials: true });
+    events.onmessage = () => void load(view);
+    events.addEventListener("request.created", () => void load(view));
+    events.addEventListener("request.updated", () => void load(view));
+    events.onerror = () => events.close();
+    return () => events.close();
+  }, [view]);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+    const timer = window.setTimeout(() => setToast(undefined), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        if (props.embedded && window.parent !== window) {
+          window.parent.postMessage({ type: "mlclaw-approvals-close" }, window.location.origin);
+        }
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open, props.embedded]);
+
+  const unread = page.items.filter((item) => !seen.has(item.id)).length;
+  const show = () => {
+    setOpen(true);
+    setToast(undefined);
+    setSeen((current) => new Set([...current, ...page.items.map((item) => item.id)]));
+  };
+  const closeDrawer = () => {
+    setOpen(false);
+    if (props.embedded && window.parent !== window) {
+      window.parent.postMessage({ type: "mlclaw-approvals-close" }, window.location.origin);
+    }
+  };
+  const switchView = (next: "pending" | "history") => {
+    setView(next);
+    setExpanded(undefined);
+  };
+  const decide = async (approval: Approval, action: "approve" | "reject" | "revoke") => {
+    const target = approval.presentation.target;
+    if (action === "approve" && !window.confirm(`Approve ${approval.presentation.title} for ${target}?`)) {
+      return;
+    }
+    const reason = action === "reject" ? window.prompt(`Why reject ${approval.presentation.title} for ${target}?`) : undefined;
+    if (action === "reject" && reason === null) {
+      return;
+    }
+    if (action === "revoke" && !window.confirm(`Revoke access for ${target}?`)) {
+      return;
+    }
+    setBusy(approval.id);
+    try {
+      await apiPost(
+        `/mlclaw/api/approvals/${encodeURIComponent(approval.id)}/${action}`,
+        {
+          expectedRevision: approval.revision,
+          expectedStatus: approval.status,
+          ...(reason ? { reason } : {}),
+          ...(action === "approve" ? {
+            durationSeconds: approval.requested_duration_seconds,
+            maxUses: approval.max_uses,
+          } : {}),
+        },
+        props.session.csrfToken,
+      );
+      await load(view);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  return (
+    <>
+      {!props.embedded ? <button className="approvalBell" type="button" aria-label="Approval requests" onClick={show}>
+        <span aria-hidden="true">♢</span>
+        {unread > 0 ? <span className="approvalBadge">{Math.min(unread, 99)}</span> : null}
+      </button> : null}
+      {toast && !props.embedded ? (
+        <button className="approvalToast" type="button" onClick={show}>
+          <strong>Approval requested</strong>
+          <span>{toast.presentation.title}</span>
+          <small>{toast.presentation.target}</small>
+        </button>
+      ) : null}
+      {open ? (
+        <div className="approvalBackdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            closeDrawer();
+          }
+        }}>
+          <aside className="approvalDrawer" role="dialog" aria-modal="true" aria-label="Hugging Face approval requests">
+            <header className="approvalHeader">
+              <div>
+                <h2>Approvals</h2>
+                <p>Requests from the Hugging Face credential broker</p>
+              </div>
+              <button className="iconButton" type="button" aria-label="Close approvals" onClick={closeDrawer}>×</button>
+            </header>
+            <div className="approvalTabs" role="tablist">
+              <button type="button" role="tab" aria-selected={view === "pending"} className={view === "pending" ? "active" : ""} onClick={() => switchView("pending")}>Pending</button>
+              <button type="button" role="tab" aria-selected={view === "history"} className={view === "history" ? "active" : ""} onClick={() => switchView("history")}>History</button>
+            </div>
+            {error ? <p className="approvalError">{error}</p> : null}
+            <div className="approvalList">
+              {page.items.length === 0 && !error ? <p className="approvalEmpty">No {view} requests.</p> : null}
+              {page.items.map((approval) => {
+                const detailsOpen = expanded === approval.id;
+                return (
+                  <article className="approvalRow" key={approval.id}>
+                    <button className="approvalSummary" type="button" aria-expanded={detailsOpen} onClick={() => setExpanded(detailsOpen ? undefined : approval.id)}>
+                      <span className={`risk risk-${approval.presentation.risk}`}>{approval.presentation.risk}</span>
+                      <strong>{approval.presentation.title}</strong>
+                      <span>{approval.presentation.target}</span>
+                      <small>{approval.status} · {relativeTime(approval.requested_at)}</small>
+                    </button>
+                    {detailsOpen ? (
+                      <div className="approvalDetails">
+                        {approval.presentation.summary ? <p>{approval.presentation.summary}</p> : null}
+                        {approval.reason ? <div><span>Reason</span><p>{approval.reason}</p></div> : null}
+                        {(approval.presentation.fields ?? []).map((field) => <div className="approvalFact" key={`${field.label}:${field.value}`}><span>{field.label}</span><code>{field.value}</code></div>)}
+                        {approval.presentation.plan_hash ? <div className="approvalFact"><span>Plan hash</span><code>{approval.presentation.plan_hash}</code></div> : null}
+                        <div className="approvalFact"><span>Expires</span><code>{new Date(approval.pending_expires_at).toLocaleString()}</code></div>
+                        {approval.status === "pending" ? (
+                          <div className="approvalActions">
+                            <button type="button" className="primaryButton" disabled={busy === approval.id} onClick={() => void decide(approval, "approve")}>Approve</button>
+                            <button type="button" className="secondaryButton" disabled={busy === approval.id} onClick={() => void decide(approval, "reject")}>Reject</button>
+                          </div>
+                        ) : approval.status === "active" ? (
+                          <div className="approvalActions">
+                            <button type="button" className="secondaryButton" disabled={busy === approval.id} onClick={() => void decide(approval, "revoke")}>Revoke</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -253,6 +487,7 @@ function Overview(props: { settings: Settings; status: Status; onNavigate: (view
       <Header title={props.settings.branding.name} subtitle="Deployment overview" />
       <div className="grid">
         <Metric label="Gateway" value={props.status.openclaw.running ? "Running" : "Not ready"} tone={props.status.openclaw.running ? "good" : "warn"} />
+        <Metric label="HF Broker" value={props.status.broker.inferenceReady ? "Ready" : props.status.broker.configured ? "Not ready" : "Not configured"} tone={props.status.broker.inferenceReady ? "good" : "warn"} />
         <Metric label="Model" value={props.settings.model} />
         <Metric label="Bucket" value={props.settings.stateBucket ?? "Not set"} />
         <Metric label="OpenAI" value={props.status.openai.configured ? "Configured" : "Not configured"} tone={props.status.openai.configured ? "good" : "neutral"} />
@@ -592,6 +827,9 @@ function StatusPage(props: { status: Status; settings: Settings; onRefresh: () =
           <Row label="Mode" value={props.status.mode} />
           <Row label="Space" value={props.status.space ?? "Not set"} />
           <Row label="Gateway" value={props.status.openclaw.running ? "Running" : "Not ready"} />
+          <Row label="HF broker agent" value={props.status.broker.agentHealthy ? "Healthy" : props.status.broker.configured ? "Not ready" : "Not configured"} />
+          <Row label="HF broker inference" value={props.status.broker.inferenceReady ? "Ready" : "Not ready"} />
+          <Row label="HF broker approvals" value={props.status.broker.operatorConfigured ? "Ready" : "Not configured"} />
           <Row label="Model" value={props.status.model} />
           <Row label="State bucket" value={props.status.stateBucket ?? props.settings.stateBucket ?? "Not set"} />
           <Row label="State mount" value={props.status.stateMountDir ?? props.settings.stateMountDir ?? "Not set"} />

@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { brandingManifest, publicBranding } from "./branding.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
+import { brokerOperatorConfigured, HfBrokerOperatorClient } from "./hf-broker.js";
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret, setCurrentSpaceVariable } from "./hub-settings.js";
@@ -49,6 +50,12 @@ export type RuntimeControls = {
 
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
   const app = new Hono();
+  const broker = brokerOperatorConfigured(config)
+    ? new HfBrokerOperatorClient({
+      baseUrl: config.brokerOperatorUrl as string,
+      token: config.brokerOperatorToken as string,
+    })
+    : undefined;
 
   app.get("/health", (c) => health(c, config, controls));
   app.get("/healthz", (c) => health(c, config, controls));
@@ -109,6 +116,110 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     }
     return c.json(await statusPayload(config, controls));
   });
+
+  app.get("/mlclaw/api/approvals", async (c) => {
+    const auth = requireAdmin(c, config);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    const rawStatus = c.req.query("status");
+    if (rawStatus && rawStatus !== "pending" && rawStatus !== "history") {
+      return c.json({ ok: false, error: "status must be pending or history" }, 400);
+    }
+    const status: "pending" | "history" | undefined = rawStatus === "pending" || rawStatus === "history"
+      ? rawStatus
+      : undefined;
+    const cursor = c.req.query("cursor");
+    try {
+      const page = await broker.list({
+        ...(status ? { status } : {}),
+        ...(cursor ? { cursor } : {}),
+        limit: boundedInteger(c.req.query("limit"), 50, 100),
+      });
+      return c.json(page);
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+
+  app.get("/mlclaw/api/approvals/events", async (c) => {
+    const auth = requireAdmin(c, config);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    try {
+      const upstream = await broker.events(c.req.header("last-event-id"));
+      return new Response(upstream.body, {
+        status: 200,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "text/event-stream",
+          "x-accel-buffering": "no",
+        },
+      });
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+
+  app.get("/mlclaw/api/approvals/:id", async (c) => {
+    const auth = requireAdmin(c, config);
+    if (auth instanceof Response) {
+      return auth;
+    }
+    if (!broker) {
+      return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+    }
+    try {
+      return c.json(await broker.get(c.req.param("id")));
+    } catch (err) {
+      return brokerUnavailable(c, err);
+    }
+  });
+
+  for (const [browserAction, brokerAction] of [
+    ["approve", "approve"],
+    ["reject", "deny"],
+    ["revoke", "revoke"],
+  ] as const) {
+    app.post(`/mlclaw/api/approvals/:id/${browserAction}`, async (c) => {
+      const auth = requireAdmin(c, config);
+      if (auth instanceof Response) {
+        return auth;
+      }
+      const csrf = requireCsrf(c, config, auth.username);
+      if (csrf) {
+        return csrf;
+      }
+      if (!broker) {
+        return c.json({ ok: false, error: "HF Broker operator inbox is not configured" }, 503);
+      }
+      const body = await readJson(c);
+      const expectedRevision = boundedInteger(body?.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
+      if (!expectedRevision) {
+        return c.json({ ok: false, error: "expectedRevision is required" }, 400);
+      }
+      try {
+        return c.json(await broker.decide(c.req.param("id"), brokerAction, {
+          expectedRevision,
+          ...(typeof body?.expectedStatus === "string" ? { expectedStatus: body.expectedStatus } : {}),
+          ...(typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2_000) } : {}),
+          ...(browserAction === "approve" ? {
+            durationSeconds: boundedInteger(body?.durationSeconds, 0, 86_400),
+            maxUses: boundedInteger(body?.maxUses, 0, 100),
+          } : {}),
+        }));
+      } catch (err) {
+        return brokerUnavailable(c, err);
+      }
+    });
+  }
 
   app.post("/mlclaw/api/integrations/huggingface/disconnect", async (c) => {
     const auth = requireAdmin(c, config);
@@ -171,8 +282,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (!selected) {
       return c.json({ ok: false, error: "active model must be included in model choices" }, 400);
     }
-    if (parseOpenClawModelRef(model) && !config.routerToken && !config.hfToken) {
-      return c.json({ ok: false, error: "Hugging Face Router token is required before selecting a Hugging Face Router model" }, 400);
+    if (parseOpenClawModelRef(model) && !config.brokerAgentSecret && !config.routerToken && !config.hfToken) {
+      return c.json({ ok: false, error: "Hugging Face broker credential is required before selecting a Hugging Face Router model" }, 400);
     }
     let persistent = false;
     if (config.spaceId && config.hfToken) {
@@ -259,9 +370,21 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
   return app;
 }
 
-function health(c: Context, config: SpaceRuntimeConfig, controls: RuntimeControls): Response {
-  const healthy = config.mode !== "app" || controls.openclawRunning();
-  return c.text(healthy ? "ok\n" : "openclaw is not running\n", healthy ? 200 : 503);
+async function health(c: Context, config: SpaceRuntimeConfig, controls: RuntimeControls): Promise<Response> {
+  if (config.mode !== "app") {
+    return c.text("ok\n");
+  }
+  if (!controls.openclawRunning()) {
+    return c.text("openclaw is not running\n", 503);
+  }
+  const broker = await brokerStatus(config);
+  if (broker.configured && !broker.agentHealthy) {
+    return c.text("HF Broker agent listener is not healthy\n", 503);
+  }
+  if (broker.configured && parseOpenClawModelRef(config.model) && !broker.inferenceReady) {
+    return c.text("HF Broker inference routes are not ready\n", 503);
+  }
+  return c.text("ok\n");
 }
 
 function handleOauthLogin(c: Context, config: SpaceRuntimeConfig): Response {
@@ -381,6 +504,19 @@ function requireCsrf(c: Context, config: SpaceRuntimeConfig, username: string): 
   return c.json({ ok: false, error: "csrf token is invalid or missing" }, 403);
 }
 
+function boundedInteger(value: unknown, fallback: number, maximum: number): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function brokerUnavailable(c: Context, err: unknown): Response {
+  process.stderr.write(`[mlclaw] HF Broker operator request failed: ${formatError(err)}\n`);
+  return c.json({ ok: false, error: "HF Broker operator request failed" }, 502);
+}
+
 function unauthenticated(c: Context, config: SpaceRuntimeConfig): Response {
   const next = normalizeNext(c.req.path + new URL(c.req.url).search);
   if (c.req.path.startsWith("/mlclaw/api/")) {
@@ -428,6 +564,7 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     stateMountDir: config.stateMountDir ?? null,
     statePrefix: config.statePrefix ?? null,
     gatewayLocation: config.gatewayLocation ?? null,
+    broker: await brokerStatus(config),
     runtimeImage: config.runtimeImage ?? null,
     runtimeId: config.runtimeId ?? null,
     templateRev: config.templateRev ?? null,
@@ -460,6 +597,49 @@ async function statusPayload(config: SpaceRuntimeConfig, controls: RuntimeContro
     },
     branding: publicBranding(config.branding),
   };
+}
+
+async function brokerStatus(config: SpaceRuntimeConfig): Promise<{
+  configured: boolean;
+  agentHealthy: boolean;
+  inferenceReady: boolean;
+  operatorConfigured: boolean;
+}> {
+  const configured = Boolean(config.brokerAgentUrl && config.brokerAgentSecret);
+  if (!configured) {
+    return {
+      configured: false,
+      agentHealthy: false,
+      inferenceReady: false,
+      operatorConfigured: brokerOperatorConfigured(config),
+    };
+  }
+  const baseUrl = (config.brokerAgentUrl as string).replace(/\/+$/, "");
+  const token = config.brokerAgentSecret as string;
+  const [agentHealthy, inferenceReady] = await Promise.all([
+    brokerProbe(`${baseUrl}/healthz`),
+    brokerProbe(`${baseUrl}/v1/models`, token),
+  ]);
+  return {
+    configured: true,
+    agentHealthy,
+    inferenceReady,
+    operatorConfigured: brokerOperatorConfigured(config),
+  };
+}
+
+async function brokerProbe(url: string, token?: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+      redirect: "error",
+      signal: AbortSignal.timeout(2_000),
+    });
+    await response.body?.cancel();
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function staticScript(body: string): Response {

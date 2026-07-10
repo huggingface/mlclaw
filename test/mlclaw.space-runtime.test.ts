@@ -127,6 +127,125 @@ describe("ML Claw Space runtime", () => {
     });
   });
 
+  it("proxies only authenticated admin approval operations with CSRF protection", async () => {
+    const brokerPort = await freePort();
+    const brokerRequests: Array<{ method: string; url: string; authorization?: string; body: string }> = [];
+    const broker = http.createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) {
+        body += String(chunk);
+      }
+      brokerRequests.push({
+        method: req.method ?? "",
+        url: req.url ?? "",
+        ...(req.headers.authorization ? { authorization: req.headers.authorization } : {}),
+        body,
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.method === "POST") {
+        res.end(JSON.stringify({ id: "grant-1", revision: 2, status: "active" }));
+      } else {
+        res.end(JSON.stringify({ items: [{ id: "grant-1", revision: 1, status: "pending" }], has_more: false }));
+      }
+    });
+    await listen(broker, brokerPort);
+    cleanups.push(() => closeServer(broker));
+    const config = await testConfig({
+      allowedUsers: ["alice", "bob"],
+      adminUsers: ["alice"],
+      brokerOperatorUrl: `http://127.0.0.1:${brokerPort}`,
+      brokerOperatorToken: "operator-secret",
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const anonymous = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals`);
+    const member = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals`, {
+      headers: { cookie: sessionCookie(config, "bob") },
+    });
+    const adminCookie = sessionCookie(config, "alice");
+    const list = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals?status=pending`, {
+      headers: { cookie: adminCookie },
+    });
+    const missingCsrf = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals/grant-1/approve`, {
+      method: "POST",
+      headers: { cookie: adminCookie, "content-type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 1 }),
+    });
+    const approve = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/approvals/grant-1/approve`, {
+      method: "POST",
+      headers: {
+        cookie: adminCookie,
+        "content-type": "application/json",
+        "x-mlclaw-csrf": createCsrfToken({ username: "alice", sessionSecret: config.sessionSecret }),
+      },
+      body: JSON.stringify({ expectedRevision: 1, expectedStatus: "pending", durationSeconds: 300, maxUses: 1 }),
+    });
+
+    expect(anonymous.status).toBe(401);
+    expect(member.status).toBe(403);
+    expect(list.status).toBe(200);
+    expect(missingCsrf.status).toBe(403);
+    expect(approve.status).toBe(200);
+    expect(brokerRequests).toEqual([
+      {
+        method: "GET",
+        url: "/api/grants?status=pending&limit=50",
+        authorization: "Bearer operator-secret",
+        body: "",
+      },
+      {
+        method: "POST",
+        url: "/api/grants/grant-1/approve",
+        authorization: "Bearer operator-secret",
+        body: JSON.stringify({
+          expected_revision: 1,
+          expected_status: "pending",
+          duration_seconds: 300,
+          max_uses: 1,
+        }),
+      },
+    ]);
+  });
+
+  it("fails health checks closed until broker inference routes are ready", async () => {
+    const brokerPort = await freePort();
+    let inferenceReady = false;
+    const broker = http.createServer((req, res) => {
+      if (req.url === "/healthz") {
+        res.writeHead(200);
+        res.end("ok\n");
+        return;
+      }
+      if (req.url === "/v1/models" && req.headers.authorization === "Bearer agent-secret") {
+        res.writeHead(inferenceReady ? 200 : 404, { "content-type": "application/json" });
+        res.end(inferenceReady ? JSON.stringify({ data: [] }) : JSON.stringify({ error: "not found" }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await listen(broker, brokerPort);
+    cleanups.push(() => closeServer(broker));
+    const config = await testConfig({
+      brokerAgentUrl: `http://127.0.0.1:${brokerPort}`,
+      brokerAgentSecret: "agent-secret",
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(() => closeServer(server), () => runtime.stop());
+
+    const unavailable = await fetch(`http://127.0.0.1:${config.port}/health`);
+    expect(unavailable.status).toBe(503);
+    await expect(unavailable.text()).resolves.toBe("HF Broker inference routes are not ready\n");
+
+    inferenceReady = true;
+    const ready = await fetch(`http://127.0.0.1:${config.port}/health`);
+    expect(ready.status).toBe(200);
+    await expect(ready.text()).resolves.toBe("ok\n");
+  });
+
   it("reports trusted local Hub-token integrations as configured", async () => {
     const config = await testConfig({
       gatewayLocation: "local",
@@ -661,7 +780,7 @@ describe("ML Claw Space runtime", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
       ok: false,
-      error: "Hugging Face Router token is required before selecting a Hugging Face Router model",
+      error: "Hugging Face broker credential is required before selecting a Hugging Face Router model",
     });
   });
 
@@ -864,6 +983,8 @@ describe("ML Claw Space runtime", () => {
     expect(body).toContain('name="application-name" content="Research"');
     expect(body).toContain("data-mlclaw-shell");
     expect(body).toContain("data-mlclaw-control-branding");
+    expect(body).toContain("data-mlclaw-approvals-button");
+    expect(body).toContain("data-mlclaw-approvals-frame");
     expect(body).toContain("src=\"/assets/mlclaw-control-branding.js\"");
     expect(body).toContain("href=\"/mlclaw\"");
     expect(body).toContain("width:34px;height:34px");
@@ -1049,7 +1170,14 @@ describe("ML Claw Space runtime", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-wrapper-secrets-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
     const envFile = path.join(root, "env.json");
-    const secretKeys = ["MLCLAW_CREDENTIAL_KEY", "MLCLAW_SESSION_SECRET", "SESSION_SECRET", "OAUTH_CLIENT_SECRET"];
+    const secretKeys = [
+      "MLCLAW_CREDENTIAL_KEY",
+      "MLCLAW_SESSION_SECRET",
+      "SESSION_SECRET",
+      "OAUTH_CLIENT_SECRET",
+      "MLCLAW_BROKER_HF_TOKEN",
+      "MLCLAW_HF_BROKER_OPERATOR_SECRET_FILE",
+    ];
     const keys = [...secretKeys, "HOME", "USER", "LOGNAME"];
     const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     for (const key of keys) {
@@ -1250,6 +1378,24 @@ describe("ML Claw Space runtime", () => {
     });
   });
 
+  it("configures OpenClaw inference with only the broker agent credential", async () => {
+    const config = await testConfig({
+      brokerAgentUrl: "http://127.0.0.1:7863/",
+      brokerAgentSecret: "agent-secret",
+      routerToken: undefined,
+    });
+
+    await configureOpenClawGateway(config);
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.models.providers.huggingface).toMatchObject({
+      baseUrl: "http://127.0.0.1:7863/v1",
+      apiKey: "agent-secret",
+      api: "openai-completions",
+    });
+    expect(JSON.stringify(rewritten)).not.toContain("operator-secret");
+  });
+
   it("makes the duplicated Space owner the default admin", () => {
     const config = loadConfig({
       SPACE_ID: "osolmaz/research",
@@ -1400,6 +1546,10 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     mode: "app",
     hfToken: undefined,
     routerToken: undefined,
+    brokerAgentUrl: undefined,
+    brokerAgentSecret: undefined,
+    brokerOperatorUrl: undefined,
+    brokerOperatorToken: undefined,
     hubUrl: "https://huggingface.co",
     openaiCredentialFile: path.join(root, "secrets", "openai.env"),
     mcpCredentialFile: path.join(root, "secrets", "mcp-oauth.enc"),
