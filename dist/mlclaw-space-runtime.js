@@ -9643,6 +9643,7 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
       const marker = `<meta name="brokerkit-delegated-session" content="${encoded}">`;
       if (!template.includes("</head>")) return c.text("not found\n", 404);
       const headers2 = trustedBrokerKitHeaders(false);
+      headers2.set("content-type", "text/html; charset=utf-8");
       return new Response(template.replace("</head>", `${marker}</head>`), { status: 200, headers: headers2 });
     } catch {
       return c.text("not found\n", 404);

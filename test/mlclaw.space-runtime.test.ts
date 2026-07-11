@@ -1292,6 +1292,7 @@ describe("ML Claw Space runtime", () => {
       headers: { "sec-fetch-dest": "iframe", cookie: sessionCookie(config, "alice") },
     });
     expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
     expect(await page.text()).toContain("Trusted BrokerKit");
     expect(page.headers.get("cache-control")).toBe("no-store");
     expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
