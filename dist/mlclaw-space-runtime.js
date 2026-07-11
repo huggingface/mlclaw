@@ -4688,41 +4688,41 @@ var displayFieldSchema = external_exports.object({
   value: external_exports.string().max(4096)
 }).passthrough();
 var approvalSchema = external_exports.object({
-  id: external_exports.string().min(1).max(200),
+  id: external_exports.string().min(1).max(128),
   revision: external_exports.number().int().positive(),
   requester: external_exports.string().min(1).max(80),
-  operation: external_exports.string().min(1).max(200),
+  operation: external_exports.string().min(1).max(500),
   status: external_exports.enum(["pending", "active", "denied", "canceled", "expired", "consumed", "revoked"]),
-  requested_at: external_exports.string().min(1).max(80),
-  pending_expires_at: external_exports.string().min(1).max(80).optional(),
-  active_expires_at: external_exports.string().min(1).max(80).optional(),
-  requested_duration_seconds: external_exports.number().int().nonnegative(),
+  requested_at: external_exports.string().datetime({ offset: true }),
+  pending_expires_at: external_exports.string().datetime({ offset: true }).optional(),
+  active_expires_at: external_exports.string().datetime({ offset: true }).optional(),
+  requested_duration_seconds: external_exports.number().int().positive(),
   requested_max_uses: external_exports.number().int().positive(),
   granted_max_uses: external_exports.number().int().positive().nullable(),
   used_count: external_exports.number().int().nonnegative(),
   request_reason: external_exports.string().max(2e3).optional(),
-  decided_at: external_exports.string().min(1).max(80).optional(),
+  decided_at: external_exports.string().datetime({ offset: true }).optional(),
   decided_by: external_exports.string().max(200).optional(),
   decided_on_behalf_of: external_exports.string().max(200).optional(),
   decision_reason: external_exports.string().max(2e3).optional(),
   presentation: external_exports.object({
     risk: external_exports.enum(["unknown", "low", "medium", "high", "critical"]),
-    title: external_exports.string().min(1).max(240),
-    summary: external_exports.string().max(4096).optional(),
-    facts: external_exports.array(displayFieldSchema).max(100).optional()
-  }).passthrough(),
+    title: external_exports.string().min(1).max(200),
+    summary: external_exports.string().max(2e3).optional(),
+    facts: external_exports.array(displayFieldSchema).max(20).optional()
+  }).strict(),
   presentation_unavailable: external_exports.boolean().optional(),
   allowed_actions: external_exports.array(external_exports.enum(["approve", "deny", "cancel", "revoke"])).max(4),
   approval_bounds: external_exports.object({
     max_duration_seconds: external_exports.number().int().positive(),
     max_uses: external_exports.number().int().positive()
   }).strict().optional()
-}).passthrough();
+}).strict();
 var approvalPageSchema = external_exports.object({
   requests: external_exports.array(approvalSchema).max(100),
   next_cursor: external_exports.string().min(1).max(4096).optional(),
   event_cursor: external_exports.string().min(1).max(4096).optional()
-}).passthrough();
+}).strict();
 var operatorErrorSchema = external_exports.object({
   error: external_exports.object({
     code: external_exports.string().min(1).max(200).optional(),
@@ -7482,7 +7482,7 @@ var DelegatedBrokerKit = class {
     if (existing && this.handles.has(existing)) return existing;
     if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
     const handle = randomBytes3(18).toString("base64url");
-    const requestExpiry = Date.parse(request.pending_expires_at ?? request.active_expires_at ?? "");
+    const requestExpiry = Date.parse(handleExpiry(request));
     const expiresAtMs = Number.isFinite(requestExpiry) ? Math.min(requestExpiry, this.now().getTime() + 24 * 60 * 6e4) : this.now().getTime() + 5 * 6e4;
     this.handles.set(handle, { sourceId, requestId: request.id, revision: request.revision, expiresAtMs });
     this.handlesByIdentity.set(identity, handle);
@@ -7525,6 +7525,10 @@ function delegatedError(code) {
 }
 function project(source, request, handle) {
   return { ...request, sourceId: source.id, sourceLabel: source.label, handle };
+}
+function handleExpiry(request) {
+  if (request.status === "active") return request.active_expires_at ?? "";
+  return request.pending_expires_at ?? request.active_expires_at ?? "";
 }
 function decisionKey(record, action, actor) {
   return createHash("sha256").update(

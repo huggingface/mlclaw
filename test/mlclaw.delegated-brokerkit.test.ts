@@ -11,6 +11,7 @@ function request(id: string, revision = 1, status = "pending") {
     status,
     requested_at: "2026-07-12T00:00:00Z",
     pending_expires_at: "2026-07-12T01:00:00Z",
+    ...(status === "active" ? { active_expires_at: "2026-07-12T02:00:00Z" } : {}),
     requested_duration_seconds: 300,
     requested_max_uses: 1,
     granted_max_uses: status === "active" ? 1 : null,

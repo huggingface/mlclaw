@@ -81,31 +81,31 @@ const displayFieldSchema = z
 
 const approvalSchema = z
   .object({
-    id: z.string().min(1).max(200),
+    id: z.string().min(1).max(128),
     revision: z.number().int().positive(),
     requester: z.string().min(1).max(80),
-    operation: z.string().min(1).max(200),
+    operation: z.string().min(1).max(500),
     status: z.enum(["pending", "active", "denied", "canceled", "expired", "consumed", "revoked"]),
-    requested_at: z.string().min(1).max(80),
-    pending_expires_at: z.string().min(1).max(80).optional(),
-    active_expires_at: z.string().min(1).max(80).optional(),
-    requested_duration_seconds: z.number().int().nonnegative(),
+    requested_at: z.string().datetime({ offset: true }),
+    pending_expires_at: z.string().datetime({ offset: true }).optional(),
+    active_expires_at: z.string().datetime({ offset: true }).optional(),
+    requested_duration_seconds: z.number().int().positive(),
     requested_max_uses: z.number().int().positive(),
     granted_max_uses: z.number().int().positive().nullable(),
     used_count: z.number().int().nonnegative(),
     request_reason: z.string().max(2_000).optional(),
-    decided_at: z.string().min(1).max(80).optional(),
+    decided_at: z.string().datetime({ offset: true }).optional(),
     decided_by: z.string().max(200).optional(),
     decided_on_behalf_of: z.string().max(200).optional(),
     decision_reason: z.string().max(2_000).optional(),
     presentation: z
       .object({
         risk: z.enum(["unknown", "low", "medium", "high", "critical"]),
-        title: z.string().min(1).max(240),
-        summary: z.string().max(4_096).optional(),
-        facts: z.array(displayFieldSchema).max(100).optional(),
+        title: z.string().min(1).max(200),
+        summary: z.string().max(2_000).optional(),
+        facts: z.array(displayFieldSchema).max(20).optional(),
       })
-      .passthrough(),
+      .strict(),
     presentation_unavailable: z.boolean().optional(),
     allowed_actions: z.array(z.enum(["approve", "deny", "cancel", "revoke"])).max(4),
     approval_bounds: z
@@ -116,7 +116,7 @@ const approvalSchema = z
       .strict()
       .optional(),
   })
-  .passthrough();
+  .strict();
 
 const approvalPageSchema = z
   .object({
@@ -124,7 +124,7 @@ const approvalPageSchema = z
     next_cursor: z.string().min(1).max(4_096).optional(),
     event_cursor: z.string().min(1).max(4_096).optional(),
   })
-  .passthrough();
+  .strict();
 
 const operatorErrorSchema = z
   .object({

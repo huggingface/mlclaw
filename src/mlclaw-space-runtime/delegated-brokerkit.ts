@@ -194,7 +194,7 @@ export class DelegatedBrokerKit {
     if (existing && this.handles.has(existing)) return existing;
     if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
     const handle = randomBytes(18).toString("base64url");
-    const requestExpiry = Date.parse(request.pending_expires_at ?? request.active_expires_at ?? "");
+    const requestExpiry = Date.parse(handleExpiry(request));
     const expiresAtMs = Number.isFinite(requestExpiry)
       ? Math.min(requestExpiry, this.now().getTime() + 24 * 60 * 60_000)
       : this.now().getTime() + 5 * 60_000;
@@ -246,6 +246,11 @@ function delegatedError(code: string): DelegatedBrokerKitError {
 
 function project(source: OperatorBrokerSummary, request: BrokerApproval, handle: string): DelegatedRequest {
   return { ...request, sourceId: source.id, sourceLabel: source.label, handle };
+}
+
+function handleExpiry(request: BrokerApproval): string {
+  if (request.status === "active") return request.active_expires_at ?? "";
+  return request.pending_expires_at ?? request.active_expires_at ?? "";
 }
 
 function decisionKey(record: HandleRecord, action: DelegatedAction, actor: string): string {
