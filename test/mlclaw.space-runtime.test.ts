@@ -16,7 +16,12 @@ import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
-function brokerApproval(id: string, status: string, revision: number) {
+function brokerApproval(
+  id: string,
+  status: string,
+  revision: number,
+  approvalBounds = { max_duration_seconds: 300, max_uses: 1 },
+) {
   return {
     id,
     revision,
@@ -25,9 +30,9 @@ function brokerApproval(id: string, status: string, revision: number) {
     status,
     requested_at: "2026-07-11T00:00:00Z",
     pending_expires_at: "2099-07-12T00:05:00Z",
-    requested_duration_seconds: 300,
-    requested_max_uses: 1,
-    granted_max_uses: status === "active" ? 1 : null,
+    requested_duration_seconds: approvalBounds.max_duration_seconds,
+    requested_max_uses: approvalBounds.max_uses,
+    granted_max_uses: status === "active" ? approvalBounds.max_uses : null,
     used_count: 0,
     presentation: {
       risk: "medium",
@@ -35,7 +40,7 @@ function brokerApproval(id: string, status: string, revision: number) {
       facts: [{ label: "Repository", value: "osolmaz/example" }],
     },
     allowed_actions: status === "pending" ? ["approve", "deny", "cancel"] : ["revoke"],
-    approval_bounds: { max_duration_seconds: 300, max_uses: 1 },
+    approval_bounds: approvalBounds,
   };
 }
 
@@ -179,13 +184,21 @@ describe("ML Claw Space runtime", () => {
       if (req.url === "/.well-known/brokerkit-operator") {
         res.end(JSON.stringify({ api_version: "brokerkit.io/operator/v1" }));
       } else if (req.method === "POST") {
-        res.end(JSON.stringify(brokerApproval("request-1", "active", 2)));
+        res.end(
+          JSON.stringify(brokerApproval("request-1", "active", 2, { max_duration_seconds: 172_800, max_uses: 200 })),
+        );
       } else if (req.url?.includes("/request-1")) {
-        res.end(JSON.stringify(brokerApproval("request-1", "pending", 1)));
+        res.end(
+          JSON.stringify(brokerApproval("request-1", "pending", 1, { max_duration_seconds: 172_800, max_uses: 200 })),
+        );
       } else if (req.url?.includes("status=active")) {
         res.end(JSON.stringify({ requests: [] }));
       } else {
-        res.end(JSON.stringify({ requests: [brokerApproval("request-1", "pending", 1)] }));
+        res.end(
+          JSON.stringify({
+            requests: [brokerApproval("request-1", "pending", 1, { max_duration_seconds: 172_800, max_uses: 200 })],
+          }),
+        );
       }
     });
     await listen(broker, brokerPort);
@@ -270,7 +283,7 @@ describe("ML Claw Space runtime", () => {
       body: JSON.stringify({
         expectedRevision: 1,
         reason: "approved in the Gateway",
-        constraints: { durationSeconds: 300, maxUses: 1 },
+        constraints: { durationSeconds: 172_800, maxUses: 200 },
       }),
     });
     expect(approve.status).toBe(200);
@@ -288,7 +301,7 @@ describe("ML Claw Space runtime", () => {
       expected_revision: 1,
       on_behalf_of: "mlclaw:alice",
       decision_reason: "approved in the Gateway",
-      constraints: { duration_seconds: 300, max_uses: 1 },
+      constraints: { duration_seconds: 172_800, max_uses: 200 },
     });
   });
 

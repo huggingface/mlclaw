@@ -173,8 +173,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       }
       const constraints = recordValue(body.constraints);
       const expectedRevision = boundedInteger(body.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
-      const durationSeconds = optionalPositiveInteger(constraints?.durationSeconds, 86_400);
-      const maxUses = optionalPositiveInteger(constraints?.maxUses, 100);
+      const durationSeconds = optionalPositiveInteger(constraints?.durationSeconds, Number.MAX_SAFE_INTEGER);
+      const maxUses = optionalPositiveInteger(constraints?.maxUses, Number.MAX_SAFE_INTEGER);
       if (
         !expectedRevision ||
         (body.reason !== undefined && (typeof body.reason !== "string" || body.reason.length > 2_000)) ||

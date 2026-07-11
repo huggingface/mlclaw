@@ -137,6 +137,9 @@ describe("DelegatedBrokerKit", () => {
     );
     const pending = (await delegated.snapshot()).requests[0];
     if (!pending) throw new Error("missing request");
+    await expect(
+      delegated.decide(pending.handle, "approve", 1, "alice", { durationSeconds: 301, maxUses: 1 }),
+    ).rejects.toMatchObject({ code: "action_not_allowed" });
     const updated = await delegated.decide(pending.handle, "approve", 1, "alice", {
       durationSeconds: 300,
       maxUses: 1,

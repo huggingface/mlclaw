@@ -7436,6 +7436,7 @@ var DelegatedBrokerKit = class {
       throw delegatedError("revision_stale");
     }
     if (!current.allowed_actions.includes(action)) throw delegatedError("action_not_allowed");
+    if (!decisionWithinBounds(action, current, options)) throw delegatedError("action_not_allowed");
     const updated = await source.decide(
       record.requestId,
       action,
@@ -7594,6 +7595,13 @@ function decisionOptions(record, action, expectedRevision, actor, options) {
     ...options.durationSeconds ? { durationSeconds: options.durationSeconds } : {},
     ...options.maxUses ? { maxUses: options.maxUses } : {}
   };
+}
+function decisionWithinBounds(action, request, options) {
+  if (options.durationSeconds === void 0 && options.maxUses === void 0) return true;
+  const bounds = request.approval_bounds;
+  return Boolean(
+    action === "approve" && bounds && options.durationSeconds !== void 0 && options.durationSeconds <= bounds.max_duration_seconds && options.maxUses !== void 0 && options.maxUses <= bounds.max_uses
+  );
 }
 function authenticatedTokenPayload(header, sign3) {
   if (!header?.startsWith("Bearer ")) return void 0;
@@ -9339,8 +9347,8 @@ function createSpaceRuntimeApp(config2, controls) {
       }
       const constraints = recordValue(body.constraints);
       const expectedRevision = boundedInteger(body.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
-      const durationSeconds = optionalPositiveInteger(constraints?.durationSeconds, 86400);
-      const maxUses = optionalPositiveInteger(constraints?.maxUses, 100);
+      const durationSeconds = optionalPositiveInteger(constraints?.durationSeconds, Number.MAX_SAFE_INTEGER);
+      const maxUses = optionalPositiveInteger(constraints?.maxUses, Number.MAX_SAFE_INTEGER);
       if (!expectedRevision || body.reason !== void 0 && (typeof body.reason !== "string" || body.reason.length > 2e3) || body.constraints !== void 0 && (!constraints || Object.keys(constraints).some((key) => !["durationSeconds", "maxUses"].includes(key)) || durationSeconds === void 0 || maxUses === void 0) || durationSeconds === "invalid" || maxUses === "invalid" || action !== "approve" && (durationSeconds !== void 0 || maxUses !== void 0)) {
         return delegatedErrorResponse(c, "invalid_input", 400);
       }

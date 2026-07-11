@@ -135,6 +135,7 @@ export class DelegatedBrokerKit {
       throw delegatedError("revision_stale");
     }
     if (!current.allowed_actions.includes(action)) throw delegatedError("action_not_allowed");
+    if (!decisionWithinBounds(action, current, options)) throw delegatedError("action_not_allowed");
     const updated = await source.decide(
       record.requestId,
       action,
@@ -338,6 +339,23 @@ function decisionOptions(
     ...(options.durationSeconds ? { durationSeconds: options.durationSeconds } : {}),
     ...(options.maxUses ? { maxUses: options.maxUses } : {}),
   };
+}
+
+function decisionWithinBounds(
+  action: DelegatedAction,
+  request: BrokerApproval,
+  options: { durationSeconds?: number; maxUses?: number },
+): boolean {
+  if (options.durationSeconds === undefined && options.maxUses === undefined) return true;
+  const bounds = request.approval_bounds;
+  return Boolean(
+    action === "approve" &&
+    bounds &&
+    options.durationSeconds !== undefined &&
+    options.durationSeconds <= bounds.max_duration_seconds &&
+    options.maxUses !== undefined &&
+    options.maxUses <= bounds.max_uses,
+  );
 }
 
 function authenticatedTokenPayload(header: string | undefined, sign: (value: string) => string): string | undefined {
