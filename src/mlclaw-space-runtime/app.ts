@@ -4,14 +4,10 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { brandingManifest, publicBranding } from "./branding.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
-import {
-  BrokerOperatorError,
-  OperatorBrokerRegistry,
-  type BrokerOperatorClient,
-  type OperatorBrokerSummary,
-} from "./operator-brokers.js";
+import { BrokerOperatorError, OperatorBrokerRegistry } from "./operator-brokers.js";
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
+import { DelegatedBrokerKit, DelegatedBrokerKitError } from "./delegated-brokerkit.js";
 import {
   normalizeModel,
   restartCurrentSpace,
@@ -63,6 +59,7 @@ export type RuntimeControls = {
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
   const app = new Hono();
   const operatorBrokers = new OperatorBrokerRegistry(config.operatorBrokers);
+  const delegatedBrokerKit = new DelegatedBrokerKit(operatorBrokers, config.sessionSecret);
   const openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
 
   app.get("/health", (c) => health(c, config, controls));
@@ -135,126 +132,68 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     return c.json(await statusPayload(config, controls));
   });
 
-  app.get("/mlclaw/api/approvals/brokers", (c) => {
+  app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
+
+  app.get("/mlclaw/api/brokerkit/session", (c) => {
+    if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
     const auth = requireAdmin(c, config);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    return c.json({ brokers: operatorBrokers.list() });
+    if (auth instanceof Response) return auth;
+    return delegatedJson(c, delegatedBrokerKit.issueSession(auth.username));
   });
 
-  app.get("/mlclaw/api/approvals", async (c) => {
-    const auth = requireAdmin(c, config);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = selectedOperatorBroker(c, operatorBrokers);
-    if (broker instanceof Response) {
-      return broker;
-    }
-    const rawStatus = c.req.query("status");
-    if (rawStatus && rawStatus !== "pending" && rawStatus !== "history") {
-      return c.json({ ok: false, error: "status must be pending or history" }, 400);
-    }
-    const status: "pending" | "history" | undefined =
-      rawStatus === "pending" || rawStatus === "history" ? rawStatus : undefined;
-    const cursor = c.req.query("cursor");
+  app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
+    const actor = delegatedActor(c, delegatedBrokerKit);
+    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      const page = await broker.list({
-        ...(status ? { status } : {}),
-        ...(cursor ? { cursor } : {}),
-        limit: boundedInteger(c.req.query("limit"), 50, 100),
-      });
-      return c.json({ broker: broker.summary(), ...page });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
+      return delegatedJson(c, await delegatedBrokerKit.snapshot());
+    } catch (error) {
+      return delegatedFailure(c, error);
     }
   });
 
-  app.get("/mlclaw/api/approvals/events", async (c) => {
-    const auth = requireAdmin(c, config);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = selectedOperatorBroker(c, operatorBrokers);
-    if (broker instanceof Response) {
-      return broker;
-    }
+  app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
+    const actor = delegatedActor(c, delegatedBrokerKit);
+    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      const upstream = await broker.events(c.req.header("last-event-id"), c.req.raw.signal);
-      return new Response(upstream.body, {
-        status: 200,
-        headers: {
-          "cache-control": "no-store",
-          "content-type": "text/event-stream",
-          "x-accel-buffering": "no",
-        },
-      });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
+      return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
+    } catch (error) {
+      return delegatedFailure(c, error);
     }
   });
 
-  app.get("/mlclaw/api/approvals/:broker/:id", async (c) => {
-    const auth = requireAdmin(c, config);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = operatorBrokers.get(c.req.param("broker"));
-    if (!broker) {
-      return c.json({ ok: false, error: "operator broker is not configured" }, 404);
-    }
-    try {
-      return c.json({ broker: broker.summary(), item: await broker.get(c.req.param("id")) });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
-    }
-  });
-
-  for (const [browserAction, brokerAction] of [
-    ["approve", "approve"],
-    ["deny", "deny"],
-    ["cancel", "cancel"],
-    ["revoke", "revoke"],
-  ] as const) {
-    app.post(`/mlclaw/api/approvals/:broker/:id/${browserAction}`, async (c) => {
-      const auth = requireAdmin(c, config);
-      if (auth instanceof Response) {
-        return auth;
-      }
-      const csrf = requireCsrf(c, config, auth.username);
-      if (csrf) {
-        return csrf;
-      }
-      const broker = operatorBrokers.get(c.req.param("broker"));
-      if (!broker) {
-        return c.json({ ok: false, error: "operator broker is not configured" }, 404);
-      }
+  for (const action of ["approve", "deny", "cancel", "revoke"] as const) {
+    app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
+      const actor = delegatedActor(c, delegatedBrokerKit);
+      if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readJson(c);
-      const expectedRevision = boundedInteger(body?.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
-      if (!expectedRevision) {
-        return c.json({ ok: false, error: "expectedRevision is required" }, 400);
+      if (
+        !body ||
+        Object.keys(body).some((key) => !["expectedRevision", "reason", "durationSeconds", "maxUses"].includes(key))
+      ) {
+        return delegatedErrorResponse(c, "invalid_input", 400);
       }
-      const durationSeconds = optionalPositiveInteger(body?.durationSeconds, 86_400);
-      const maxUses = optionalPositiveInteger(body?.maxUses, 100);
-      if (browserAction === "approve" && (durationSeconds === "invalid" || maxUses === "invalid")) {
-        return c.json({ ok: false, error: "approval bounds are invalid" }, 400);
+      const expectedRevision = boundedInteger(body.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
+      const durationSeconds = optionalPositiveInteger(body.durationSeconds, 86_400);
+      const maxUses = optionalPositiveInteger(body.maxUses, 100);
+      if (
+        !expectedRevision ||
+        durationSeconds === "invalid" ||
+        maxUses === "invalid" ||
+        (action !== "approve" && (durationSeconds !== undefined || maxUses !== undefined))
+      ) {
+        return delegatedErrorResponse(c, "invalid_input", 400);
       }
       try {
-        const item = await broker.decide(c.req.param("id"), brokerAction, {
-          expectedRevision,
-          ...(typeof body?.expectedStatus === "string" ? { expectedStatus: body.expectedStatus } : {}),
-          ...(typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2_000) } : {}),
-          ...(browserAction === "approve"
-            ? {
-                ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
-                ...(typeof maxUses === "number" ? { maxUses } : {}),
-              }
-            : {}),
-        });
-        return c.json({ broker: broker.summary(), item });
-      } catch (err) {
-        return brokerFailure(c, err, broker.summary());
+        return delegatedJson(
+          c,
+          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, actor, {
+            ...(typeof body.reason === "string" ? { reason: body.reason.slice(0, 2_000) } : {}),
+            ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
+            ...(typeof maxUses === "number" ? { maxUses } : {}),
+          }),
+        );
+      } catch (error) {
+        return delegatedFailure(c, error);
       }
     });
   }
@@ -604,22 +543,65 @@ function optionalPositiveInteger(value: unknown, maximum: number): number | "inv
   return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= maximum ? parsed : "invalid";
 }
 
-function selectedOperatorBroker(c: Context, registry: OperatorBrokerRegistry): BrokerOperatorClient | Response {
-  const id = c.req.query("broker");
-  if (!id) {
-    return c.json({ ok: false, error: "broker is required" }, 400);
-  }
-  return registry.get(id) ?? c.json({ ok: false, error: "operator broker is not configured" }, 404);
+function delegatedOriginAllowed(c: Context): boolean {
+  return c.req.header("origin") === "null";
 }
 
-function brokerFailure(c: Context, err: unknown, broker: OperatorBrokerSummary): Response {
-  const upstream =
-    err instanceof BrokerOperatorError ? ` status=${err.status}${err.code ? ` code=${err.code}` : ""}` : "";
-  process.stderr.write(`[mlclaw] ${broker.id} operator request failed${upstream}: ${formatError(err)}\n`);
-  if (err instanceof BrokerOperatorError && err.status >= 400 && err.status < 500) {
-    return c.json({ ok: false, error: err.message, ...(err.code ? { code: err.code } : {}) }, err.status as 400);
+function delegatedActor(c: Context, delegated: DelegatedBrokerKit): string | undefined {
+  if (!delegatedOriginAllowed(c)) return undefined;
+  return delegated.authorize(c.req.header("authorization"));
+}
+
+function delegatedPreflight(c: Context): Response {
+  if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
+  delegatedHeaders(c);
+  c.header("access-control-allow-headers", "authorization, content-type");
+  c.header("access-control-allow-methods", "GET, POST, OPTIONS");
+  c.header("access-control-max-age", "300");
+  return c.body(null, 204);
+}
+
+function delegatedJson(c: Context, value: unknown, status: 200 | 201 = 200): Response {
+  delegatedHeaders(c);
+  return c.json(value, status);
+}
+
+function delegatedErrorResponse(c: Context, code: string, status: 400 | 401 | 403 | 404 | 409 | 502): Response {
+  delegatedHeaders(c);
+  return c.json({ error: { code } }, status);
+}
+
+function delegatedFailure(c: Context, error: unknown): Response {
+  if (error instanceof DelegatedBrokerKitError) {
+    const status =
+      error.code === "request_not_found"
+        ? 404
+        : error.code === "revision_stale" || error.code === "action_not_allowed"
+          ? 409
+          : 502;
+    return delegatedErrorResponse(c, error.code, status);
   }
-  return c.json({ ok: false, error: `${broker.label} operator API is unavailable` }, 502);
+  if (error instanceof BrokerOperatorError) {
+    const code = safeDelegatedBrokerCode(error.code);
+    const status = error.status === 404 ? 404 : error.status === 409 ? 409 : 502;
+    return delegatedErrorResponse(c, code, status);
+  }
+  process.stderr.write(`[mlclaw] delegated BrokerKit request failed: ${formatError(error)}\n`);
+  return delegatedErrorResponse(c, "source_unavailable", 502);
+}
+
+function delegatedHeaders(c: Context): void {
+  c.header("access-control-allow-origin", "null");
+  c.header("access-control-allow-credentials", "true");
+  c.header("cache-control", "no-store");
+  c.header("vary", "origin");
+  c.header("x-content-type-options", "nosniff");
+}
+
+function safeDelegatedBrokerCode(value: string | undefined): string {
+  return ["request_not_found", "request_terminal", "revision_stale", "action_not_allowed"].includes(value ?? "")
+    ? (value as string)
+    : "source_unavailable";
 }
 
 function unauthenticated(c: Context, config: SpaceRuntimeConfig): Response {
