@@ -9334,20 +9334,21 @@ function createSpaceRuntimeApp(config2, controls) {
       const actor = delegatedActor(c, delegatedBrokerKit);
       if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readJson(c);
-      if (!body || Object.keys(body).some((key) => !["expectedRevision", "reason", "durationSeconds", "maxUses"].includes(key))) {
+      if (!body || Object.keys(body).some((key) => !["expectedRevision", "reason", "constraints"].includes(key))) {
         return delegatedErrorResponse(c, "invalid_input", 400);
       }
+      const constraints = recordValue(body.constraints);
       const expectedRevision = boundedInteger(body.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
-      const durationSeconds = optionalPositiveInteger(body.durationSeconds, 86400);
-      const maxUses = optionalPositiveInteger(body.maxUses, 100);
-      if (!expectedRevision || durationSeconds === "invalid" || maxUses === "invalid" || action !== "approve" && (durationSeconds !== void 0 || maxUses !== void 0)) {
+      const durationSeconds = optionalPositiveInteger(constraints?.durationSeconds, 86400);
+      const maxUses = optionalPositiveInteger(constraints?.maxUses, 100);
+      if (!expectedRevision || body.reason !== void 0 && (typeof body.reason !== "string" || body.reason.length > 2e3) || body.constraints !== void 0 && (!constraints || Object.keys(constraints).some((key) => !["durationSeconds", "maxUses"].includes(key)) || durationSeconds === void 0 || maxUses === void 0) || durationSeconds === "invalid" || maxUses === "invalid" || action !== "approve" && (durationSeconds !== void 0 || maxUses !== void 0)) {
         return delegatedErrorResponse(c, "invalid_input", 400);
       }
       try {
         return delegatedJson(
           c,
           await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, actor, {
-            ...typeof body.reason === "string" ? { reason: body.reason.slice(0, 2e3) } : {},
+            ...typeof body.reason === "string" ? { reason: body.reason } : {},
             ...typeof durationSeconds === "number" ? { durationSeconds } : {},
             ...typeof maxUses === "number" ? { maxUses } : {}
           })
@@ -9859,6 +9860,9 @@ async function readJson(c) {
   } catch {
     return void 0;
   }
+}
+function recordValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 async function writeRuntimeSettingsFile(config2, model, choices) {
   await fs3.mkdir(path3.dirname(config2.runtimeSettingsFile), { recursive: true });

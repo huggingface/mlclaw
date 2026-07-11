@@ -256,10 +256,22 @@ describe("ML Claw Space runtime", () => {
     expect(snapshotBody.requests[0]?.id).toBe("request-1");
     expect(snapshotBody.requests[0]?.handle).toMatch(/^[A-Za-z0-9_-]{24}$/u);
 
-    const approve = await fetch(`${base}/requests/${snapshotBody.requests[0]?.handle}/approve`, {
+    const requestUrl = `${base}/requests/${snapshotBody.requests[0]?.handle}/approve`;
+    const legacyShape = await fetch(requestUrl, {
       method: "POST",
       headers: { ...authorizedHeaders, "content-type": "application/json" },
       body: JSON.stringify({ expectedRevision: 1, durationSeconds: 300, maxUses: 1 }),
+    });
+    expect(legacyShape.status).toBe(400);
+
+    const approve = await fetch(requestUrl, {
+      method: "POST",
+      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        expectedRevision: 1,
+        reason: "approved in the Gateway",
+        constraints: { durationSeconds: 300, maxUses: 1 },
+      }),
     });
     expect(approve.status).toBe(200);
     expect(brokerRequests.map((request) => request.url)).toEqual([
@@ -275,6 +287,7 @@ describe("ML Claw Space runtime", () => {
     expect(JSON.parse(brokerRequests.at(-1)?.body ?? "{}")).toMatchObject({
       expected_revision: 1,
       on_behalf_of: "mlclaw:alice",
+      decision_reason: "approved in the Gateway",
       constraints: { duration_seconds: 300, max_uses: 1 },
     });
   });
