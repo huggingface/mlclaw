@@ -1508,6 +1508,11 @@ describe("ML Claw Space runtime", () => {
             },
           },
         },
+        plugins: {
+          allow: ["custom"],
+          load: { paths: ["/opt/custom-plugin"] },
+          entries: { custom: { enabled: true } },
+        },
       }),
     );
     const config = await testConfig({
@@ -1579,6 +1584,21 @@ describe("ML Claw Space runtime", () => {
       url: `http://127.0.0.1:${config.mcpPort}/mcp/research`,
       transport: "streamable-http",
     });
+    expect(rewritten.plugins).toEqual({
+      allow: ["custom", "brokerkit"],
+      load: { paths: ["/opt/custom-plugin", config.brokerKitPluginPath] },
+      entries: {
+        custom: { enabled: true },
+        brokerkit: {
+          enabled: true,
+          config: {
+            mode: "delegated-web",
+            delegatedWeb: { basePath: "/mlclaw/api/brokerkit" },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(rewritten.plugins)).not.toContain("operator-secret");
   });
 
   it("configures OpenClaw inference with only the broker agent credential", async () => {

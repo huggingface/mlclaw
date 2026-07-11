@@ -100,14 +100,25 @@ ML Claw validates the complete file and every referenced token before opening
 its HTTP listener. It does not reload either file during requests. A restart is
 required after changing broker entries or rotating tokens.
 
-The backend exposes only fixed list, detail, event, approve, deny, cancel, and
-revoke operations. Browser routes include the broker ID, so grant IDs only need
-to be unique within one broker.
+The backend discovers and validates each broker's BrokerKit Operator V1 API,
+then exposes only fixed list, detail, approve, deny, cancel, and revoke
+operations to the packaged OpenClaw plugin UI. It replaces broker and request
+IDs with short-lived opaque handles before returning data to the browser. The
+browser receives a short-lived token bound to the authenticated ML Claw admin;
+that token cannot call a broker directly.
+
+ML Claw refreshes current request state and revision immediately before every
+decision. It sends actor attribution and a deterministic idempotency key to the
+selected broker. An unavailable broker is reported as a redacted source error
+without hiding healthy brokers.
 
 Unknown top-level or broker fields are rejected. Relative token paths, duplicate
 IDs, duplicate URLs, inline tokens, and unsupported versions are invalid.
 
 ## Scope
 
-This format configures operator inbox connectivity only. It does not configure
-agent credentials, policy, Telegram, broker storage, or privileged execution.
+This format configures operator inbox connectivity only. The OpenClaw plugin is
+installed and registered by the ML Claw runtime in `delegated-web` mode; it does
+not receive broker credentials or register approval commands. This file does
+not configure agent credentials, policy, channels, broker storage, or
+privileged execution.

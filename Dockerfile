@@ -1,6 +1,7 @@
-ARG OPENCLAW_VERSION=2026.7.1-beta.2
+ARG OPENCLAW_VERSION=2026.7.1-beta.5
 ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/mlclaw:0.2.3-openclaw-2026.7.1-beta.2
+ARG BROKERKIT_PLUGIN_VERSION=0.1.0
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/mlclaw:0.2.3-openclaw-2026.7.1-beta.5
 ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
@@ -42,6 +43,10 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
   "uvicorn==0.49.0" \
   "uv==0.11.28" \
   "hf-discover==1.3.7"
+ARG BROKERKIT_PLUGIN_VERSION
+RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins \
+  "openclaw-brokerkit@${BROKERKIT_PLUGIN_VERSION}" \
+  && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
 
 COPY --from=sync-build /build/dist/hf-state-sync.js /app/hf-state-sync.js
 COPY --from=sync-build /build/dist/hf-tooling-seed.js /app/hf-tooling-seed.js
@@ -67,6 +72,7 @@ ENV OPENCLAW_STATE_DIR=/home/node/.local/share/mlclaw/live/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/home/node/.local/share/mlclaw/live/workspace
 ENV OPENCLAW_CONFIG_PATH=/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json
 ENV OPENCLAW_DISABLE_BONJOUR=1
+ENV MLCLAW_BROKERKIT_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-brokerkit
 ARG MLCLAW_RUNTIME_IMAGE
 ENV MLCLAW_RUNTIME_IMAGE=$MLCLAW_RUNTIME_IMAGE
 

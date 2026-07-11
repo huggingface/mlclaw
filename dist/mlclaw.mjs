@@ -14836,12 +14836,17 @@ function sseDataToText(raw) {
 import fs11 from "node:fs";
 import path12 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-var DEFAULT_OPENCLAW_VERSION = "2026.7.1-beta.2";
+var DEFAULT_OPENCLAW_VERSION = "2026.7.1-beta.5";
+var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.1.0";
 var DEFAULT_RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/mlclaw";
 var PACKAGE_METADATA = readPackageMetadata();
 var PACKAGE_VERSION = packageString("version", "unknown");
 var OPENCLAW_VERSION = packageConfigString("openclawVersion", DEFAULT_OPENCLAW_VERSION);
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
+var BROKERKIT_PLUGIN_VERSION = packageConfigString(
+  "brokerkitPluginVersion",
+  DEFAULT_BROKERKIT_PLUGIN_VERSION
+);
 var RUNTIME_IMAGE_REPOSITORY = packageConfigString("runtimeImageRepository", DEFAULT_RUNTIME_IMAGE_REPOSITORY);
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
@@ -14970,6 +14975,7 @@ function imageDockerfile(runtimeImage) {
 }
 function bundledDockerfile() {
   return `ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
+ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
@@ -15002,6 +15008,8 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uvicorn==0.49.0" \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
+ARG BROKERKIT_PLUGIN_VERSION
+RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
 
 COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
@@ -15022,6 +15030,7 @@ ENV OPENCLAW_STATE_DIR=/home/node/.local/share/mlclaw/live/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/home/node/.local/share/mlclaw/live/workspace
 ENV OPENCLAW_CONFIG_PATH=/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json
 ENV OPENCLAW_DISABLE_BONJOUR=1
+ENV MLCLAW_BROKERKIT_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-brokerkit
 
 EXPOSE 7860
 

@@ -73,74 +73,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
-  function installApprovals() {
-    var button = document.querySelector("[data-mlclaw-approvals-button]");
-    var frame = document.querySelector("[data-mlclaw-approvals-frame]");
-    var badge = document.querySelector("[data-mlclaw-approvals-badge]");
-    if (!button || !frame || button.getAttribute("data-ready") === "1") return;
-    button.setAttribute("data-ready", "1");
-    function closeApprovals() {
-      frame.style.display = "none";
-      button.setAttribute("aria-expanded", "false");
-    }
-    button.addEventListener("click", function () {
-      var open = frame.style.display !== "none";
-      if (open) {
-        closeApprovals();
-      } else {
-        frame.style.display = "block";
-        button.setAttribute("aria-expanded", "true");
-        frame.focus();
-      }
-    });
-    document.addEventListener("pointerdown", function (event) {
-      var shell = button.closest("[data-mlclaw-shell]");
-      if (frame.style.display !== "none" && shell && !shell.contains(event.target) && event.target !== frame) {
-        closeApprovals();
-      }
-    });
-    window.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") closeApprovals();
-    });
-    window.addEventListener("message", function (event) {
-      if (event.origin === window.location.origin && event.data && event.data.type === "mlclaw-approvals-close") {
-        closeApprovals();
-        button.focus();
-      }
-    });
-    function refresh() {
-      listBrokers().then(function (brokers) {
-        return Promise.all(brokers.map(function (broker) {
-          return fetch("/mlclaw/api/approvals?broker=" + encodeURIComponent(broker.id) + "&status=pending&limit=100", { credentials: "same-origin" })
-            .then(function (response) { return response.ok ? response.json() : null; })
-            .catch(function () { return null; });
-        }));
-      }).then(function (pages) {
-          var count = pages.reduce(function (total, page) {
-            return total + (page && Array.isArray(page.items) ? page.items.length : 0);
-          }, 0);
-          if (!badge) return;
-          badge.textContent = count > 99 ? "99" : String(count);
-          badge.style.display = count > 0 ? "grid" : "none";
-        }).catch(function () {});
-    }
-    function listBrokers() {
-      return fetch("/mlclaw/api/approvals/brokers", { credentials: "same-origin" })
-        .then(function (response) { return response.ok ? response.json() : { brokers: [] }; })
-        .then(function (value) { return value && Array.isArray(value.brokers) ? value.brokers : []; });
-    }
-    refresh();
-    listBrokers().then(function (brokers) {
-      brokers.forEach(function (broker) {
-        var events = new EventSource("/mlclaw/api/approvals/events?broker=" + encodeURIComponent(broker.id), { withCredentials: true });
-        events.onmessage = refresh;
-        ["request.created", "request.updated", "request.decided"].forEach(function (kind) {
-          events.addEventListener(kind, refresh);
-        });
-      });
-    });
-  }
-  if (!document.documentElement.hasAttribute(marker)) {
+    if (!document.documentElement.hasAttribute(marker)) {
     document.documentElement.setAttribute(marker, "1");
     var attachShadow = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function () {
@@ -153,7 +86,6 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
     requestAnimationFrame(function () {
       observeExistingShadowRoots(document);
       scan(document);
-      installApprovals();
     });
   }
 })();
@@ -207,13 +139,8 @@ export function injectMlClawShell(html: string, branding: RuntimeBranding): stri
       <circle cx="12" cy="12" r="3"></circle>
     </svg>
   </a>
-  <button data-mlclaw-approvals-button type="button" aria-label="Open approval requests" aria-controls="mlclaw-approvals-popover" aria-haspopup="dialog" aria-expanded="false" style="position:relative;box-sizing:border-box;display:grid;width:34px;height:34px;place-items:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;cursor:pointer;">
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
-    <span data-mlclaw-approvals-badge style="position:absolute;display:none;place-items:center;min-width:17px;height:17px;right:-6px;top:-7px;padding:0 4px;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:700 9px system-ui;"></span>
-  </button>
   </div>
 </div>
-<iframe id="mlclaw-approvals-popover" data-mlclaw-approvals-frame src="/mlclaw?embed=approvals" title="Approval requests" tabindex="-1" style="display:none;position:fixed;z-index:2147483646;left:max(12px,env(safe-area-inset-left));bottom:max(54px,calc(env(safe-area-inset-bottom) + 54px));width:min(420px,calc(100vw - 24px));height:min(620px,calc(100dvh - 78px));border:1px solid rgba(15,23,42,.18);border-radius:12px;background:white;box-shadow:0 18px 48px rgba(15,23,42,.24);"></iframe>
 `;
   const brandingScript = `<script ${CONTROL_BRANDING_MARKER} src="${CONTROL_BRANDING_SCRIPT_PATH}"></script>\n`;
   if (html.includes(SHELL_MARKER)) {

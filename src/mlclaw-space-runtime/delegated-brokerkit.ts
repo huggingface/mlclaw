@@ -3,6 +3,7 @@ import {
   BrokerOperatorError,
   OperatorBrokerRegistry,
   type BrokerApproval,
+  type BrokerDecision,
   type BrokerOperatorClient,
   type OperatorBrokerSummary,
 } from "./operator-brokers.js";
@@ -88,30 +89,10 @@ export class DelegatedBrokerKit {
   }
 
   authorize(header: string | undefined): string | undefined {
-    if (!header?.startsWith("Bearer ")) return undefined;
-    const token = header.slice("Bearer ".length);
-    if (token.length > 4_096) return undefined;
-    const [encoded, signature, extra] = token.split(".");
-    if (!encoded || !signature || extra !== undefined || !safeEqual(signature, this.sign(encoded))) {
-      return undefined;
-    }
-    let payload: unknown;
-    try {
-      payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    } catch {
-      return undefined;
-    }
-    if (!validTokenPayload(payload)) return undefined;
-    const now = Math.floor(this.now().getTime() / 1_000);
-    if (
-      payload.audience !== "brokerkit-delegated-web" ||
-      payload.issuedAt > now + 5 ||
-      payload.expiresAt <= now ||
-      payload.expiresAt - payload.issuedAt > TOKEN_LIFETIME_SECONDS
-    ) {
-      return undefined;
-    }
-    return payload.subject;
+    const encoded = authenticatedTokenPayload(header, (value) => this.sign(value));
+    if (!encoded) return undefined;
+    const payload = parseTokenPayload(encoded);
+    return payload && tokenIsCurrent(payload, this.now()) ? payload.subject : undefined;
   }
 
   async snapshot(): Promise<DelegatedSnapshot> {
@@ -151,14 +132,11 @@ export class DelegatedBrokerKit {
       throw delegatedError("revision_stale");
     }
     if (!current.allowed_actions.includes(action)) throw delegatedError("action_not_allowed");
-    const updated = await source.decide(record.requestId, action, {
-      expectedRevision,
-      idempotencyKey: decisionKey(record, action, actor),
-      onBehalfOf: `mlclaw:${actor}`,
-      ...(options.reason ? { reason: options.reason } : {}),
-      ...(options.durationSeconds ? { durationSeconds: options.durationSeconds } : {}),
-      ...(options.maxUses ? { maxUses: options.maxUses } : {}),
-    });
+    const updated = await source.decide(
+      record.requestId,
+      action,
+      decisionOptions(record, action, expectedRevision, actor, options),
+    );
     if (updated.status !== "pending" && updated.status !== "active") this.removeHandle(handle, record);
     return project(source.summary(), updated, handle);
   }
@@ -227,8 +205,8 @@ export class DelegatedBrokerKit {
   }
 
   private pruneOldestHandle(): void {
-    const oldest = this.handles.entries().next().value as [string, HandleRecord] | undefined;
-    if (oldest) this.removeHandle(oldest[0], oldest[1]);
+    const oldest = this.handles.entries().next();
+    if (!oldest.done) this.removeHandle(oldest.value[0], oldest.value[1]);
   }
 
   private removeHandle(handle: string, record: HandleRecord): void {
@@ -266,23 +244,82 @@ function decisionKey(record: HandleRecord, action: DelegatedAction, actor: strin
     .digest("base64url");
 }
 
+function decisionOptions(
+  record: HandleRecord,
+  action: DelegatedAction,
+  expectedRevision: number,
+  actor: string,
+  options: { reason?: string; durationSeconds?: number; maxUses?: number },
+): BrokerDecision {
+  return {
+    expectedRevision,
+    idempotencyKey: decisionKey(record, action, actor),
+    onBehalfOf: `mlclaw:${actor}`,
+    ...(options.reason ? { reason: options.reason } : {}),
+    ...(options.durationSeconds ? { durationSeconds: options.durationSeconds } : {}),
+    ...(options.maxUses ? { maxUses: options.maxUses } : {}),
+  };
+}
+
+function authenticatedTokenPayload(header: string | undefined, sign: (value: string) => string): string | undefined {
+  if (!header?.startsWith("Bearer ")) return undefined;
+  const token = header.slice("Bearer ".length);
+  if (token.length > 4_096) return undefined;
+  const [encoded, signature, extra] = token.split(".");
+  return encoded && signature && extra === undefined && safeEqual(signature, sign(encoded)) ? encoded : undefined;
+}
+
+function parseTokenPayload(encoded: string): TokenPayload | undefined {
+  try {
+    const payload: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return validTokenPayload(payload) ? payload : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function tokenIsCurrent(payload: TokenPayload, now: Date): boolean {
+  const current = Math.floor(now.getTime() / 1_000);
+  return (
+    payload.issuedAt <= current + 5 &&
+    payload.expiresAt > current &&
+    payload.expiresAt - payload.issuedAt <= TOKEN_LIFETIME_SECONDS
+  );
+}
+
 function validTokenPayload(value: unknown): value is TokenPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return (
-    Object.keys(record).sort().join(",") === "audience,expiresAt,issuedAt,nonce,subject,version" &&
+    hasExactTokenFields(record) && validTokenIdentity(record) && validTokenTimes(record) && validTokenNonce(record)
+  );
+}
+
+function hasExactTokenFields(record: Record<string, unknown>): boolean {
+  return Object.keys(record).sort().join(",") === "audience,expiresAt,issuedAt,nonce,subject,version";
+}
+
+function validTokenIdentity(record: Record<string, unknown>): boolean {
+  return (
     record.version === 1 &&
     record.audience === "brokerkit-delegated-web" &&
     typeof record.subject === "string" &&
     record.subject.length >= 1 &&
-    record.subject.length <= 200 &&
+    record.subject.length <= 200
+  );
+}
+
+function validTokenTimes(record: Record<string, unknown>): boolean {
+  return (
     typeof record.issuedAt === "number" &&
     Number.isSafeInteger(record.issuedAt) &&
     typeof record.expiresAt === "number" &&
-    Number.isSafeInteger(record.expiresAt) &&
-    typeof record.nonce === "string" &&
-    /^[A-Za-z0-9_-]{22}$/u.test(record.nonce)
+    Number.isSafeInteger(record.expiresAt)
   );
+}
+
+function validTokenNonce(record: Record<string, unknown>): boolean {
+  return typeof record.nonce === "string" && /^[A-Za-z0-9_-]{22}$/u.test(record.nonce);
 }
 
 function safeEqual(left: string, right: string): boolean {

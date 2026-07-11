@@ -204,14 +204,13 @@ Use the browser control UI for:
   and `MLCLAW_MODEL_CHOICES`, and request a Space restart.
 - `/mlclaw/status`: inspect runtime, bucket, model, OAuth, and integration status.
 
-Administrators also get an approval bell with a compact, anchored popover.
-Requests for brokered operations can be inspected, approved, denied, canceled,
-or revoked there.
-The inbox merges every Brokerkit-compatible backend configured in
-`MLCLAW_OPERATOR_BROKERS_FILE`; every decision is authenticated,
-CSRF-protected, and sent through fixed broker-scoped API routes. Operator
-tokens remain in backend-only files and are never sent to the browser or
-OpenClaw. See [Operator Broker Configuration](docs/operator-brokers-config.md).
+OpenClaw's BrokerKit plugin adds an **Approvals** tab to the gateway. The tab
+merges every BrokerKit-compatible backend configured in
+`MLCLAW_OPERATOR_BROKERS_FILE` and lets administrators inspect, approve, deny,
+cancel, or revoke requests. ML Claw gives the packaged plugin UI a short-lived,
+admin-bound browser token; broker operator tokens remain in backend-only files
+and are never sent to the browser or OpenClaw. See
+[Operator Broker Configuration](docs/operator-brokers-config.md).
 
 - `/mlclaw/credentials`: connect or disconnect Hugging Face MCP and Research
   Agent access, or submit an OpenAI API key.

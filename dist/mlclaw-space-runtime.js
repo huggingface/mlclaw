@@ -4690,35 +4690,38 @@ var displayFieldSchema = external_exports.object({
 var approvalSchema = external_exports.object({
   id: external_exports.string().min(1).max(200),
   revision: external_exports.number().int().positive(),
-  client: external_exports.string().min(1).max(200),
+  requester: external_exports.string().min(1).max(80),
   operation: external_exports.string().min(1).max(200),
-  status: external_exports.string().min(1).max(40),
+  status: external_exports.enum(["pending", "active", "denied", "canceled", "expired", "consumed", "revoked"]),
   requested_at: external_exports.string().min(1).max(80),
-  pending_expires_at: external_exports.string().min(1).max(80),
+  pending_expires_at: external_exports.string().min(1).max(80).optional(),
   active_expires_at: external_exports.string().min(1).max(80).optional(),
   requested_duration_seconds: external_exports.number().int().nonnegative(),
-  max_uses: external_exports.number().int().nonnegative(),
+  requested_max_uses: external_exports.number().int().positive(),
+  granted_max_uses: external_exports.number().int().positive().nullable(),
   used_count: external_exports.number().int().nonnegative(),
-  reserved_count: external_exports.number().int().nonnegative(),
-  reason: external_exports.string().max(2e3).optional(),
+  request_reason: external_exports.string().max(2e3).optional(),
   decided_at: external_exports.string().min(1).max(80).optional(),
   decided_by: external_exports.string().max(200).optional(),
+  decided_on_behalf_of: external_exports.string().max(200).optional(),
   decision_reason: external_exports.string().max(2e3).optional(),
   presentation: external_exports.object({
     risk: external_exports.enum(["unknown", "low", "medium", "high", "critical"]),
     title: external_exports.string().min(1).max(240),
     summary: external_exports.string().max(4096).optional(),
-    target: external_exports.string().min(1).max(2e3),
-    fields: external_exports.array(displayFieldSchema).max(100).optional(),
-    plan_hash: external_exports.string().max(256).optional(),
-    audit: external_exports.array(displayFieldSchema).max(100).optional()
+    facts: external_exports.array(displayFieldSchema).max(100).optional()
   }).passthrough(),
-  presentation_unavailable: external_exports.boolean().optional()
+  presentation_unavailable: external_exports.boolean().optional(),
+  allowed_actions: external_exports.array(external_exports.enum(["approve", "deny", "cancel", "revoke"])).max(4),
+  approval_bounds: external_exports.object({
+    max_duration_seconds: external_exports.number().int().positive(),
+    max_uses: external_exports.number().int().positive()
+  }).strict().optional()
 }).passthrough();
 var approvalPageSchema = external_exports.object({
-  items: external_exports.array(approvalSchema),
+  requests: external_exports.array(approvalSchema).max(100),
   next_cursor: external_exports.string().min(1).max(4096).optional(),
-  has_more: external_exports.boolean()
+  event_cursor: external_exports.string().min(1).max(4096).optional()
 }).passthrough();
 var operatorErrorSchema = external_exports.object({
   error: external_exports.object({
@@ -4760,6 +4763,14 @@ var BrokerOperatorClient = class {
   summary() {
     return { id: this.options.id, label: this.options.label };
   }
+  discover() {
+    return this.request(
+      "/.well-known/brokerkit-operator",
+      void 0,
+      external_exports.object({ api_version: external_exports.literal("brokerkit.io/operator/v1") }).passthrough(),
+      "discovery"
+    );
+  }
   list(params = {}) {
     const query = new URLSearchParams();
     if (params.status) {
@@ -4772,27 +4783,42 @@ var BrokerOperatorClient = class {
       query.set("limit", String(params.limit));
     }
     const suffix = query.size > 0 ? `?${query}` : "";
-    return this.request(`/api/grants${suffix}`, void 0, approvalPageSchema, "grant list");
+    return this.request(
+      `/api/operator/v1/requests${suffix}`,
+      void 0,
+      approvalPageSchema,
+      "request list"
+    );
   }
   get(id) {
-    return this.request(`/api/grants/${approvalId(id)}`, void 0, approvalSchema, "grant");
+    return this.request(
+      `/api/operator/v1/requests/${approvalId(id)}`,
+      void 0,
+      approvalSchema,
+      "request"
+    );
   }
   decide(id, action, decision) {
     return this.request(
-      `/api/grants/${approvalId(id)}/${action}`,
+      `/api/operator/v1/requests/${approvalId(id)}/${action}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           expected_revision: decision.expectedRevision,
-          ...decision.expectedStatus ? { expected_status: decision.expectedStatus } : {},
-          ...decision.reason ? { reason: decision.reason } : {},
-          ...decision.durationSeconds ? { duration_seconds: decision.durationSeconds } : {},
-          ...decision.maxUses ? { max_uses: decision.maxUses } : {}
+          idempotency_key: decision.idempotencyKey,
+          on_behalf_of: decision.onBehalfOf,
+          ...decision.reason ? { decision_reason: decision.reason } : {},
+          ...decision.durationSeconds || decision.maxUses ? {
+            constraints: {
+              ...decision.durationSeconds ? { duration_seconds: decision.durationSeconds } : {},
+              ...decision.maxUses ? { max_uses: decision.maxUses } : {}
+            }
+          } : {}
         })
       },
       approvalSchema,
-      "grant"
+      "request"
     );
   }
   async events(lastEventId, signal) {
@@ -4800,10 +4826,8 @@ var BrokerOperatorClient = class {
       accept: "text/event-stream",
       authorization: `Bearer ${this.options.token}`
     };
-    if (lastEventId) {
-      headers["last-event-id"] = lastEventId;
-    }
-    const response = await this.fetchImpl(`${this.baseUrl}/api/grants/events`, {
+    const cursor = lastEventId ? `?cursor=${encodeURIComponent(lastEventId)}` : "";
+    const response = await this.fetchImpl(`${this.baseUrl}/api/operator/v1/events${cursor}`, {
       headers,
       redirect: "error",
       ...signal ? { signal } : {}
@@ -4883,6 +4907,9 @@ var OperatorBrokerRegistry = class {
   }
   get(id) {
     return this.clients.get(id);
+  }
+  entries() {
+    return [...this.clients.values()].map((client) => [client.summary(), client]);
   }
 };
 function loadOperatorBrokers(file) {
@@ -5095,6 +5122,7 @@ function loadConfig(env = process.env) {
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
+    brokerKitPluginPath: trim(env.MLCLAW_BROKERKIT_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
     agentName,
     model,
     modelChoices: runtimeSettings2.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
@@ -7335,6 +7363,226 @@ function signatureMatches(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+// src/mlclaw-space-runtime/delegated-brokerkit.ts
+import { createHash, createHmac as createHmac2, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+var API_VERSION = "brokerkit.io/delegated-web/v1";
+var TOKEN_LIFETIME_SECONDS = 4 * 60;
+var MAX_PAGES_PER_SOURCE = 32;
+var MAX_HANDLES = 4096;
+var DelegatedBrokerKit = class {
+  constructor(registry, sessionSecret, now = () => /* @__PURE__ */ new Date()) {
+    this.registry = registry;
+    this.now = now;
+    this.key = createHmac2("sha256", sessionSecret).update("mlclaw/brokerkit-delegated-web/v1", "utf8").digest();
+  }
+  key;
+  handles = /* @__PURE__ */ new Map();
+  handlesByIdentity = /* @__PURE__ */ new Map();
+  issueSession(actor) {
+    const issuedAt = Math.floor(this.now().getTime() / 1e3);
+    const expiresAt = issuedAt + TOKEN_LIFETIME_SECONDS;
+    const payload = {
+      version: 1,
+      audience: "brokerkit-delegated-web",
+      subject: actor,
+      issuedAt,
+      expiresAt,
+      nonce: randomBytes3(16).toString("base64url")
+    };
+    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+    const signature = this.sign(encoded);
+    return {
+      api_version: API_VERSION,
+      actor,
+      decision_token: `${encoded}.${signature}`,
+      expires_at: new Date(expiresAt * 1e3).toISOString()
+    };
+  }
+  authorize(header) {
+    const encoded = authenticatedTokenPayload(header, (value) => this.sign(value));
+    if (!encoded) return void 0;
+    const payload = parseTokenPayload(encoded);
+    return payload && tokenIsCurrent(payload, this.now()) ? payload.subject : void 0;
+  }
+  async snapshot() {
+    this.pruneHandles();
+    const synchronizedAt = this.now().toISOString();
+    const results = await Promise.all(
+      this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt))
+    );
+    return {
+      sources: results.map((result) => result.source),
+      requests: results.flatMap((result) => result.requests),
+      synchronizedAt
+    };
+  }
+  async detail(handle) {
+    const record = this.resolveHandle(handle);
+    const source = this.registry.get(record.sourceId);
+    if (!source) throw delegatedError("source_unavailable");
+    const request = await source.get(record.requestId);
+    if (request.revision !== record.revision) throw delegatedError("revision_stale");
+    return project(source.summary(), request, handle);
+  }
+  async decide(handle, action, expectedRevision, actor, options = {}) {
+    const record = this.resolveHandle(handle);
+    const source = this.registry.get(record.sourceId);
+    if (!source) throw delegatedError("source_unavailable");
+    const current = await source.get(record.requestId);
+    if (current.revision !== record.revision || current.revision !== expectedRevision) {
+      throw delegatedError("revision_stale");
+    }
+    if (!current.allowed_actions.includes(action)) throw delegatedError("action_not_allowed");
+    const updated = await source.decide(
+      record.requestId,
+      action,
+      decisionOptions(record, action, expectedRevision, actor, options)
+    );
+    if (updated.status !== "pending" && updated.status !== "active") this.removeHandle(handle, record);
+    return project(source.summary(), updated, handle);
+  }
+  async sourceSnapshot(summary, client, synchronizedAt) {
+    try {
+      await client.discover();
+      const requests = [];
+      let cursor;
+      for (let pageNumber = 0; pageNumber < MAX_PAGES_PER_SOURCE; pageNumber += 1) {
+        const page2 = await client.list({ status: "pending", ...cursor ? { cursor } : {}, limit: 100 });
+        for (const request of page2.requests) {
+          const handle = this.handle(summary.id, request);
+          requests.push(project(summary, request, handle));
+        }
+        cursor = page2.next_cursor;
+        if (!cursor) {
+          return {
+            source: { ...summary, healthy: true, lastSyncAt: synchronizedAt },
+            requests
+          };
+        }
+      }
+      throw delegatedError("source_protocol_error");
+    } catch (error) {
+      return {
+        source: { ...summary, healthy: false, error: safeSourceError(error) },
+        requests: []
+      };
+    }
+  }
+  handle(sourceId, request) {
+    const identity = `${sourceId}\0${request.id}\0${request.revision}`;
+    const existing = this.handlesByIdentity.get(identity);
+    if (existing && this.handles.has(existing)) return existing;
+    if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
+    const handle = randomBytes3(18).toString("base64url");
+    const requestExpiry = Date.parse(request.pending_expires_at ?? request.active_expires_at ?? "");
+    const expiresAtMs = Number.isFinite(requestExpiry) ? Math.min(requestExpiry, this.now().getTime() + 24 * 60 * 6e4) : this.now().getTime() + 5 * 6e4;
+    this.handles.set(handle, { sourceId, requestId: request.id, revision: request.revision, expiresAtMs });
+    this.handlesByIdentity.set(identity, handle);
+    return handle;
+  }
+  resolveHandle(handle) {
+    if (!/^[A-Za-z0-9_-]{24}$/u.test(handle)) throw delegatedError("request_not_found");
+    const record = this.handles.get(handle);
+    if (!record || record.expiresAtMs <= this.now().getTime()) {
+      if (record) this.removeHandle(handle, record);
+      throw delegatedError("request_not_found");
+    }
+    return record;
+  }
+  pruneHandles() {
+    for (const [handle, record] of this.handles) {
+      if (record.expiresAtMs <= this.now().getTime()) this.removeHandle(handle, record);
+    }
+  }
+  pruneOldestHandle() {
+    const oldest = this.handles.entries().next();
+    if (!oldest.done) this.removeHandle(oldest.value[0], oldest.value[1]);
+  }
+  removeHandle(handle, record) {
+    this.handles.delete(handle);
+    this.handlesByIdentity.delete(`${record.sourceId}\0${record.requestId}\0${record.revision}`);
+  }
+  sign(encoded) {
+    return createHmac2("sha256", this.key).update(encoded, "utf8").digest("base64url");
+  }
+};
+var DelegatedBrokerKitError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+};
+function delegatedError(code) {
+  return new DelegatedBrokerKitError(code);
+}
+function project(source, request, handle) {
+  return { ...request, sourceId: source.id, sourceLabel: source.label, handle };
+}
+function decisionKey(record, action, actor) {
+  return createHash("sha256").update(
+    ["mlclaw-brokerkit-decision-v1", record.sourceId, record.requestId, String(record.revision), action, actor].join(
+      "\0"
+    ),
+    "utf8"
+  ).digest("base64url");
+}
+function decisionOptions(record, action, expectedRevision, actor, options) {
+  return {
+    expectedRevision,
+    idempotencyKey: decisionKey(record, action, actor),
+    onBehalfOf: `mlclaw:${actor}`,
+    ...options.reason ? { reason: options.reason } : {},
+    ...options.durationSeconds ? { durationSeconds: options.durationSeconds } : {},
+    ...options.maxUses ? { maxUses: options.maxUses } : {}
+  };
+}
+function authenticatedTokenPayload(header, sign3) {
+  if (!header?.startsWith("Bearer ")) return void 0;
+  const token = header.slice("Bearer ".length);
+  if (token.length > 4096) return void 0;
+  const [encoded, signature, extra] = token.split(".");
+  return encoded && signature && extra === void 0 && safeEqual(signature, sign3(encoded)) ? encoded : void 0;
+}
+function parseTokenPayload(encoded) {
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return validTokenPayload(payload) ? payload : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function tokenIsCurrent(payload, now) {
+  const current = Math.floor(now.getTime() / 1e3);
+  return payload.issuedAt <= current + 5 && payload.expiresAt > current && payload.expiresAt - payload.issuedAt <= TOKEN_LIFETIME_SECONDS;
+}
+function validTokenPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value;
+  return hasExactTokenFields(record) && validTokenIdentity(record) && validTokenTimes(record) && validTokenNonce(record);
+}
+function hasExactTokenFields(record) {
+  return Object.keys(record).sort().join(",") === "audience,expiresAt,issuedAt,nonce,subject,version";
+}
+function validTokenIdentity(record) {
+  return record.version === 1 && record.audience === "brokerkit-delegated-web" && typeof record.subject === "string" && record.subject.length >= 1 && record.subject.length <= 200;
+}
+function validTokenTimes(record) {
+  return typeof record.issuedAt === "number" && Number.isSafeInteger(record.issuedAt) && typeof record.expiresAt === "number" && Number.isSafeInteger(record.expiresAt);
+}
+function validTokenNonce(record) {
+  return typeof record.nonce === "string" && /^[A-Za-z0-9_-]{22}$/u.test(record.nonce);
+}
+function safeEqual(left, right) {
+  const a = Buffer.from(left, "utf8");
+  const b = Buffer.from(right, "utf8");
+  return a.length === b.length && timingSafeEqual2(a, b);
+}
+function safeSourceError(error) {
+  if (error instanceof BrokerOperatorError) return error.code ?? "source_unavailable";
+  if (error instanceof DelegatedBrokerKitError) return error.code;
+  return "source_unavailable";
+}
+
 // src/mlclaw-space-runtime/hub-settings.ts
 function runtimeSettings(config2) {
   return {
@@ -7487,7 +7735,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 // src/mlclaw-space-runtime/mcp-integrations.ts
-import { createHmac as createHmac2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 var MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -7751,7 +7999,7 @@ var ResearchRpcError = class extends Error {
   }
 };
 function deriveInternalToken(secret) {
-  return createHmac2("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
+  return createHmac3("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
 }
 function managedMcpServerConfig(config2) {
   const headers = { [INTERNAL_HEADER]: deriveInternalToken(config2.sessionSecret) };
@@ -7981,7 +8229,7 @@ function validInternalToken(value, expected) {
   }
   const actualBuffer = Buffer.from(value);
   const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual2(actualBuffer, expectedBuffer);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual3(actualBuffer, expectedBuffer);
 }
 function requestHeader(headers, name) {
   const value = headers[name];
@@ -8063,6 +8311,7 @@ async function configureOpenClawGateway(config2) {
   };
   configureOpenClawModels(openclawConfig, config2);
   configureManagedMcpServers(openclawConfig, config2);
+  configureBrokerKitPlugin(openclawConfig, config2);
   await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
   await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
@@ -8070,6 +8319,20 @@ async function configureOpenClawGateway(config2) {
   if (process.getuid?.() === 0) {
     await fs.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
+}
+function configureBrokerKitPlugin(openclawConfig, config2) {
+  const plugins = object(openclawConfig, "plugins");
+  const load = object(plugins, "load");
+  load.paths = uniqueStrings(load.paths, config2.brokerKitPluginPath);
+  plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
+  const entries = object(plugins, "entries");
+  entries.brokerkit = {
+    enabled: true,
+    config: {
+      mode: "delegated-web",
+      delegatedWeb: { basePath: "/mlclaw/api/brokerkit" }
+    }
+  };
 }
 async function managedMcpServerStatus(config2) {
   const raw2 = JSON.parse(await fs.readFile(config2.openclawConfigPath, "utf8"));
@@ -8189,9 +8452,13 @@ function object(parent, key) {
 function objectValue2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
+function uniqueStrings(value, required) {
+  const current = Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  return [.../* @__PURE__ */ new Set([...current, required])];
+}
 
 // src/mlclaw-space-runtime/openai-credentials.ts
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes3 } from "node:crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes4 } from "node:crypto";
 import fs2 from "node:fs/promises";
 import path2 from "node:path";
 function openAiConfigured(env = process.env) {
@@ -8260,7 +8527,7 @@ var OpenAiCredentialStore = class {
     if (!normalized) {
       throw new Error("valid OpenAI API key is required");
     }
-    const iv = randomBytes3(12);
+    const iv = randomBytes4(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
     const ciphertext = Buffer.concat([cipher.update(normalized, "utf8"), cipher.final()]);
     const envelope = {
@@ -8271,7 +8538,7 @@ var OpenAiCredentialStore = class {
       ciphertext: ciphertext.toString("base64url")
     };
     const directory = path2.dirname(this.file);
-    const temporary = `${this.file}.${process.pid}.${randomBytes3(6).toString("hex")}.tmp`;
+    const temporary = `${this.file}.${process.pid}.${randomBytes4(6).toString("hex")}.tmp`;
     await fs2.mkdir(directory, { recursive: true, mode: 448 });
     try {
       await fs2.writeFile(temporary, `${JSON.stringify(envelope)}
@@ -8557,7 +8824,7 @@ function positiveNumber2(value) {
 }
 
 // src/mlclaw-space-runtime/cookies.ts
-import { createHmac as createHmac3, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHmac as createHmac4, randomBytes as randomBytes5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 function createSignedCookie(options, payload) {
   const body = Buffer.from(JSON.stringify({
     ...payload,
@@ -8606,15 +8873,15 @@ function clearCookie(name, secure) {
   });
 }
 function randomState() {
-  return randomBytes4(24).toString("base64url");
+  return randomBytes5(24).toString("base64url");
 }
 function sign2(value, secret) {
-  return createHmac3("sha256", secret).update(value).digest("base64url");
+  return createHmac4("sha256", secret).update(value).digest("base64url");
 }
 function signatureMatches2(a, b) {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual3(left, right);
+  return left.length === right.length && timingSafeEqual4(left, right);
 }
 function parseCookies(header) {
   const cookies = /* @__PURE__ */ new Map();
@@ -8767,74 +9034,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
-  function installApprovals() {
-    var button = document.querySelector("[data-mlclaw-approvals-button]");
-    var frame = document.querySelector("[data-mlclaw-approvals-frame]");
-    var badge = document.querySelector("[data-mlclaw-approvals-badge]");
-    if (!button || !frame || button.getAttribute("data-ready") === "1") return;
-    button.setAttribute("data-ready", "1");
-    function closeApprovals() {
-      frame.style.display = "none";
-      button.setAttribute("aria-expanded", "false");
-    }
-    button.addEventListener("click", function () {
-      var open = frame.style.display !== "none";
-      if (open) {
-        closeApprovals();
-      } else {
-        frame.style.display = "block";
-        button.setAttribute("aria-expanded", "true");
-        frame.focus();
-      }
-    });
-    document.addEventListener("pointerdown", function (event) {
-      var shell = button.closest("[data-mlclaw-shell]");
-      if (frame.style.display !== "none" && shell && !shell.contains(event.target) && event.target !== frame) {
-        closeApprovals();
-      }
-    });
-    window.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") closeApprovals();
-    });
-    window.addEventListener("message", function (event) {
-      if (event.origin === window.location.origin && event.data && event.data.type === "mlclaw-approvals-close") {
-        closeApprovals();
-        button.focus();
-      }
-    });
-    function refresh() {
-      listBrokers().then(function (brokers) {
-        return Promise.all(brokers.map(function (broker) {
-          return fetch("/mlclaw/api/approvals?broker=" + encodeURIComponent(broker.id) + "&status=pending&limit=100", { credentials: "same-origin" })
-            .then(function (response) { return response.ok ? response.json() : null; })
-            .catch(function () { return null; });
-        }));
-      }).then(function (pages) {
-          var count = pages.reduce(function (total, page) {
-            return total + (page && Array.isArray(page.items) ? page.items.length : 0);
-          }, 0);
-          if (!badge) return;
-          badge.textContent = count > 99 ? "99" : String(count);
-          badge.style.display = count > 0 ? "grid" : "none";
-        }).catch(function () {});
-    }
-    function listBrokers() {
-      return fetch("/mlclaw/api/approvals/brokers", { credentials: "same-origin" })
-        .then(function (response) { return response.ok ? response.json() : { brokers: [] }; })
-        .then(function (value) { return value && Array.isArray(value.brokers) ? value.brokers : []; });
-    }
-    refresh();
-    listBrokers().then(function (brokers) {
-      brokers.forEach(function (broker) {
-        var events = new EventSource("/mlclaw/api/approvals/events?broker=" + encodeURIComponent(broker.id), { withCredentials: true });
-        events.onmessage = refresh;
-        ["request.created", "request.updated", "request.decided"].forEach(function (kind) {
-          events.addEventListener(kind, refresh);
-        });
-      });
-    });
-  }
-  if (!document.documentElement.hasAttribute(marker)) {
+    if (!document.documentElement.hasAttribute(marker)) {
     document.documentElement.setAttribute(marker, "1");
     var attachShadow = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function () {
@@ -8847,7 +9047,6 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
     requestAnimationFrame(function () {
       observeExistingShadowRoots(document);
       scan(document);
-      installApprovals();
     });
   }
 })();
@@ -8887,13 +9086,8 @@ function injectMlClawShell(html, branding) {
       <circle cx="12" cy="12" r="3"></circle>
     </svg>
   </a>
-  <button data-mlclaw-approvals-button type="button" aria-label="Open approval requests" aria-controls="mlclaw-approvals-popover" aria-haspopup="dialog" aria-expanded="false" style="position:relative;box-sizing:border-box;display:grid;width:34px;height:34px;place-items:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;cursor:pointer;">
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
-    <span data-mlclaw-approvals-badge style="position:absolute;display:none;place-items:center;min-width:17px;height:17px;right:-6px;top:-7px;padding:0 4px;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:700 9px system-ui;"></span>
-  </button>
   </div>
 </div>
-<iframe id="mlclaw-approvals-popover" data-mlclaw-approvals-frame src="/mlclaw?embed=approvals" title="Approval requests" tabindex="-1" style="display:none;position:fixed;z-index:2147483646;left:max(12px,env(safe-area-inset-left));bottom:max(54px,calc(env(safe-area-inset-bottom) + 54px));width:min(420px,calc(100vw - 24px));height:min(620px,calc(100dvh - 78px));border:1px solid rgba(15,23,42,.18);border-radius:12px;background:white;box-shadow:0 18px 48px rgba(15,23,42,.24);"></iframe>
 `;
   const brandingScript = `<script ${CONTROL_BRANDING_MARKER} src="${CONTROL_BRANDING_SCRIPT_PATH}"></script>
 `;
@@ -8932,6 +9126,7 @@ function escapeHtml2(value) {
 function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
   const operatorBrokers = new OperatorBrokerRegistry(config2.operatorBrokers);
+  const delegatedBrokerKit = new DelegatedBrokerKit(operatorBrokers, config2.sessionSecret);
   const openAiCredentials = new OpenAiCredentialStore(config2.openaiCredentialStoreFile, config2.credentialKey);
   app.get("/health", (c) => health(c, config2, controls));
   app.get("/healthz", (c) => health(c, config2, controls));
@@ -8999,119 +9194,56 @@ function createSpaceRuntimeApp(config2, controls) {
     }
     return c.json(await statusPayload(config2, controls));
   });
-  app.get("/mlclaw/api/approvals/brokers", (c) => {
+  app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
+  app.get("/mlclaw/api/brokerkit/session", (c) => {
+    if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
     const auth = requireAdmin(c, config2);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    return c.json({ brokers: operatorBrokers.list() });
+    if (auth instanceof Response) return auth;
+    return delegatedJson(c, delegatedBrokerKit.issueSession(auth.username));
   });
-  app.get("/mlclaw/api/approvals", async (c) => {
-    const auth = requireAdmin(c, config2);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = selectedOperatorBroker(c, operatorBrokers);
-    if (broker instanceof Response) {
-      return broker;
-    }
-    const rawStatus = c.req.query("status");
-    if (rawStatus && rawStatus !== "pending" && rawStatus !== "history") {
-      return c.json({ ok: false, error: "status must be pending or history" }, 400);
-    }
-    const status = rawStatus === "pending" || rawStatus === "history" ? rawStatus : void 0;
-    const cursor = c.req.query("cursor");
+  app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
+    const actor = delegatedActor(c, delegatedBrokerKit);
+    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      const page2 = await broker.list({
-        ...status ? { status } : {},
-        ...cursor ? { cursor } : {},
-        limit: boundedInteger(c.req.query("limit"), 50, 100)
-      });
-      return c.json({ broker: broker.summary(), ...page2 });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
+      return delegatedJson(c, await delegatedBrokerKit.snapshot());
+    } catch (error) {
+      return delegatedFailure(c, error);
     }
   });
-  app.get("/mlclaw/api/approvals/events", async (c) => {
-    const auth = requireAdmin(c, config2);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = selectedOperatorBroker(c, operatorBrokers);
-    if (broker instanceof Response) {
-      return broker;
-    }
+  app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
+    const actor = delegatedActor(c, delegatedBrokerKit);
+    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      const upstream = await broker.events(c.req.header("last-event-id"), c.req.raw.signal);
-      return new Response(upstream.body, {
-        status: 200,
-        headers: {
-          "cache-control": "no-store",
-          "content-type": "text/event-stream",
-          "x-accel-buffering": "no"
-        }
-      });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
+      return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
+    } catch (error) {
+      return delegatedFailure(c, error);
     }
   });
-  app.get("/mlclaw/api/approvals/:broker/:id", async (c) => {
-    const auth = requireAdmin(c, config2);
-    if (auth instanceof Response) {
-      return auth;
-    }
-    const broker = operatorBrokers.get(c.req.param("broker"));
-    if (!broker) {
-      return c.json({ ok: false, error: "operator broker is not configured" }, 404);
-    }
-    try {
-      return c.json({ broker: broker.summary(), item: await broker.get(c.req.param("id")) });
-    } catch (err) {
-      return brokerFailure(c, err, broker.summary());
-    }
-  });
-  for (const [browserAction, brokerAction] of [
-    ["approve", "approve"],
-    ["deny", "deny"],
-    ["cancel", "cancel"],
-    ["revoke", "revoke"]
-  ]) {
-    app.post(`/mlclaw/api/approvals/:broker/:id/${browserAction}`, async (c) => {
-      const auth = requireAdmin(c, config2);
-      if (auth instanceof Response) {
-        return auth;
-      }
-      const csrf = requireCsrf(c, config2, auth.username);
-      if (csrf) {
-        return csrf;
-      }
-      const broker = operatorBrokers.get(c.req.param("broker"));
-      if (!broker) {
-        return c.json({ ok: false, error: "operator broker is not configured" }, 404);
-      }
+  for (const action of ["approve", "deny", "cancel", "revoke"]) {
+    app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
+      const actor = delegatedActor(c, delegatedBrokerKit);
+      if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readJson(c);
-      const expectedRevision = boundedInteger(body?.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
-      if (!expectedRevision) {
-        return c.json({ ok: false, error: "expectedRevision is required" }, 400);
+      if (!body || Object.keys(body).some((key) => !["expectedRevision", "reason", "durationSeconds", "maxUses"].includes(key))) {
+        return delegatedErrorResponse(c, "invalid_input", 400);
       }
-      const durationSeconds = optionalPositiveInteger(body?.durationSeconds, 86400);
-      const maxUses = optionalPositiveInteger(body?.maxUses, 100);
-      if (browserAction === "approve" && (durationSeconds === "invalid" || maxUses === "invalid")) {
-        return c.json({ ok: false, error: "approval bounds are invalid" }, 400);
+      const expectedRevision = boundedInteger(body.expectedRevision, 0, Number.MAX_SAFE_INTEGER);
+      const durationSeconds = optionalPositiveInteger(body.durationSeconds, 86400);
+      const maxUses = optionalPositiveInteger(body.maxUses, 100);
+      if (!expectedRevision || durationSeconds === "invalid" || maxUses === "invalid" || action !== "approve" && (durationSeconds !== void 0 || maxUses !== void 0)) {
+        return delegatedErrorResponse(c, "invalid_input", 400);
       }
       try {
-        const item = await broker.decide(c.req.param("id"), brokerAction, {
-          expectedRevision,
-          ...typeof body?.expectedStatus === "string" ? { expectedStatus: body.expectedStatus } : {},
-          ...typeof body?.reason === "string" ? { reason: body.reason.slice(0, 2e3) } : {},
-          ...browserAction === "approve" ? {
+        return delegatedJson(
+          c,
+          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, actor, {
+            ...typeof body.reason === "string" ? { reason: body.reason.slice(0, 2e3) } : {},
             ...typeof durationSeconds === "number" ? { durationSeconds } : {},
             ...typeof maxUses === "number" ? { maxUses } : {}
-          } : {}
-        });
-        return c.json({ broker: broker.summary(), item });
-      } catch (err) {
-        return brokerFailure(c, err, broker.summary());
+          })
+        );
+      } catch (error) {
+        return delegatedFailure(c, error);
       }
     });
   }
@@ -9431,21 +9563,52 @@ function optionalPositiveInteger(value, maximum) {
   const parsed = typeof value === "number" ? value : Number(String(value));
   return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= maximum ? parsed : "invalid";
 }
-function selectedOperatorBroker(c, registry) {
-  const id = c.req.query("broker");
-  if (!id) {
-    return c.json({ ok: false, error: "broker is required" }, 400);
-  }
-  return registry.get(id) ?? c.json({ ok: false, error: "operator broker is not configured" }, 404);
+function delegatedOriginAllowed(c) {
+  return c.req.header("origin") === "null";
 }
-function brokerFailure(c, err, broker) {
-  const upstream = err instanceof BrokerOperatorError ? ` status=${err.status}${err.code ? ` code=${err.code}` : ""}` : "";
-  process.stderr.write(`[mlclaw] ${broker.id} operator request failed${upstream}: ${formatError(err)}
-`);
-  if (err instanceof BrokerOperatorError && err.status >= 400 && err.status < 500) {
-    return c.json({ ok: false, error: err.message, ...err.code ? { code: err.code } : {} }, err.status);
+function delegatedActor(c, delegated) {
+  if (!delegatedOriginAllowed(c)) return void 0;
+  return delegated.authorize(c.req.header("authorization"));
+}
+function delegatedPreflight(c) {
+  if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
+  delegatedHeaders(c);
+  c.header("access-control-allow-headers", "authorization, content-type");
+  c.header("access-control-allow-methods", "GET, POST, OPTIONS");
+  c.header("access-control-max-age", "300");
+  return c.body(null, 204);
+}
+function delegatedJson(c, value, status = 200) {
+  delegatedHeaders(c);
+  return c.json(value, status);
+}
+function delegatedErrorResponse(c, code, status) {
+  delegatedHeaders(c);
+  return c.json({ error: { code } }, status);
+}
+function delegatedFailure(c, error) {
+  if (error instanceof DelegatedBrokerKitError) {
+    const status = error.code === "request_not_found" ? 404 : error.code === "revision_stale" || error.code === "action_not_allowed" ? 409 : 502;
+    return delegatedErrorResponse(c, error.code, status);
   }
-  return c.json({ ok: false, error: `${broker.label} operator API is unavailable` }, 502);
+  if (error instanceof BrokerOperatorError) {
+    const code = safeDelegatedBrokerCode(error.code);
+    const status = error.status === 404 ? 404 : error.status === 409 ? 409 : 502;
+    return delegatedErrorResponse(c, code, status);
+  }
+  process.stderr.write(`[mlclaw] delegated BrokerKit request failed: ${formatError(error)}
+`);
+  return delegatedErrorResponse(c, "source_unavailable", 502);
+}
+function delegatedHeaders(c) {
+  c.header("access-control-allow-origin", "null");
+  c.header("access-control-allow-credentials", "true");
+  c.header("cache-control", "no-store");
+  c.header("vary", "origin");
+  c.header("x-content-type-options", "nosniff");
+}
+function safeDelegatedBrokerCode(value) {
+  return ["request_not_found", "request_terminal", "revision_stale", "action_not_allowed"].includes(value ?? "") ? value : "source_unavailable";
 }
 function unauthenticated(c, config2) {
   const next = normalizeNext(c.req.path + new URL(c.req.url).search);
@@ -9661,7 +9824,7 @@ function contentType(file) {
 }
 
 // src/mlclaw-space-runtime/mcp-credentials.ts
-import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes5 } from "node:crypto";
+import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes6 } from "node:crypto";
 import fs4 from "node:fs/promises";
 import path4 from "node:path";
 var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
@@ -9794,7 +9957,7 @@ var McpCredentialStore = class {
   async persist() {
     const directory = path4.dirname(this.options.file);
     await fs4.mkdir(directory, { recursive: true, mode: 448 });
-    const temporary = `${this.options.file}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
+    const temporary = `${this.options.file}.${process.pid}.${randomBytes6(6).toString("hex")}.tmp`;
     const encrypted = encryptDocument(this.document, this.key);
     try {
       await fs4.writeFile(temporary, `${JSON.stringify(encrypted)}
@@ -9872,7 +10035,7 @@ var InvalidCredentialFileError = class extends Error {
   }
 };
 function encryptDocument(document, key) {
-  const iv = randomBytes5(12);
+  const iv = randomBytes6(12);
   const cipher = createCipheriv2("aes-256-gcm", key, iv);
   const plaintext = Buffer.from(JSON.stringify(document), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
