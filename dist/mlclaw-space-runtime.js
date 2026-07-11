@@ -4720,8 +4720,8 @@ var approvalSchema = external_exports.object({
 }).strict();
 var approvalPageSchema = external_exports.object({
   requests: external_exports.array(approvalSchema).max(100),
-  next_cursor: external_exports.string().min(1).max(4096).optional(),
-  event_cursor: external_exports.string().min(1).max(4096).optional()
+  next_cursor: external_exports.string().min(1).max(1024).optional(),
+  event_cursor: external_exports.string().min(1).max(1024).optional()
 }).strict();
 var operatorErrorSchema = external_exports.object({
   error: external_exports.object({
