@@ -181,7 +181,7 @@ describe("DelegatedBrokerKit", () => {
       "s".repeat(48),
     );
     const snapshot = await delegated.snapshot();
-    expect(snapshot.sources).toEqual([expect.objectContaining({ healthy: true })]);
+    expect(snapshot.sources).toEqual([expect.objectContaining({ healthy: false, error: "source_truncated" })]);
     expect(snapshot.requests).toHaveLength(32);
   });
 

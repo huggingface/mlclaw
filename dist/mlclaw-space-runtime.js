@@ -7457,14 +7457,13 @@ var DelegatedBrokerKit = class {
     timer.unref?.();
     try {
       await client.discover(deadline.signal);
-      const requests = reconcileRequests(
-        await Promise.all([
-          this.sourceRequests(client, "pending", deadline.signal),
-          this.sourceRequests(client, "active", deadline.signal)
-        ])
-      );
+      const pages = await Promise.all([
+        this.sourceRequests(client, "pending", deadline.signal),
+        this.sourceRequests(client, "active", deadline.signal)
+      ]);
+      const requests = reconcileRequests(pages.map((page2) => page2.requests));
       return {
-        source: deadline.signal.aborted ? { ...summary, healthy: false, error: "broker_timeout" } : { ...summary, healthy: true, lastSyncAt: synchronizedAt },
+        source: deadline.signal.aborted ? { ...summary, healthy: false, error: "broker_timeout" } : pages.some((page2) => page2.truncated) ? { ...summary, healthy: false, error: "source_truncated" } : { ...summary, healthy: true, lastSyncAt: synchronizedAt },
         requests
       };
     } catch (error) {
@@ -7484,12 +7483,12 @@ var DelegatedBrokerKit = class {
         const page2 = await client.list({ status, ...cursor ? { cursor } : {}, limit: 100 }, signal);
         requests.push(...page2.requests);
         cursor = page2.next_cursor;
-        if (!cursor) return requests;
+        if (!cursor) return { requests, truncated: false };
       }
     } catch (error) {
       if (!signal.aborted) throw error;
     }
-    return requests;
+    return { requests, truncated: Boolean(cursor) };
   }
   handle(sourceId, request) {
     const identity = requestIdentity(sourceId, request.id, request.revision);
@@ -9110,7 +9109,8 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
     var frames = root.querySelectorAll("iframe");
     for (var i = 0; i < frames.length; i++) {
       try {
-        if (frames[i].contentWindow === source && new URL(frames[i].src, location.href).pathname === "/plugins/brokerkit/ui/") {
+        var frameUrl = new URL(frames[i].src, location.href);
+        if (frames[i].contentWindow === source && frameUrl.origin === location.origin && frameUrl.pathname === "/plugins/brokerkit/ui/") {
           return frames[i];
         }
       } catch (_) {}

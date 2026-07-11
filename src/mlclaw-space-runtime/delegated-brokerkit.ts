@@ -161,16 +161,17 @@ export class DelegatedBrokerKit {
     timer.unref?.();
     try {
       await client.discover(deadline.signal);
-      const requests = reconcileRequests(
-        await Promise.all([
-          this.sourceRequests(client, "pending", deadline.signal),
-          this.sourceRequests(client, "active", deadline.signal),
-        ]),
-      );
+      const pages = await Promise.all([
+        this.sourceRequests(client, "pending", deadline.signal),
+        this.sourceRequests(client, "active", deadline.signal),
+      ]);
+      const requests = reconcileRequests(pages.map((page) => page.requests));
       return {
         source: deadline.signal.aborted
           ? { ...summary, healthy: false, error: "broker_timeout" }
-          : { ...summary, healthy: true, lastSyncAt: synchronizedAt },
+          : pages.some((page) => page.truncated)
+            ? { ...summary, healthy: false, error: "source_truncated" }
+            : { ...summary, healthy: true, lastSyncAt: synchronizedAt },
         requests,
       };
     } catch (error) {
@@ -187,7 +188,7 @@ export class DelegatedBrokerKit {
     client: BrokerOperatorClient,
     status: "pending" | "active",
     signal: AbortSignal,
-  ): Promise<BrokerApproval[]> {
+  ): Promise<{ requests: BrokerApproval[]; truncated: boolean }> {
     const requests: BrokerApproval[] = [];
     let cursor: string | undefined;
     try {
@@ -195,12 +196,12 @@ export class DelegatedBrokerKit {
         const page = await client.list({ status, ...(cursor ? { cursor } : {}), limit: 100 }, signal);
         requests.push(...page.requests);
         cursor = page.next_cursor;
-        if (!cursor) return requests;
+        if (!cursor) return { requests, truncated: false };
       }
     } catch (error) {
       if (!signal.aborted) throw error;
     }
-    return requests;
+    return { requests, truncated: Boolean(cursor) };
   }
 
   private handle(sourceId: string, request: BrokerApproval): string {

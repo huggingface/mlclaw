@@ -78,7 +78,8 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
     var frames = root.querySelectorAll("iframe");
     for (var i = 0; i < frames.length; i++) {
       try {
-        if (frames[i].contentWindow === source && new URL(frames[i].src, location.href).pathname === "/plugins/brokerkit/ui/") {
+        var frameUrl = new URL(frames[i].src, location.href);
+        if (frames[i].contentWindow === source && frameUrl.origin === location.origin && frameUrl.pathname === "/plugins/brokerkit/ui/") {
           return frames[i];
         }
       } catch (_) {}
