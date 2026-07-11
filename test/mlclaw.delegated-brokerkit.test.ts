@@ -124,4 +124,39 @@ describe("DelegatedBrokerKit", () => {
       status: "revoked",
     });
   });
+
+  it("caps large snapshots before assigning usable handles", async () => {
+    const requests = new Map<string, ReturnType<typeof request>>();
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/.well-known/brokerkit-operator") {
+        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+      }
+      if (url.pathname.startsWith("/api/operator/v1/requests/request-")) {
+        return Response.json(requests.get(url.pathname.split("/").at(-1) ?? ""));
+      }
+      const status = url.searchParams.get("status") ?? "pending";
+      const page = Number(url.searchParams.get("cursor") ?? "0");
+      const pageCount = status === "pending" ? 32 : 9;
+      const items = Array.from({ length: 100 }, (_, index) => {
+        const id = `request-${status}-${page}-${index}`;
+        const item = request(id, status === "active" ? 2 : 1, status);
+        requests.set(id, item);
+        return item;
+      });
+      return Response.json({ requests: items, ...(page + 1 < pageCount ? { next_cursor: String(page + 1) } : {}) });
+    });
+    const delegated = new DelegatedBrokerKit(
+      new OperatorBrokerRegistry(
+        [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
+        fetchImpl,
+      ),
+      "s".repeat(48),
+      () => new Date("2026-07-12T00:00:00Z"),
+    );
+    const snapshot = await delegated.snapshot();
+    expect(snapshot.requests).toHaveLength(4_096);
+    await expect(delegated.detail(snapshot.requests[0]?.handle ?? "")).resolves.toBeTruthy();
+    await expect(delegated.detail(snapshot.requests.at(-1)?.handle ?? "")).resolves.toBeTruthy();
+  });
 });

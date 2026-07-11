@@ -101,9 +101,15 @@ export class DelegatedBrokerKit {
     const results = await Promise.all(
       this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt)),
     );
+    const selected = results
+      .flatMap((result) => result.requests.map((request) => ({ source: result.source, request })))
+      .slice(0, MAX_HANDLES);
+    this.retainHandles(
+      new Set(selected.map(({ source, request }) => requestIdentity(source.id, request.id, request.revision))),
+    );
     return {
       sources: results.map((result) => result.source),
-      requests: results.flatMap((result) => result.requests),
+      requests: selected.map(({ source, request }) => project(source, request, this.handle(source.id, request))),
       synchronizedAt,
     };
   }
@@ -149,14 +155,11 @@ export class DelegatedBrokerKit {
     summary: OperatorBrokerSummary,
     client: BrokerOperatorClient,
     synchronizedAt: string,
-  ): Promise<{ source: DelegatedSourceHealth; requests: DelegatedRequest[] }> {
+  ): Promise<{ source: DelegatedSourceHealth; requests: BrokerApproval[] }> {
     try {
       await client.discover();
       const requests = (
-        await Promise.all([
-          this.sourceRequests(summary, client, "pending"),
-          this.sourceRequests(summary, client, "active"),
-        ])
+        await Promise.all([this.sourceRequests(client, "pending"), this.sourceRequests(client, "active")])
       ).flat();
       return {
         source: { ...summary, healthy: true, lastSyncAt: synchronizedAt },
@@ -170,18 +173,12 @@ export class DelegatedBrokerKit {
     }
   }
 
-  private async sourceRequests(
-    summary: OperatorBrokerSummary,
-    client: BrokerOperatorClient,
-    status: "pending" | "active",
-  ): Promise<DelegatedRequest[]> {
-    const requests: DelegatedRequest[] = [];
+  private async sourceRequests(client: BrokerOperatorClient, status: "pending" | "active"): Promise<BrokerApproval[]> {
+    const requests: BrokerApproval[] = [];
     let cursor: string | undefined;
     for (let pageNumber = 0; pageNumber < MAX_PAGES_PER_SOURCE; pageNumber += 1) {
       const page = await client.list({ status, ...(cursor ? { cursor } : {}), limit: 100 });
-      for (const request of page.requests) {
-        requests.push(project(summary, request, this.handle(summary.id, request)));
-      }
+      requests.push(...page.requests);
       cursor = page.next_cursor;
       if (!cursor) return requests;
     }
@@ -189,7 +186,7 @@ export class DelegatedBrokerKit {
   }
 
   private handle(sourceId: string, request: BrokerApproval): string {
-    const identity = `${sourceId}\0${request.id}\0${request.revision}`;
+    const identity = requestIdentity(sourceId, request.id, request.revision);
     const existing = this.handlesByIdentity.get(identity);
     if (existing && this.handles.has(existing)) return existing;
     if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
@@ -224,9 +221,17 @@ export class DelegatedBrokerKit {
     if (!oldest.done) this.removeHandle(oldest.value[0], oldest.value[1]);
   }
 
+  private retainHandles(identities: Set<string>): void {
+    for (const [handle, record] of this.handles) {
+      if (!identities.has(requestIdentity(record.sourceId, record.requestId, record.revision))) {
+        this.removeHandle(handle, record);
+      }
+    }
+  }
+
   private removeHandle(handle: string, record: HandleRecord): void {
     this.handles.delete(handle);
-    this.handlesByIdentity.delete(`${record.sourceId}\0${record.requestId}\0${record.revision}`);
+    this.handlesByIdentity.delete(requestIdentity(record.sourceId, record.requestId, record.revision));
   }
 
   private sign(encoded: string): string {
@@ -246,6 +251,10 @@ function delegatedError(code: string): DelegatedBrokerKitError {
 
 function project(source: OperatorBrokerSummary, request: BrokerApproval, handle: string): DelegatedRequest {
   return { ...request, sourceId: source.id, sourceLabel: source.label, handle };
+}
+
+function requestIdentity(sourceId: string, requestId: string, revision: number): string {
+  return `${sourceId}\0${requestId}\0${revision}`;
 }
 
 function handleExpiry(request: BrokerApproval): string {
