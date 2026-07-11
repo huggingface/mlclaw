@@ -1621,6 +1621,21 @@ describe("ML Claw Space runtime", () => {
     expect(JSON.stringify(rewritten.plugins)).not.toContain("operator-secret");
   });
 
+  it("does not create a restrictive plugin allowlist", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openclaw-plugins-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const configPath = path.join(root, "openclaw.json");
+    await fs.writeFile(configPath, JSON.stringify({ plugins: { entries: { telegram: { enabled: true } } } }));
+    const config = await testConfig({ openclawConfigPath: configPath });
+
+    await configureOpenClawGateway(config);
+
+    const rewritten = JSON.parse(await fs.readFile(configPath, "utf8"));
+    expect(rewritten.plugins.allow).toBeUndefined();
+    expect(rewritten.plugins.entries.telegram).toEqual({ enabled: true });
+    expect(rewritten.plugins.entries.brokerkit.enabled).toBe(true);
+  });
+
   it("configures OpenClaw inference with only the broker agent credential", async () => {
     const config = await testConfig({
       brokerAgentUrl: "http://127.0.0.1:7863/",

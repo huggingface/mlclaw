@@ -42,7 +42,7 @@ function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, confi
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
   load.paths = uniqueStrings(load.paths, config.brokerKitPluginPath);
-  plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
+  if (plugins.allow !== undefined) plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
   const entries = object(plugins, "entries");
   entries.brokerkit = {
     enabled: true,
