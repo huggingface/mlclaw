@@ -43,6 +43,10 @@ describe("DelegatedBrokerKit", () => {
     const session = delegated.issueSession("alice");
     expect(session.api_version).toBe("brokerkit.io/delegated-web/v1");
     expect(delegated.authorize(`Bearer ${session.decision_token}`)).toBe("alice");
+    expect(delegated.authorizeSession(`Bearer ${session.decision_token}`)).toEqual({
+      actor: "alice",
+      sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/u),
+    });
     expect(delegated.authorize(`Bearer ${session.decision_token}x`)).toBeUndefined();
     now = new Date("2026-07-12T00:05:00Z");
     expect(delegated.authorize(`Bearer ${session.decision_token}`)).toBeUndefined();

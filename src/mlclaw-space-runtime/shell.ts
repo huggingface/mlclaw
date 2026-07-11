@@ -73,55 +73,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
-  function brokerKitFrameIn(root, source) {
-    if (!root.querySelectorAll) return;
-    var frames = root.querySelectorAll("iframe");
-    for (var i = 0; i < frames.length; i++) {
-      try {
-        var frameUrl = new URL(frames[i].src, location.href);
-        if (frames[i].contentWindow === source && frameUrl.origin === location.origin && frameUrl.pathname === "/plugins/brokerkit/ui/") {
-          return frames[i];
-        }
-      } catch (_) {}
-    }
-    var elements = root.querySelectorAll("*");
-    for (var j = 0; j < elements.length; j++) {
-      if (elements[j].shadowRoot) {
-        var nested = brokerKitFrameIn(elements[j].shadowRoot, source);
-        if (nested) return nested;
-      }
-    }
-  }
-  function brokerKitFrame(source) {
-    return brokerKitFrameIn(document, source);
-  }
-  async function brokerKitSession(event) {
-    var message = event.data;
-    if (event.origin !== "null" || !message || message.type !== "brokerkit.delegated-web.session.request" || message.version !== 1 ||
-        typeof message.nonce !== "string" || !/^[a-f0-9]{32}$/.test(message.nonce) || !brokerKitFrame(event.source)) {
-      return;
-    }
-    var response = { type: "brokerkit.delegated-web.session.response", version: 1, nonce: message.nonce };
-    try {
-      var current = await fetch("/mlclaw/api/session", { credentials: "same-origin", cache: "no-store" });
-      var identity = await current.json();
-      if (!current.ok || !identity.admin || typeof identity.csrfToken !== "string") throw new Error("not authorized");
-      var issued = await fetch("/mlclaw/api/brokerkit/session", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json", "x-mlclaw-csrf": identity.csrfToken },
-        body: "{}"
-      });
-      if (!issued.ok) throw new Error("not authorized");
-      response.session = await issued.json();
-    } catch (_) {
-      response.error = "not_authorized";
-    }
-    event.source.postMessage(response, "*");
-  }
-  window.addEventListener("message", function (event) { void brokerKitSession(event); });
-    if (!document.documentElement.hasAttribute(marker)) {
+  if (!document.documentElement.hasAttribute(marker)) {
     document.documentElement.setAttribute(marker, "1");
     var attachShadow = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function () {

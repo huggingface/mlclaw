@@ -7398,10 +7398,13 @@ var DelegatedBrokerKit = class {
     };
   }
   authorize(header) {
+    return this.authorizeSession(header)?.actor;
+  }
+  authorizeSession(header) {
     const encoded = authenticatedTokenPayload(header, (value) => this.sign(value));
     if (!encoded) return void 0;
     const payload = parseTokenPayload(encoded);
-    return payload && tokenIsCurrent(payload, this.now()) ? payload.subject : void 0;
+    return payload && tokenIsCurrent(payload, this.now()) ? { actor: payload.subject, sessionId: payload.nonce } : void 0;
   }
   async snapshot() {
     if (this.snapshotInFlight) return this.snapshotInFlight;
@@ -9149,55 +9152,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
-  function brokerKitFrameIn(root, source) {
-    if (!root.querySelectorAll) return;
-    var frames = root.querySelectorAll("iframe");
-    for (var i = 0; i < frames.length; i++) {
-      try {
-        var frameUrl = new URL(frames[i].src, location.href);
-        if (frames[i].contentWindow === source && frameUrl.origin === location.origin && frameUrl.pathname === "/plugins/brokerkit/ui/") {
-          return frames[i];
-        }
-      } catch (_) {}
-    }
-    var elements = root.querySelectorAll("*");
-    for (var j = 0; j < elements.length; j++) {
-      if (elements[j].shadowRoot) {
-        var nested = brokerKitFrameIn(elements[j].shadowRoot, source);
-        if (nested) return nested;
-      }
-    }
-  }
-  function brokerKitFrame(source) {
-    return brokerKitFrameIn(document, source);
-  }
-  async function brokerKitSession(event) {
-    var message = event.data;
-    if (event.origin !== "null" || !message || message.type !== "brokerkit.delegated-web.session.request" || message.version !== 1 ||
-        typeof message.nonce !== "string" || !/^[a-f0-9]{32}$/.test(message.nonce) || !brokerKitFrame(event.source)) {
-      return;
-    }
-    var response = { type: "brokerkit.delegated-web.session.response", version: 1, nonce: message.nonce };
-    try {
-      var current = await fetch("/mlclaw/api/session", { credentials: "same-origin", cache: "no-store" });
-      var identity = await current.json();
-      if (!current.ok || !identity.admin || typeof identity.csrfToken !== "string") throw new Error("not authorized");
-      var issued = await fetch("/mlclaw/api/brokerkit/session", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json", "x-mlclaw-csrf": identity.csrfToken },
-        body: "{}"
-      });
-      if (!issued.ok) throw new Error("not authorized");
-      response.session = await issued.json();
-    } catch (_) {
-      response.error = "not_authorized";
-    }
-    event.source.postMessage(response, "*");
-  }
-  window.addEventListener("message", function (event) { void brokerKitSession(event); });
-    if (!document.documentElement.hasAttribute(marker)) {
+  if (!document.documentElement.hasAttribute(marker)) {
     document.documentElement.setAttribute(marker, "1");
     var attachShadow = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function () {
@@ -9307,6 +9262,8 @@ function createSpaceRuntimeApp(config2, controls) {
     async () => serveFile(path3.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
+  app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
+  app.get("/plugins/brokerkit/ui/*", (c) => trustedBrokerKitUi(c, config2, delegatedBrokerKit));
   app.get("/assets/brand/logo", async () => serveBrandAsset(config2, config2.branding.logoAsset));
   app.get("/favicon.svg", async () => serveBrandAsset(config2, config2.branding.faviconSvgAsset));
   app.get("/favicon-32.png", async () => serveBrandAsset(config2, config2.branding.favicon32Asset));
@@ -9359,18 +9316,10 @@ function createSpaceRuntimeApp(config2, controls) {
     return c.json(await statusPayload(config2, controls));
   });
   app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
-  app.post("/mlclaw/api/brokerkit/session", (c) => {
-    if (!delegatedBridgeOriginAllowed(c, config2)) return delegatedErrorResponse(c, "not_authorized", 403);
-    const auth = requireAdmin(c, config2);
-    if (auth instanceof Response) return auth;
-    const csrf = requireCsrf(c, config2, auth.username);
-    if (csrf) return csrf;
-    return delegatedBridgeJson(c, delegatedBrokerKit.issueSession(auth.username));
-  });
   app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
-    const actor = delegatedActor(c, delegatedBrokerKit);
-    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
-    if (!allowDelegatedSnapshot(actor)) return delegatedErrorResponse(c, "rate_limited", 429);
+    const identity = delegatedIdentity(c, delegatedBrokerKit);
+    if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
+    if (!allowDelegatedSnapshot(identity.sessionId)) return delegatedErrorResponse(c, "rate_limited", 429);
     try {
       return delegatedJson(c, await delegatedBrokerKit.snapshot());
     } catch (error) {
@@ -9378,8 +9327,8 @@ function createSpaceRuntimeApp(config2, controls) {
     }
   });
   app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
-    const actor = delegatedActor(c, delegatedBrokerKit);
-    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
+    const identity = delegatedIdentity(c, delegatedBrokerKit);
+    if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
       return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
     } catch (error) {
@@ -9388,8 +9337,8 @@ function createSpaceRuntimeApp(config2, controls) {
   });
   for (const action of ["approve", "deny", "cancel", "revoke"]) {
     app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
-      const actor = delegatedActor(c, delegatedBrokerKit);
-      if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
+      const identity = delegatedIdentity(c, delegatedBrokerKit);
+      if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readBoundedJson(c, 16384);
       if (!body || Object.keys(body).some((key) => !["expectedRevision", "reason", "constraints"].includes(key))) {
         return delegatedErrorResponse(c, "invalid_input", 400);
@@ -9404,7 +9353,7 @@ function createSpaceRuntimeApp(config2, controls) {
       try {
         return delegatedJson(
           c,
-          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, actor, {
+          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
             ...typeof body.reason === "string" ? { reason: body.reason } : {},
             ...typeof durationSeconds === "number" ? { durationSeconds } : {},
             ...typeof maxUses === "number" ? { maxUses } : {}
@@ -9676,6 +9625,45 @@ async function controlUi(c, config2) {
   }
   return serveFile(path3.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
+async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
+  const prefix = "/plugins/brokerkit/ui/";
+  const requested = c.req.path.slice(prefix.length);
+  const relative = requested ? safeRelativePath(requested) : "index.html";
+  if (!relative) return c.text("not found\n", 404);
+  const uiDir = path3.join(config2.brokerKitPluginPath, "dist", "ui");
+  const file = path3.join(uiDir, relative);
+  if (relative === "index.html") {
+    if (c.req.header("sec-fetch-dest") !== "iframe") return c.text("not found\n", 404);
+    const auth = requireAdmin(c, config2);
+    if (auth instanceof Response) return auth;
+    try {
+      const template = await fs3.readFile(file, "utf8");
+      const session = delegatedBrokerKit.issueSession(auth.username);
+      const encoded = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
+      const marker = `<meta name="brokerkit-delegated-session" content="${encoded}">`;
+      if (!template.includes("</head>")) return c.text("not found\n", 404);
+      const headers2 = trustedBrokerKitHeaders(false);
+      return new Response(template.replace("</head>", `${marker}</head>`), { status: 200, headers: headers2 });
+    } catch {
+      return c.text("not found\n", 404);
+    }
+  }
+  const response = await serveFile(file, contentType(file), true);
+  if (response.status !== 200) return response;
+  const headers = trustedBrokerKitHeaders(true);
+  headers.set("content-type", response.headers.get("content-type") ?? "application/octet-stream");
+  return new Response(response.body, { status: response.status, headers });
+}
+function trustedBrokerKitHeaders(immutable) {
+  return new Headers({
+    "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-store",
+    "content-security-policy": "sandbox allow-scripts; default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'self'",
+    "cross-origin-resource-policy": "same-origin",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN"
+  });
+}
 function logoutResponse(config2, json) {
   const headers = new Headers();
   headers.append("set-cookie", clearSessionCookie(config2.cookieSecure));
@@ -9720,13 +9708,9 @@ function requireCsrf(c, config2, username) {
 function delegatedOriginAllowed(c) {
   return c.req.header("origin") === "null";
 }
-function delegatedBridgeOriginAllowed(c, config2) {
-  const origin = c.req.header("origin");
-  return origin === void 0 || origin === new URL(config2.publicUrl).origin;
-}
-function delegatedActor(c, delegated) {
+function delegatedIdentity(c, delegated) {
   if (!delegatedOriginAllowed(c)) return void 0;
-  return delegated.authorize(c.req.header("authorization"));
+  return delegated.authorizeSession(c.req.header("authorization"));
 }
 function delegatedPreflight(c) {
   if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
@@ -9739,11 +9723,6 @@ function delegatedPreflight(c) {
 function delegatedJson(c, value, status = 200) {
   delegatedHeaders(c);
   return c.json(value, status);
-}
-function delegatedBridgeJson(c, value) {
-  c.header("cache-control", "no-store");
-  c.header("x-content-type-options", "nosniff");
-  return c.json(value);
 }
 function delegatedErrorResponse(c, code, status) {
   delegatedHeaders(c);
@@ -10653,7 +10632,7 @@ var SpaceRuntimeServer = class {
     await proxyHttp(req, res, this.config, { username: session.username });
   }
   shouldRouteToMlClaw(pathname) {
-    return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/sw.js" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/assistant-avatar.svg" || pathname === "/assets/mlclaw-control-branding.js" || pathname === "/assets/brand/logo" || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
+    return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/sw.js" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/assistant-avatar.svg" || pathname === "/assets/mlclaw-control-branding.js" || pathname === "/assets/brand/logo" || pathname === "/plugins/brokerkit/ui" || pathname.startsWith("/plugins/brokerkit/ui/") || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
   }
   async startOpenClaw(extraEnv = {}) {
     if (this.openclawStarting || this.openclaw && !this.openclaw.killed) {

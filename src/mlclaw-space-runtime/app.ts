@@ -7,7 +7,7 @@ import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js"
 import { BrokerOperatorError, OperatorBrokerRegistry } from "./operator-brokers.js";
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
-import { DelegatedBrokerKit, DelegatedBrokerKitError } from "./delegated-brokerkit.js";
+import { DelegatedBrokerKit, DelegatedBrokerKitError, type DelegatedSessionIdentity } from "./delegated-brokerkit.js";
 import {
   normalizeModel,
   restartCurrentSpace,
@@ -75,6 +75,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     serveFile(path.join(config.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8"),
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
+  app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
+  app.get("/plugins/brokerkit/ui/*", (c) => trustedBrokerKitUi(c, config, delegatedBrokerKit));
   app.get("/assets/brand/logo", async () => serveBrandAsset(config, config.branding.logoAsset));
   app.get("/favicon.svg", async () => serveBrandAsset(config, config.branding.faviconSvgAsset));
   app.get("/favicon-32.png", async () => serveBrandAsset(config, config.branding.favicon32Asset));
@@ -135,19 +137,10 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
 
   app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
 
-  app.post("/mlclaw/api/brokerkit/session", (c) => {
-    if (!delegatedBridgeOriginAllowed(c, config)) return delegatedErrorResponse(c, "not_authorized", 403);
-    const auth = requireAdmin(c, config);
-    if (auth instanceof Response) return auth;
-    const csrf = requireCsrf(c, config, auth.username);
-    if (csrf) return csrf;
-    return delegatedBridgeJson(c, delegatedBrokerKit.issueSession(auth.username));
-  });
-
   app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
-    const actor = delegatedActor(c, delegatedBrokerKit);
-    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
-    if (!allowDelegatedSnapshot(actor)) return delegatedErrorResponse(c, "rate_limited", 429);
+    const identity = delegatedIdentity(c, delegatedBrokerKit);
+    if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
+    if (!allowDelegatedSnapshot(identity.sessionId)) return delegatedErrorResponse(c, "rate_limited", 429);
     try {
       return delegatedJson(c, await delegatedBrokerKit.snapshot());
     } catch (error) {
@@ -156,8 +149,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
   });
 
   app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
-    const actor = delegatedActor(c, delegatedBrokerKit);
-    if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
+    const identity = delegatedIdentity(c, delegatedBrokerKit);
+    if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
       return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
     } catch (error) {
@@ -167,8 +160,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
 
   for (const action of ["approve", "deny", "cancel", "revoke"] as const) {
     app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
-      const actor = delegatedActor(c, delegatedBrokerKit);
-      if (!actor) return delegatedErrorResponse(c, "not_authorized", 401);
+      const identity = delegatedIdentity(c, delegatedBrokerKit);
+      if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readBoundedJson(c, 16_384);
       if (!body || Object.keys(body).some((key) => !["expectedRevision", "reason", "constraints"].includes(key))) {
         return delegatedErrorResponse(c, "invalid_input", 400);
@@ -194,7 +187,7 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       try {
         return delegatedJson(
           c,
-          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, actor, {
+          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
             ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
             ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
             ...(typeof maxUses === "number" ? { maxUses } : {}),
@@ -489,6 +482,52 @@ async function controlUi(c: Context, config: SpaceRuntimeConfig): Promise<Respon
   return serveFile(path.join(config.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 
+async function trustedBrokerKitUi(
+  c: Context,
+  config: SpaceRuntimeConfig,
+  delegatedBrokerKit: DelegatedBrokerKit,
+): Promise<Response> {
+  const prefix = "/plugins/brokerkit/ui/";
+  const requested = c.req.path.slice(prefix.length);
+  const relative = requested ? safeRelativePath(requested) : "index.html";
+  if (!relative) return c.text("not found\n", 404);
+  const uiDir = path.join(config.brokerKitPluginPath, "dist", "ui");
+  const file = path.join(uiDir, relative);
+  if (relative === "index.html") {
+    if (c.req.header("sec-fetch-dest") !== "iframe") return c.text("not found\n", 404);
+    const auth = requireAdmin(c, config);
+    if (auth instanceof Response) return auth;
+    try {
+      const template = await fs.readFile(file, "utf8");
+      const session = delegatedBrokerKit.issueSession(auth.username);
+      const encoded = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
+      const marker = `<meta name="brokerkit-delegated-session" content="${encoded}">`;
+      if (!template.includes("</head>")) return c.text("not found\n", 404);
+      const headers = trustedBrokerKitHeaders(false);
+      return new Response(template.replace("</head>", `${marker}</head>`), { status: 200, headers });
+    } catch {
+      return c.text("not found\n", 404);
+    }
+  }
+  const response = await serveFile(file, contentType(file), true);
+  if (response.status !== 200) return response;
+  const headers = trustedBrokerKitHeaders(true);
+  headers.set("content-type", response.headers.get("content-type") ?? "application/octet-stream");
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function trustedBrokerKitHeaders(immutable: boolean): Headers {
+  return new Headers({
+    "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-store",
+    "content-security-policy":
+      "sandbox allow-scripts; default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'self'",
+    "cross-origin-resource-policy": "same-origin",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN",
+  });
+}
+
 function logoutResponse(config: SpaceRuntimeConfig, json: boolean): Response {
   const headers = new Headers();
   headers.append("set-cookie", clearSessionCookie(config.cookieSecure));
@@ -555,14 +594,9 @@ function delegatedOriginAllowed(c: Context): boolean {
   return c.req.header("origin") === "null";
 }
 
-function delegatedBridgeOriginAllowed(c: Context, config: SpaceRuntimeConfig): boolean {
-  const origin = c.req.header("origin");
-  return origin === undefined || origin === new URL(config.publicUrl).origin;
-}
-
-function delegatedActor(c: Context, delegated: DelegatedBrokerKit): string | undefined {
+function delegatedIdentity(c: Context, delegated: DelegatedBrokerKit): DelegatedSessionIdentity | undefined {
   if (!delegatedOriginAllowed(c)) return undefined;
-  return delegated.authorize(c.req.header("authorization"));
+  return delegated.authorizeSession(c.req.header("authorization"));
 }
 
 function delegatedPreflight(c: Context): Response {
@@ -577,12 +611,6 @@ function delegatedPreflight(c: Context): Response {
 function delegatedJson(c: Context, value: unknown, status: 200 | 201 = 200): Response {
   delegatedHeaders(c);
   return c.json(value, status);
-}
-
-function delegatedBridgeJson(c: Context, value: unknown): Response {
-  c.header("cache-control", "no-store");
-  c.header("x-content-type-options", "nosniff");
-  return c.json(value);
 }
 
 function delegatedErrorResponse(c: Context, code: string, status: 400 | 401 | 403 | 404 | 409 | 429 | 502): Response {

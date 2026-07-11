@@ -50,6 +50,11 @@ type TokenPayload = {
   nonce: string;
 };
 
+export type DelegatedSessionIdentity = {
+  actor: string;
+  sessionId: string;
+};
+
 export class DelegatedBrokerKit {
   private readonly key: Buffer;
   private readonly handles = new Map<string, HandleRecord>();
@@ -92,10 +97,16 @@ export class DelegatedBrokerKit {
   }
 
   authorize(header: string | undefined): string | undefined {
+    return this.authorizeSession(header)?.actor;
+  }
+
+  authorizeSession(header: string | undefined): DelegatedSessionIdentity | undefined {
     const encoded = authenticatedTokenPayload(header, (value) => this.sign(value));
     if (!encoded) return undefined;
     const payload = parseTokenPayload(encoded);
-    return payload && tokenIsCurrent(payload, this.now()) ? payload.subject : undefined;
+    return payload && tokenIsCurrent(payload, this.now())
+      ? { actor: payload.subject, sessionId: payload.nonce }
+      : undefined;
   }
 
   async snapshot(): Promise<DelegatedSnapshot> {

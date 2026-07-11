@@ -169,6 +169,13 @@ describe("ML Claw Space runtime", () => {
   });
 
   it("delegates the packaged BrokerKit tab to authenticated admin authority", async () => {
+    const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-brokerkit-delegated-ui-"));
+    cleanups.push(() => fs.rm(pluginRoot, { recursive: true, force: true }));
+    await fs.mkdir(path.join(pluginRoot, "dist", "ui"), { recursive: true });
+    await fs.writeFile(
+      path.join(pluginRoot, "dist", "ui", "index.html"),
+      "<!doctype html><html><head><title>BrokerKit</title></head><body></body></html>",
+    );
     const brokerPort = await freePort();
     const brokerRequests: Array<{ method: string; url: string; authorization?: string; body: string }> = [];
     let postAttempts = 0;
@@ -222,6 +229,7 @@ describe("ML Claw Space runtime", () => {
     const config = await testConfig({
       allowedUsers: ["alice", "bob"],
       adminUsers: ["alice"],
+      brokerKitPluginPath: pluginRoot,
       operatorBrokers: [
         {
           id: "hf-broker",
@@ -238,37 +246,36 @@ describe("ML Claw Space runtime", () => {
       () => runtime.stop(),
     );
     const base = `http://127.0.0.1:${config.port}/mlclaw/api/brokerkit`;
-    const originHeaders = { origin: config.publicUrl };
-    const anonymous = await fetch(`${base}/session`, { method: "POST", headers: originHeaders });
-    const member = await fetch(`${base}/session`, {
-      method: "POST",
-      headers: { ...originHeaders, cookie: sessionCookie(config, "bob") },
+    const ui = `http://127.0.0.1:${config.port}/plugins/brokerkit/ui/`;
+    const iframeHeaders = { "sec-fetch-dest": "iframe" };
+    const anonymous = await fetch(ui, { headers: iframeHeaders });
+    const member = await fetch(ui, {
+      headers: { ...iframeHeaders, cookie: sessionCookie(config, "bob") },
     });
-    const wrongOrigin = await fetch(`${base}/session`, {
-      method: "POST",
-      headers: { origin: "https://attacker.example", cookie: sessionCookie(config, "alice") },
+    const topLevel = await fetch(ui, {
+      headers: { cookie: sessionCookie(config, "alice") },
     });
-    const missingCsrf = await fetch(`${base}/session`, {
-      method: "POST",
-      headers: { ...originHeaders, cookie: sessionCookie(config, "alice") },
-    });
-    const session = await fetch(`${base}/session`, {
-      method: "POST",
-      headers: {
-        ...originHeaders,
-        cookie: sessionCookie(config, "alice"),
-        "x-mlclaw-csrf": createCsrfToken({ username: "alice", sessionSecret: config.sessionSecret }),
-      },
+    const session = await fetch(ui, {
+      headers: { ...iframeHeaders, cookie: sessionCookie(config, "alice") },
     });
     expect(anonymous.status).toBe(401);
     expect(member.status).toBe(403);
-    expect(wrongOrigin.status).toBe(403);
-    expect(missingCsrf.status).toBe(403);
+    expect(topLevel.status).toBe(404);
     expect(session.status).toBe(200);
     expect(session.headers.get("cache-control")).toBe("no-store");
-    const sessionBody = (await session.json()) as { decision_token: string; expires_at: string };
+    expect(session.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    const sessionHtml = await session.text();
+    const embedded = sessionHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    expect(embedded).toBeDefined();
+    const sessionBody = JSON.parse(Buffer.from(embedded ?? "", "base64url").toString("utf8")) as {
+      decision_token: string;
+      expires_at: string;
+    };
     expect(sessionBody.decision_token).not.toContain("operator-secret");
     expect(Date.parse(sessionBody.expires_at) - Date.now()).toBeLessThanOrEqual(5 * 60_000);
+    const removedSessionRoute = await fetch(`${base}/session`, { method: "POST" });
+    expect(removedSessionRoute.status).not.toBe(200);
+    expect(await removedSessionRoute.text()).not.toContain("decision_token");
 
     const cookieOnly = await fetch(`${base}/snapshot`, {
       headers: { origin: "null", cookie: sessionCookie(config, "alice") },
@@ -292,6 +299,18 @@ describe("ML Claw Space runtime", () => {
     const rateLimited = await fetch(`${base}/snapshot`, { headers: authorizedHeaders });
     expect(rateLimited.status).toBe(429);
     expect(await rateLimited.json()).toEqual({ error: { code: "rate_limited" } });
+    const anotherSession = await fetch(ui, {
+      headers: { ...iframeHeaders, cookie: sessionCookie(config, "alice") },
+    });
+    const anotherHtml = await anotherSession.text();
+    const anotherEmbedded = anotherHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    const anotherSessionBody = JSON.parse(Buffer.from(anotherEmbedded ?? "", "base64url").toString("utf8")) as {
+      decision_token: string;
+    };
+    const independentTab = await fetch(`${base}/snapshot`, {
+      headers: { origin: "null", authorization: `Bearer ${anotherSessionBody.decision_token}` },
+    });
+    expect(independentTab.status).toBe(200);
     brokerRequests.length = 0;
 
     const requestUrl = `${base}/requests/${snapshotBody.requests[0]?.handle}/approve`;
@@ -1236,17 +1255,60 @@ describe("ML Claw Space runtime", () => {
     expect(branding.headers.get("cache-control")).toContain("no-store");
     const brandingScript = await branding.text();
     expect(brandingScript).toContain('var productName = "ML Claw"');
-    expect(brandingScript).toContain("brokerkit.delegated-web.session.request");
-    expect(brandingScript).toContain("brokerKitFrameIn(elements[j].shadowRoot, source)");
-    expect(brandingScript).toContain("frameUrl.origin === location.origin");
-    expect(brandingScript).toContain('frameUrl.pathname === "/plugins/brokerkit/ui/"');
-    expect(brandingScript).toContain('"x-mlclaw-csrf": identity.csrfToken');
+    expect(brandingScript).not.toContain("brokerkit.delegated-web.session.request");
+    expect(brandingScript).not.toContain("brokerKitSession");
 
     const sw = await fetch(`http://127.0.0.1:${config.port}/sw.js`);
     expect(sw.status).toBe(200);
     expect(sw.headers.get("content-type")).toContain("text/javascript");
     expect(sw.headers.get("cache-control")).toContain("no-store");
     expect(await sw.text()).toContain("registration.unregister");
+  });
+
+  it("serves the packaged BrokerKit UI from the trusted ML Claw boundary", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-brokerkit-ui-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const uiDir = path.join(root, "dist", "ui", "assets");
+    await fs.mkdir(uiDir, { recursive: true });
+    await fs.writeFile(
+      path.join(root, "dist", "ui", "index.html"),
+      "<!doctype html><html><head><title>Trusted BrokerKit</title></head><body></body></html>",
+    );
+    await fs.writeFile(path.join(uiDir, "app.js"), "globalThis.trustedBrokerKit = true;");
+    const config = await testConfig({
+      allowedUsers: ["alice", "bob"],
+      adminUsers: ["alice"],
+      brokerKitPluginPath: root,
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    const base = `http://127.0.0.1:${config.port}/plugins/brokerkit/ui/`;
+    const page = await fetch(base, {
+      headers: { "sec-fetch-dest": "iframe", cookie: sessionCookie(config, "alice") },
+    });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Trusted BrokerKit");
+    expect(page.headers.get("cache-control")).toBe("no-store");
+    expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
+    expect(page.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    expect(page.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+
+    const asset = await fetch(`${base}assets/app.js`, {
+      headers: { cookie: sessionCookie(config, "alice") },
+    });
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("cache-control")).toContain("immutable");
+    expect(await asset.text()).toContain("trustedBrokerKit");
+
+    const member = await fetch(base, {
+      headers: { "sec-fetch-dest": "iframe", cookie: sessionCookie(config, "bob") },
+    });
+    expect(member.status).toBe(403);
   });
 
   it("does not inject the ML Claw shell into proxied JSON", async () => {
