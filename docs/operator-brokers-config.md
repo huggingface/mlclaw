@@ -102,10 +102,11 @@ required after changing broker entries or rotating tokens.
 
 The backend discovers and validates each broker's BrokerKit Operator V1 API,
 then exposes only fixed list, detail, approve, deny, cancel, and revoke
-operations to the packaged OpenClaw plugin UI. It replaces broker and request
-IDs with short-lived opaque handles before returning data to the browser. The
-browser receives a short-lived token bound to the authenticated ML Claw admin;
-that token cannot call a broker directly.
+operations to the packaged OpenClaw plugin UI. Browser actions address
+short-lived opaque handles; canonical broker and request IDs are display and
+audit fields and are never accepted for routing. The browser receives a
+short-lived token bound to the authenticated ML Claw admin; that token cannot
+call a broker directly.
 
 ML Claw refreshes current request state and revision immediately before every
 decision. It sends actor attribution and a deterministic idempotency key to the

@@ -7410,7 +7410,7 @@ var DelegatedBrokerKit = class {
     const results = await Promise.all(
       this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt))
     );
-    const selected = results.flatMap((result) => result.requests.map((request) => ({ source: result.source, request }))).slice(0, MAX_HANDLES);
+    const selected = selectSnapshotRequests(results, MAX_HANDLES);
     this.retainHandles(
       new Set(selected.map(({ source, request }) => requestIdentity(source.id, request.id, request.revision)))
     );
@@ -7473,7 +7473,7 @@ var DelegatedBrokerKit = class {
       cursor = page2.next_cursor;
       if (!cursor) return requests;
     }
-    throw delegatedError("source_protocol_error");
+    return requests;
   }
   handle(sourceId, request) {
     const identity = requestIdentity(sourceId, request.id, request.revision);
@@ -7520,6 +7520,29 @@ var DelegatedBrokerKit = class {
     return createHmac2("sha256", this.key).update(encoded, "utf8").digest("base64url");
   }
 };
+function selectSnapshotRequests(results, limit) {
+  const buckets = results.flatMap(
+    (result) => ["pending", "active"].map((status) => ({
+      source: result.source,
+      requests: result.requests.filter((request) => request.status === status),
+      index: 0
+    }))
+  );
+  const selected = [];
+  while (selected.length < limit) {
+    let added = false;
+    for (const bucket of buckets) {
+      const request = bucket.requests[bucket.index];
+      if (!request) continue;
+      selected.push({ source: bucket.source, request });
+      bucket.index += 1;
+      added = true;
+      if (selected.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
 var DelegatedBrokerKitError = class extends Error {
   constructor(code) {
     super(code);
