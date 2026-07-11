@@ -130,7 +130,6 @@ IDs, duplicate URLs, inline tokens, and unsupported versions are invalid.
 This format configures operator inbox connectivity only. The OpenClaw plugin is
 installed and registered by the ML Claw runtime in `delegated-web` mode; it does
 not receive broker credentials or register approval commands. Delegated
-sessions are issued only through the sandboxed Gateway tab bridge; opening the
-plugin UI as a top-level page is intentionally unsupported. This file does not
-configure agent credentials, policy, channels, broker storage, or privileged
-execution.
+sessions are issued only to the protected top-level document after navigation
+from the sandboxed launcher. This file does not configure agent credentials,
+policy, channels, broker storage, or privileged execution.
