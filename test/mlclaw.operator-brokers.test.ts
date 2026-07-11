@@ -191,6 +191,26 @@ describe("Brokerkit operator backends", () => {
     await expect(malformed.list()).rejects.toThrow("broker grant list response is invalid");
   });
 
+  it("times out stalled non-streaming broker requests", async () => {
+    const client = new BrokerOperatorClient({
+      id: "gh-broker",
+      label: "GitHub",
+      baseUrl: "http://broker.example",
+      token: "operator-secret",
+      requestTimeoutMs: 10,
+      fetch: async (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+        }),
+    });
+
+    await expect(client.list()).rejects.toMatchObject({
+      status: 504,
+      code: "broker_timeout",
+      message: "GitHub operator request timed out",
+    });
+  });
+
   it("loads a strict multi-broker file without exposing tokens in summaries", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-operator-brokers-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));

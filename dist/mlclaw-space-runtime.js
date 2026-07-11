@@ -4681,6 +4681,7 @@ var NEVER = INVALID;
 var MAX_CONFIG_BYTES = 64 * 1024;
 var MAX_TOKEN_BYTES = 4096;
 var MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+var DEFAULT_REQUEST_TIMEOUT_MS = 1e4;
 var BROKER_ID = /^[a-z](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 var displayFieldSchema = external_exports.object({
   label: external_exports.string().min(1).max(120),
@@ -4733,14 +4734,29 @@ var BrokerOperatorError = class extends Error {
     this.code = code;
   }
 };
+function requestDeadline(timeoutMs, signal) {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
+  timer.unref?.();
+  return {
+    signal: signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal,
+    timedOut: () => timeout.signal.aborted,
+    clear: () => clearTimeout(timer)
+  };
+}
 var BrokerOperatorClient = class {
   constructor(options) {
     this.options = options;
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (!Number.isSafeInteger(this.requestTimeoutMs) || this.requestTimeoutMs < 1) {
+      throw new Error("operator broker request timeout must be a positive integer");
+    }
   }
   fetchImpl;
   baseUrl;
+  requestTimeoutMs;
   summary() {
     return { id: this.options.id, label: this.options.label };
   }
@@ -4810,15 +4826,31 @@ var BrokerOperatorClient = class {
     const headers = new Headers(init?.headers);
     headers.set("accept", "application/json");
     headers.set("authorization", `Bearer ${this.options.token}`);
-    const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
-      ...init ?? {},
-      headers,
-      redirect: "error"
-    });
-    if (!response.ok) {
-      throw await this.operatorError(response);
+    const deadline = requestDeadline(this.requestTimeoutMs, init?.signal ?? void 0);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
+        ...init ?? {},
+        headers,
+        redirect: "error",
+        signal: deadline.signal
+      });
+      if (!response.ok) {
+        throw await this.operatorError(response);
+      }
+      return validatedBrokerPayload(await boundedJson(response), schema, label);
+    } catch (err) {
+      if (deadline.timedOut()) {
+        throw new BrokerOperatorError(
+          this.summary(),
+          504,
+          "broker_timeout",
+          `${this.options.label} operator request timed out`
+        );
+      }
+      throw err;
+    } finally {
+      deadline.clear();
     }
-    return validatedBrokerPayload(await boundedJson(response), schema, label);
   }
   async operatorError(response) {
     const fallback = `${this.options.label} operator request failed`;

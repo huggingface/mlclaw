@@ -5,6 +5,7 @@ import { z } from "zod";
 const MAX_CONFIG_BYTES = 64 * 1024;
 const MAX_TOKEN_BYTES = 4096;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const BROKER_ID = /^[a-z](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 
 export type OperatorBrokerSummary = {
@@ -67,6 +68,7 @@ export type BrokerDecision = {
 
 export type BrokerOperatorClientOptions = OperatorBrokerConfig & {
   fetch?: typeof fetch;
+  requestTimeoutMs?: number;
 };
 
 const displayFieldSchema = z
@@ -139,13 +141,29 @@ export class BrokerOperatorError extends Error {
   }
 }
 
+function requestDeadline(timeoutMs: number, signal?: AbortSignal) {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
+  timer.unref?.();
+  return {
+    signal: signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal,
+    timedOut: () => timeout.signal.aborted,
+    clear: () => clearTimeout(timer),
+  };
+}
+
 export class BrokerOperatorClient {
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
+  private readonly requestTimeoutMs: number;
 
   constructor(private readonly options: BrokerOperatorClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (!Number.isSafeInteger(this.requestTimeoutMs) || this.requestTimeoutMs < 1) {
+      throw new Error("operator broker request timeout must be a positive integer");
+    }
   }
 
   summary(): OperatorBrokerSummary {
@@ -231,15 +249,31 @@ export class BrokerOperatorClient {
     const headers = new Headers(init?.headers);
     headers.set("accept", "application/json");
     headers.set("authorization", `Bearer ${this.options.token}`);
-    const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
-      ...(init ?? {}),
-      headers,
-      redirect: "error",
-    });
-    if (!response.ok) {
-      throw await this.operatorError(response);
+    const deadline = requestDeadline(this.requestTimeoutMs, init?.signal ?? undefined);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
+        ...(init ?? {}),
+        headers,
+        redirect: "error",
+        signal: deadline.signal,
+      });
+      if (!response.ok) {
+        throw await this.operatorError(response);
+      }
+      return validatedBrokerPayload(await boundedJson(response), schema, label);
+    } catch (err) {
+      if (deadline.timedOut()) {
+        throw new BrokerOperatorError(
+          this.summary(),
+          504,
+          "broker_timeout",
+          `${this.options.label} operator request timed out`,
+        );
+      }
+      throw err;
+    } finally {
+      deadline.clear();
     }
-    return validatedBrokerPayload(await boundedJson(response), schema, label);
   }
 
   private async operatorError(response: Response): Promise<BrokerOperatorError> {
