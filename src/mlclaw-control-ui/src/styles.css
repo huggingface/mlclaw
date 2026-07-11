@@ -712,6 +712,14 @@ nav {
   line-height: 1.5;
 }
 
+.uiDialogContent > .uiDialogError {
+  padding: 9px 11px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .uiDialogActions {
   display: flex;
   justify-content: flex-end;

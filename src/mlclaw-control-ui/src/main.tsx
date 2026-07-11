@@ -334,6 +334,7 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState<string | undefined>();
   const [decision, setDecision] = useState<ApprovalDecision | undefined>();
+  const [decisionError, setDecisionError] = useState<string | undefined>();
   const pageRef = useRef(page);
   const cursorsRef = useRef(cursors);
   const seenRef = useRef(seen);
@@ -448,13 +449,13 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !decision) {
         closeApprovalPanel();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.embedded]);
+  }, [props.embedded, decision]);
   const switchView = (next: "pending" | "history") => {
     setView(next);
     setExpanded(undefined);
@@ -470,6 +471,7 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
     reason?: string,
   ): Promise<boolean> => {
     setBusy(approvalKey(approval));
+    setDecisionError(undefined);
     try {
       await apiPost(
         `/mlclaw/api/approvals/${encodeURIComponent(approval.broker.id)}/${encodeURIComponent(approval.id)}/${action}`,
@@ -489,7 +491,9 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
       await load(view);
       return true;
     } catch (err) {
-      setError(errorMessage(err));
+      const message = errorMessage(err);
+      setError(message);
+      setDecisionError(message);
       return false;
     } finally {
       setBusy(undefined);
@@ -507,7 +511,10 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
       onClose={closeApprovalPanel}
       onSwitchView={switchView}
       onExpandedChange={setExpanded}
-      onDecision={setDecision}
+      onDecision={(nextDecision) => {
+        setDecisionError(undefined);
+        setDecision(nextDecision);
+      }}
       onLoadOlder={() => void load(view, true)}
     />
   );
@@ -517,7 +524,16 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
       {props.embedded ? (
         <div className="approvalEmbedded">{surface}</div>
       ) : (
-        <Popover open={open} onOpenChange={(nextOpen) => (nextOpen ? show() : closeApprovalPanel())}>
+        <Popover
+          open={open}
+          onOpenChange={(nextOpen) => {
+            if (nextOpen) {
+              show();
+            } else if (!decision) {
+              closeApprovalPanel();
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <button className="approvalBell" type="button" aria-label="Approval requests">
               <Bell aria-hidden="true" size={18} />
@@ -547,6 +563,7 @@ export function ApprovalCenter(props: { session: Session; embedded?: boolean }) 
       ) : null}
       <ApprovalDecisionDialogs
         decision={decision}
+        error={decisionError}
         busy={busy}
         onClose={() => setDecision(undefined)}
         onSubmit={submitDecision}
@@ -716,6 +733,7 @@ function ApprovalRequest(props: {
 
 function ApprovalDecisionDialogs(props: {
   decision: ApprovalDecision | undefined;
+  error: string | undefined;
   busy: string | undefined;
   onClose: () => void;
   onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
@@ -732,6 +750,7 @@ function ApprovalDecisionDialogs(props: {
 
 function ConfirmApprovalDialog(props: {
   decision: ApprovalDecision;
+  error: string | undefined;
   busy: string | undefined;
   onClose: () => void;
   onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
@@ -751,6 +770,11 @@ function ConfirmApprovalDialog(props: {
           {approval.presentation.title} for <strong>{approval.presentation.target}</strong>. The broker will use its
           stored plan; this dialog cannot change the requested operation.
         </AlertDialogDescription>
+        {props.error ? (
+          <p className="uiDialogError" role="alert">
+            {props.error}
+          </p>
+        ) : null}
         <div className="uiDialogActions">
           <AlertDialogCancel className="secondaryButton" disabled={props.busy === key}>
             Keep pending
@@ -773,6 +797,7 @@ function ConfirmApprovalDialog(props: {
 
 function DenyApprovalDialog(props: {
   decision: ApprovalDecision;
+  error: string | undefined;
   busy: string | undefined;
   onClose: () => void;
   onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
@@ -788,6 +813,11 @@ function DenyApprovalDialog(props: {
           Deny {approval.presentation.title} for <strong>{approval.presentation.target}</strong>. An optional reason is
           returned to the requesting agent.
         </DialogDescription>
+        {props.error ? (
+          <p className="uiDialogError" role="alert">
+            {props.error}
+          </p>
+        ) : null}
         <label className="field" htmlFor="approval-denial-reason">
           <span>Reason</span>
           <textarea

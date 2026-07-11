@@ -37,9 +37,11 @@ const approval = {
 
 describe("ApprovalCenter", () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
+  let decisionFailure: string | undefined;
 
   beforeEach(() => {
     requests.length = 0;
+    decisionFailure = undefined;
     vi.stubGlobal("EventSource", MockEventSource);
     vi.stubGlobal(
       "ResizeObserver",
@@ -61,6 +63,9 @@ describe("ApprovalCenter", () => {
           return Response.json({ broker: { id: "hf-broker", label: "Hugging Face" }, items: [approval] });
         }
         if (init?.method === "POST") {
+          if (decisionFailure) {
+            return Response.json({ error: decisionFailure }, { status: 409 });
+          }
           return Response.json({ ok: true });
         }
         return Response.json({ error: "not found" }, { status: 404 });
@@ -99,15 +104,39 @@ describe("ApprovalCenter", () => {
       });
     });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Deny request" })).toBeNull());
+    expect(screen.getByRole("region", { name: "Approval requests" })).toBeTruthy();
   });
 
-  it("closes the embedded surface on Escape without making a decision", async () => {
+  it("shows a failed decision inside the active dialog", async () => {
+    decisionFailure = "The request changed before it could be approved.";
+    const user = userEvent.setup();
+    render(<ApprovalCenter session={{ user: "alice", admin: true, csrfToken: "csrf-token" }} />);
+
+    await user.click(await screen.findByRole("button", { name: "Approval requests" }));
+    await user.click(await screen.findByRole("button", { name: /Update repository/ }));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    await user.click(screen.getByRole("button", { name: "Approve request" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "The request changed before it could be approved.",
+    );
+    expect(screen.getByRole("alertdialog", { name: "Approve request" })).toBeTruthy();
+  });
+
+  it("dismisses an embedded dialog before closing the embedded surface on Escape", async () => {
     const postMessage = vi.spyOn(window.parent, "postMessage");
     const user = userEvent.setup();
     render(<ApprovalCenter session={{ user: "alice", admin: true, csrfToken: "csrf-token" }} embedded />);
 
+    await user.click(await screen.findByRole("button", { name: /Update repository/ }));
+    await user.click(screen.getByRole("button", { name: "Deny" }));
+    postMessage.mockClear();
     await user.keyboard("{Escape}");
 
+    expect(screen.queryByRole("dialog", { name: "Deny request" })).toBeNull();
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
     expect(postMessage).toHaveBeenCalledWith({ type: "mlclaw-approvals-close" }, window.location.origin);
     expect(requests.every((request) => request.init?.method !== "POST")).toBe(true);
     postMessage.mockRestore();
