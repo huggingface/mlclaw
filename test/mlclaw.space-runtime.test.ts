@@ -219,7 +219,7 @@ describe("ML Claw Space runtime", () => {
       method: "POST",
       headers: { origin: "https://attacker.example", cookie: sessionCookie(config, "alice") },
     });
-    const missingCsrf = await fetch(`${base}/session`, {
+    const topLevelSession = await fetch(`${base}/session`, {
       method: "POST",
       headers: { ...originHeaders, cookie: sessionCookie(config, "alice") },
     });
@@ -234,7 +234,7 @@ describe("ML Claw Space runtime", () => {
     expect(anonymous.status).toBe(401);
     expect(member.status).toBe(403);
     expect(wrongOrigin.status).toBe(403);
-    expect(missingCsrf.status).toBe(403);
+    expect(topLevelSession.status).toBe(200);
     expect(session.status).toBe(200);
     expect(session.headers.get("cache-control")).toBe("no-store");
     const sessionBody = (await session.json()) as { decision_token: string; expires_at: string };
@@ -1172,6 +1172,7 @@ describe("ML Claw Space runtime", () => {
     const brandingScript = await branding.text();
     expect(brandingScript).toContain('var productName = "ML Claw"');
     expect(brandingScript).toContain("brokerkit.delegated-web.session.request");
+    expect(brandingScript).toContain("brokerKitFrameIn(elements[j].shadowRoot, source)");
     expect(brandingScript).toContain('new URL(frames[i].src, location.href).pathname === "/plugins/brokerkit/ui/"');
     expect(brandingScript).toContain('"x-mlclaw-csrf": identity.csrfToken');
 

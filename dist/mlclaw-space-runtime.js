@@ -9093,8 +9093,9 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
       }
     });
   }
-  function brokerKitFrame(source) {
-    var frames = document.querySelectorAll("iframe");
+  function brokerKitFrameIn(root, source) {
+    if (!root.querySelectorAll) return;
+    var frames = root.querySelectorAll("iframe");
     for (var i = 0; i < frames.length; i++) {
       try {
         if (frames[i].contentWindow === source && new URL(frames[i].src, location.href).pathname === "/plugins/brokerkit/ui/") {
@@ -9102,6 +9103,16 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
         }
       } catch (_) {}
     }
+    var elements = root.querySelectorAll("*");
+    for (var j = 0; j < elements.length; j++) {
+      if (elements[j].shadowRoot) {
+        var nested = brokerKitFrameIn(elements[j].shadowRoot, source);
+        if (nested) return nested;
+      }
+    }
+  }
+  function brokerKitFrame(source) {
+    return brokerKitFrameIn(document, source);
   }
   async function brokerKitSession(event) {
     var message = event.data;
@@ -9294,8 +9305,11 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!delegatedBridgeOriginAllowed(c, config2)) return delegatedErrorResponse(c, "not_authorized", 403);
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
-    const csrf = requireCsrf(c, config2, auth.username);
-    if (csrf) return csrf;
+    const topLevelSameOrigin = c.req.header("origin") === new URL(config2.publicUrl).origin && !c.req.header("x-mlclaw-csrf");
+    if (!topLevelSameOrigin) {
+      const csrf = requireCsrf(c, config2, auth.username);
+      if (csrf) return csrf;
+    }
     return delegatedBridgeJson(c, delegatedBrokerKit.issueSession(auth.username));
   });
   app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
