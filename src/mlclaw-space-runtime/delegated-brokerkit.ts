@@ -101,9 +101,7 @@ export class DelegatedBrokerKit {
     const results = await Promise.all(
       this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt)),
     );
-    const selected = results
-      .flatMap((result) => result.requests.map((request) => ({ source: result.source, request })))
-      .slice(0, MAX_HANDLES);
+    const selected = selectSnapshotRequests(results, MAX_HANDLES);
     this.retainHandles(
       new Set(selected.map(({ source, request }) => requestIdentity(source.id, request.id, request.revision))),
     );
@@ -182,7 +180,7 @@ export class DelegatedBrokerKit {
       cursor = page.next_cursor;
       if (!cursor) return requests;
     }
-    throw delegatedError("source_protocol_error");
+    return requests;
   }
 
   private handle(sourceId: string, request: BrokerApproval): string {
@@ -237,6 +235,33 @@ export class DelegatedBrokerKit {
   private sign(encoded: string): string {
     return createHmac("sha256", this.key).update(encoded, "utf8").digest("base64url");
   }
+}
+
+function selectSnapshotRequests(
+  results: { source: DelegatedSourceHealth; requests: BrokerApproval[] }[],
+  limit: number,
+): { source: DelegatedSourceHealth; request: BrokerApproval }[] {
+  const buckets = results.flatMap((result) =>
+    (["pending", "active"] as const).map((status) => ({
+      source: result.source,
+      requests: result.requests.filter((request) => request.status === status),
+      index: 0,
+    })),
+  );
+  const selected: { source: DelegatedSourceHealth; request: BrokerApproval }[] = [];
+  while (selected.length < limit) {
+    let added = false;
+    for (const bucket of buckets) {
+      const request = bucket.requests[bucket.index];
+      if (!request) continue;
+      selected.push({ source: bucket.source, request });
+      bucket.index += 1;
+      added = true;
+      if (selected.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return selected;
 }
 
 export class DelegatedBrokerKitError extends Error {

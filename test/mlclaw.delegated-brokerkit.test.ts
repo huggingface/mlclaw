@@ -159,4 +159,51 @@ describe("DelegatedBrokerKit", () => {
     await expect(delegated.detail(snapshot.requests[0]?.handle ?? "")).resolves.toBeTruthy();
     await expect(delegated.detail(snapshot.requests.at(-1)?.handle ?? "")).resolves.toBeTruthy();
   });
+
+  it("keeps bounded partial pages instead of discarding a busy source", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/.well-known/brokerkit-operator") {
+        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+      }
+      if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
+      const page = Number(url.searchParams.get("cursor") ?? "0");
+      return Response.json({ requests: [request(`pending-${page}`)], next_cursor: String(page + 1) });
+    });
+    const delegated = new DelegatedBrokerKit(
+      new OperatorBrokerRegistry(
+        [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
+        fetchImpl,
+      ),
+      "s".repeat(48),
+    );
+    const snapshot = await delegated.snapshot();
+    expect(snapshot.sources).toEqual([expect.objectContaining({ healthy: true })]);
+    expect(snapshot.requests).toHaveLength(32);
+  });
+
+  it("shares a capped inbox fairly across sources and statuses", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/.well-known/brokerkit-operator") {
+        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+      }
+      const status = url.searchParams.get("status") ?? "pending";
+      const page = Number(url.searchParams.get("cursor") ?? "0");
+      const items = Array.from({ length: 100 }, (_, index) =>
+        request(`${url.hostname}-${status}-${page}-${index}`, status === "active" ? 2 : 1, status),
+      );
+      return Response.json({ requests: items, ...(page < 31 ? { next_cursor: String(page + 1) } : {}) });
+    });
+    const delegated = new DelegatedBrokerKit(registry(fetchImpl), "s".repeat(48));
+    const snapshot = await delegated.snapshot();
+    expect(snapshot.requests).toHaveLength(4_096);
+    for (const sourceId of ["hf-broker", "gh-broker"]) {
+      for (const status of ["pending", "active"]) {
+        expect(snapshot.requests.filter((item) => item.sourceId === sourceId && item.status === status)).toHaveLength(
+          1_024,
+        );
+      }
+    }
+  });
 });
