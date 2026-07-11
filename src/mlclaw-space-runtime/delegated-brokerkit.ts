@@ -131,11 +131,7 @@ export class DelegatedBrokerKit {
     const source = this.registry.get(record.sourceId);
     if (!source) throw delegatedError("source_unavailable");
     const current = await source.get(record.requestId);
-    if (current.revision !== record.revision || current.revision !== expectedRevision) {
-      throw delegatedError("revision_stale");
-    }
-    if (!current.allowed_actions.includes(action)) throw delegatedError("action_not_allowed");
-    if (!decisionWithinBounds(action, current, options)) throw delegatedError("action_not_allowed");
+    assertDecisionAllowed(current, record, action, expectedRevision, options);
     const updated = await source.decide(
       record.requestId,
       action,
@@ -356,6 +352,21 @@ function decisionWithinBounds(
     options.maxUses !== undefined &&
     options.maxUses <= bounds.max_uses,
   );
+}
+
+function assertDecisionAllowed(
+  request: BrokerApproval,
+  record: HandleRecord,
+  action: DelegatedAction,
+  expectedRevision: number,
+  options: { durationSeconds?: number; maxUses?: number },
+): void {
+  if (request.revision !== record.revision || request.revision !== expectedRevision) {
+    throw delegatedError("revision_stale");
+  }
+  if (!request.allowed_actions.includes(action) || !decisionWithinBounds(action, request, options)) {
+    throw delegatedError("action_not_allowed");
+  }
 }
 
 function authenticatedTokenPayload(header: string | undefined, sign: (value: string) => string): string | undefined {
