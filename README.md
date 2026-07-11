@@ -204,8 +204,9 @@ Use the browser control UI for:
   and `MLCLAW_MODEL_CHOICES`, and request a Space restart.
 - `/mlclaw/status`: inspect runtime, bucket, model, OAuth, and integration status.
 
-Administrators also get an approval bell and drawer. Requests for brokered
-operations can be inspected, approved, denied, canceled, or revoked there.
+Administrators also get an approval bell with a compact, anchored popover.
+Requests for brokered operations can be inspected, approved, denied, canceled,
+or revoked there.
 The inbox merges every Brokerkit-compatible backend configured in
 `MLCLAW_OPERATOR_BROKERS_FILE`; every decision is authenticated,
 CSRF-protected, and sent through fixed broker-scoped API routes. Operator

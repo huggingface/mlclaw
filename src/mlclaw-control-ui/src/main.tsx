@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Bell, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "./components/ui/alert-dialog.js";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./components/ui/collapsible.js";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog.js";
+import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from "./components/ui/popover.js";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs.js";
 import "./styles.css";
 
 type Session = {
@@ -310,7 +322,7 @@ function Frame(props: {
   );
 }
 
-function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
+export function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
   const [open, setOpen] = useState(Boolean(props.embedded));
   const [view, setView] = useState<"pending" | "history">("pending");
   const [page, setPage] = useState<ApprovalPage>({ items: [], has_more: false });
@@ -321,6 +333,7 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
   const [toast, setToast] = useState<Approval | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState<string | undefined>();
+  const [decision, setDecision] = useState<ApprovalDecision | undefined>();
   const pageRef = useRef(page);
   const cursorsRef = useRef(cursors);
   const seenRef = useRef(seen);
@@ -416,22 +429,6 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        if (props.embedded && window.parent !== window) {
-          window.parent.postMessage({ type: "mlclaw-approvals-close" }, window.location.origin);
-        }
-      }
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [open, props.embedded]);
-
   const unread = page.items.filter((item) => !seen.has(approvalKey(item))).length;
   const show = () => {
     setOpen(true);
@@ -440,12 +437,24 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
     seenRef.current = nextSeen;
     setSeen(nextSeen);
   };
-  const closeDrawer = () => {
+  const closeApprovalPanel = () => {
     setOpen(false);
-    if (props.embedded && window.parent !== window) {
+    if (props.embedded) {
       window.parent.postMessage({ type: "mlclaw-approvals-close" }, window.location.origin);
     }
   };
+  useEffect(() => {
+    if (!props.embedded) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeApprovalPanel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.embedded]);
   const switchView = (next: "pending" | "history") => {
     setView(next);
     setExpanded(undefined);
@@ -455,22 +464,11 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
     pageRef.current = emptyPage;
     setPage(emptyPage);
   };
-  const decide = async (approval: Approval, action: "approve" | "deny" | "cancel" | "revoke") => {
-    const target = approval.presentation.target;
-    if (action === "approve" && !window.confirm(`Approve ${approval.presentation.title} for ${target}?`)) {
-      return;
-    }
-    const reason =
-      action === "deny" ? window.prompt(`Why deny ${approval.presentation.title} for ${target}?`) : undefined;
-    if (action === "deny" && reason === null) {
-      return;
-    }
-    if (action === "cancel" && !window.confirm(`Cancel this request for ${target}?`)) {
-      return;
-    }
-    if (action === "revoke" && !window.confirm(`Revoke access for ${target}?`)) {
-      return;
-    }
+  const submitDecision = async (
+    approval: Approval,
+    action: ApprovalDecisionAction,
+    reason?: string,
+  ): Promise<boolean> => {
     setBusy(approvalKey(approval));
     try {
       await apiPost(
@@ -489,21 +487,56 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
         props.session.csrfToken,
       );
       await load(view);
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     } finally {
       setBusy(undefined);
     }
   };
 
+  const surface = (
+    <ApprovalPanel
+      brokers={brokers}
+      view={view}
+      page={page}
+      expanded={expanded}
+      busy={busy}
+      error={error}
+      onClose={closeApprovalPanel}
+      onSwitchView={switchView}
+      onExpandedChange={setExpanded}
+      onDecision={setDecision}
+      onLoadOlder={() => void load(view, true)}
+    />
+  );
+
   return (
     <>
-      {!props.embedded ? (
-        <button className="approvalBell" type="button" aria-label="Approval requests" onClick={show}>
-          <Bell aria-hidden="true" size={18} />
-          {unread > 0 ? <span className="approvalBadge">{Math.min(unread, 99)}</span> : null}
-        </button>
-      ) : null}
+      {props.embedded ? (
+        <div className="approvalEmbedded">{surface}</div>
+      ) : (
+        <Popover open={open} onOpenChange={(nextOpen) => (nextOpen ? show() : closeApprovalPanel())}>
+          <PopoverTrigger asChild>
+            <button className="approvalBell" type="button" aria-label="Approval requests">
+              <Bell aria-hidden="true" size={18} />
+              {unread > 0 ? <span className="approvalBadge">{Math.min(unread, 99)}</span> : null}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="approvalPopover"
+            side="top"
+            align="end"
+            sideOffset={10}
+            collisionPadding={14}
+            aria-label="Approval requests"
+          >
+            {surface}
+            <PopoverArrow className="approvalPopoverArrow" width={18} height={9} />
+          </PopoverContent>
+        </Popover>
+      )}
       {toast && !props.embedded ? (
         <button className="approvalToast" type="button" onClick={show}>
           <strong>Approval requested</strong>
@@ -512,152 +545,280 @@ function ApprovalCenter(props: { session: Session; embedded?: boolean }) {
           <small>{toast.presentation.target}</small>
         </button>
       ) : null}
-      {open ? (
-        <div
-          className="approvalBackdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) {
-              closeDrawer();
-            }
-          }}
-        >
-          <aside className="approvalDrawer" role="dialog" aria-modal="true" aria-label="Approval requests">
-            <header className="approvalHeader">
-              <div>
-                <h2>Approvals</h2>
-                <p>
-                  {brokers.length} connected {brokers.length === 1 ? "broker" : "brokers"}
-                </p>
-              </div>
-              <button className="iconButton" type="button" aria-label="Close approvals" onClick={closeDrawer}>
-                <X aria-hidden="true" size={18} />
-              </button>
-            </header>
-            <div className="approvalTabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={view === "pending"}
-                className={view === "pending" ? "active" : ""}
-                onClick={() => switchView("pending")}
-              >
-                Pending
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={view === "history"}
-                className={view === "history" ? "active" : ""}
-                onClick={() => switchView("history")}
-              >
-                History
-              </button>
-            </div>
-            {error ? <p className="approvalError">{error}</p> : null}
-            <div className="approvalList">
-              {page.items.length === 0 && !error ? <p className="approvalEmpty">No {view} requests.</p> : null}
-              {page.items.map((approval) => {
-                const key = approvalKey(approval);
-                const detailsOpen = expanded === key;
-                return (
-                  <article className="approvalRow" key={key}>
-                    <button
-                      className="approvalSummary"
-                      type="button"
-                      aria-expanded={detailsOpen}
-                      onClick={() => setExpanded(detailsOpen ? undefined : key)}
-                    >
-                      <span className={`risk risk-${approval.presentation.risk}`}>{approval.presentation.risk}</span>
-                      <span className="approvalBroker">{approval.broker.label}</span>
-                      <strong>{approval.presentation.title}</strong>
-                      <span>{approval.presentation.target}</span>
-                      <small>
-                        {approval.status} · {relativeTime(approval.requested_at)}
-                      </small>
-                    </button>
-                    {detailsOpen ? (
-                      <div className="approvalDetails">
-                        {approval.presentation.summary ? <p>{approval.presentation.summary}</p> : null}
-                        {approval.reason ? (
-                          <div>
-                            <span>Reason</span>
-                            <p>{approval.reason}</p>
-                          </div>
-                        ) : null}
-                        {(approval.presentation.fields ?? []).map((field) => (
-                          <div className="approvalFact" key={`${field.label}:${field.value}`}>
-                            <span>{field.label}</span>
-                            <code>{field.value}</code>
-                          </div>
-                        ))}
-                        {approval.presentation.plan_hash ? (
-                          <div className="approvalFact">
-                            <span>Plan hash</span>
-                            <code>{approval.presentation.plan_hash}</code>
-                          </div>
-                        ) : null}
-                        <div className="approvalFact">
-                          <span>Expires</span>
-                          <code>{new Date(approval.pending_expires_at).toLocaleString()}</code>
-                        </div>
-                        {approval.status === "pending" ? (
-                          <div className="approvalActions">
-                            <button
-                              type="button"
-                              className="primaryButton"
-                              disabled={busy === key}
-                              onClick={() => void decide(approval, "approve")}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              className="secondaryButton"
-                              disabled={busy === key}
-                              onClick={() => void decide(approval, "deny")}
-                            >
-                              Deny
-                            </button>
-                            <button
-                              type="button"
-                              className="secondaryButton"
-                              disabled={busy === key}
-                              onClick={() => void decide(approval, "cancel")}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : approval.status === "active" ? (
-                          <div className="approvalActions">
-                            <button
-                              type="button"
-                              className="secondaryButton"
-                              disabled={busy === key}
-                              onClick={() => void decide(approval, "revoke")}
-                            >
-                              Revoke
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
-              {page.has_more ? (
-                <button className="secondaryButton approvalMore" type="button" onClick={() => void load(view, true)}>
-                  Load older
-                </button>
-              ) : null}
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      <ApprovalDecisionDialogs
+        decision={decision}
+        busy={busy}
+        onClose={() => setDecision(undefined)}
+        onSubmit={submitDecision}
+      />
     </>
   );
 }
 
+type ApprovalDecisionAction = "approve" | "deny" | "cancel" | "revoke";
+
+type ApprovalDecision = {
+  approval: Approval;
+  action: ApprovalDecisionAction;
+};
+
+function ApprovalPanel(props: {
+  brokers: OperatorBroker[];
+  view: "pending" | "history";
+  page: ApprovalPage;
+  expanded: string | undefined;
+  busy: string | undefined;
+  error: string | undefined;
+  onClose: () => void;
+  onSwitchView: (view: "pending" | "history") => void;
+  onExpandedChange: (key: string | undefined) => void;
+  onDecision: (decision: ApprovalDecision) => void;
+  onLoadOlder: () => void;
+}) {
+  return (
+    <section className="approvalPanel" aria-label="Approval requests">
+      <header className="approvalHeader">
+        <div>
+          <h2>Approvals</h2>
+          <p>
+            {props.brokers.length} connected {props.brokers.length === 1 ? "broker" : "brokers"}
+          </p>
+        </div>
+        <button className="iconButton" type="button" aria-label="Close approvals" onClick={props.onClose}>
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
+      <Tabs value={props.view} onValueChange={(value) => props.onSwitchView(value as "pending" | "history")}>
+        <TabsList className="approvalTabs" aria-label="Approval request status">
+          <TabsTrigger value="pending">Pending</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {props.error ? (
+        <p className="approvalError" role="alert">
+          {props.error}
+        </p>
+      ) : null}
+      <div className="approvalList">
+        {props.page.items.length === 0 && !props.error ? (
+          <p className="approvalEmpty">No {props.view} requests.</p>
+        ) : null}
+        {props.page.items.map((approval) => (
+          <ApprovalRequest
+            key={approvalKey(approval)}
+            approval={approval}
+            open={props.expanded === approvalKey(approval)}
+            busy={props.busy === approvalKey(approval)}
+            onOpenChange={(open) => props.onExpandedChange(open ? approvalKey(approval) : undefined)}
+            onDecision={(action) => props.onDecision({ approval, action })}
+          />
+        ))}
+        {props.page.has_more ? (
+          <button className="secondaryButton approvalMore" type="button" onClick={props.onLoadOlder}>
+            Load older
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ApprovalRequest(props: {
+  approval: Approval;
+  open: boolean;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDecision: (action: ApprovalDecisionAction) => void;
+}) {
+  const approval = props.approval;
+  return (
+    <Collapsible className="approvalRow" open={props.open} onOpenChange={props.onOpenChange}>
+      <CollapsibleTrigger asChild>
+        <button className="approvalSummary" type="button">
+          <span className={`risk risk-${approval.presentation.risk}`}>{approval.presentation.risk}</span>
+          <span className="approvalBroker">{approval.broker.label}</span>
+          <strong>{approval.presentation.title}</strong>
+          <span>{approval.presentation.target}</span>
+          <small>
+            {approval.status} · {relativeTime(approval.requested_at)}
+          </small>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="approvalCollapsibleContent">
+        <div className="approvalDetails">
+          {approval.presentation.summary ? <p>{approval.presentation.summary}</p> : null}
+          {approval.reason ? (
+            <div>
+              <span>Reason</span>
+              <p>{approval.reason}</p>
+            </div>
+          ) : null}
+          {(approval.presentation.fields ?? []).map((field) => (
+            <div className="approvalFact" key={`${field.label}:${field.value}`}>
+              <span>{field.label}</span>
+              <code>{field.value}</code>
+            </div>
+          ))}
+          {approval.presentation.plan_hash ? (
+            <div className="approvalFact">
+              <span>Plan hash</span>
+              <code>{approval.presentation.plan_hash}</code>
+            </div>
+          ) : null}
+          <div className="approvalFact">
+            <span>Expires</span>
+            <code>{new Date(approval.pending_expires_at).toLocaleString()}</code>
+          </div>
+          {approval.status === "pending" ? (
+            <div className="approvalActions">
+              <button
+                type="button"
+                className="primaryButton"
+                disabled={props.busy}
+                onClick={() => props.onDecision("approve")}
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                className="secondaryButton"
+                disabled={props.busy}
+                onClick={() => props.onDecision("deny")}
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                className="secondaryButton"
+                disabled={props.busy}
+                onClick={() => props.onDecision("cancel")}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : approval.status === "active" ? (
+            <div className="approvalActions">
+              <button
+                type="button"
+                className="secondaryButton"
+                disabled={props.busy}
+                onClick={() => props.onDecision("revoke")}
+              >
+                Revoke
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ApprovalDecisionDialogs(props: {
+  decision: ApprovalDecision | undefined;
+  busy: string | undefined;
+  onClose: () => void;
+  onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
+}) {
+  if (!props.decision) {
+    return null;
+  }
+  return props.decision.action === "deny" ? (
+    <DenyApprovalDialog {...props} decision={props.decision} />
+  ) : (
+    <ConfirmApprovalDialog {...props} decision={props.decision} />
+  );
+}
+
+function ConfirmApprovalDialog(props: {
+  decision: ApprovalDecision;
+  busy: string | undefined;
+  onClose: () => void;
+  onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
+}) {
+  const { approval, action } = props.decision;
+  const key = approvalKey(approval);
+  const labels: Record<Exclude<ApprovalDecisionAction, "deny">, string> = {
+    approve: "Approve request",
+    cancel: "Cancel request",
+    revoke: "Revoke access",
+  };
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && props.onClose()}>
+      <AlertDialogContent>
+        <AlertDialogTitle>{labels[action as Exclude<ApprovalDecisionAction, "deny">]}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {approval.presentation.title} for <strong>{approval.presentation.target}</strong>. The broker will use its
+          stored plan; this dialog cannot change the requested operation.
+        </AlertDialogDescription>
+        <div className="uiDialogActions">
+          <AlertDialogCancel className="secondaryButton" disabled={props.busy === key}>
+            Keep pending
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className={action === "approve" ? "primaryButton" : "dangerButton"}
+            disabled={props.busy === key}
+            onClick={(event) => {
+              event.preventDefault();
+              void props.onSubmit(approval, action).then((ok) => ok && props.onClose());
+            }}
+          >
+            {props.busy === key ? "Working…" : labels[action as Exclude<ApprovalDecisionAction, "deny">]}
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DenyApprovalDialog(props: {
+  decision: ApprovalDecision;
+  busy: string | undefined;
+  onClose: () => void;
+  onSubmit: (approval: Approval, action: ApprovalDecisionAction, reason?: string) => Promise<boolean>;
+}) {
+  const [reason, setReason] = useState("");
+  const approval = props.decision.approval;
+  const key = approvalKey(approval);
+  return (
+    <Dialog open onOpenChange={(open) => !open && props.onClose()}>
+      <DialogContent>
+        <DialogTitle>Deny request</DialogTitle>
+        <DialogDescription>
+          Deny {approval.presentation.title} for <strong>{approval.presentation.target}</strong>. An optional reason is
+          returned to the requesting agent.
+        </DialogDescription>
+        <label className="field" htmlFor="approval-denial-reason">
+          <span>Reason</span>
+          <textarea
+            id="approval-denial-reason"
+            className="textInput approvalReason"
+            value={reason}
+            maxLength={500}
+            autoFocus
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Optional reason"
+          />
+        </label>
+        <div className="uiDialogActions">
+          <DialogClose className="secondaryButton" disabled={props.busy === key}>
+            Keep pending
+          </DialogClose>
+          <button
+            className="dangerButton"
+            type="button"
+            disabled={props.busy === key}
+            onClick={() => {
+              void props.onSubmit(approval, "deny", reason.trim() || undefined).then((ok) => ok && props.onClose());
+            }}
+          >
+            {props.busy === key ? "Working…" : "Deny request"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 function approvalKey(approval: Pick<Approval, "broker" | "id">): string {
   return `${approval.broker.id}:${approval.id}`;
 }
@@ -1237,4 +1398,7 @@ function viewFromPath(pathname: string): View {
   return "overview";
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}

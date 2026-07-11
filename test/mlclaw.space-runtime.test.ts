@@ -1276,6 +1276,10 @@ describe("ML Claw Space runtime", () => {
     expect(body).toContain("data-mlclaw-control-branding");
     expect(body).toContain("data-mlclaw-approvals-button");
     expect(body).toContain("data-mlclaw-approvals-frame");
+    expect(body).toContain('aria-controls="mlclaw-approvals-popover"');
+    expect(body).toContain("width:min(420px,calc(100vw - 24px))");
+    expect(body).toContain("height:min(620px,calc(100dvh - 78px))");
+    expect(body).not.toContain("height:100dvh;border:0");
     expect(body).toContain('src="/assets/mlclaw-control-branding.js"');
     expect(body).toContain('href="/mlclaw"');
     expect(body).toContain("width:34px;height:34px");

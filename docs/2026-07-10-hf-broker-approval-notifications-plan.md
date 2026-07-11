@@ -73,17 +73,17 @@ When a new request arrives:
 1. Show a short toast naming the action and target.
 2. Increment the unread badge.
 3. Keep the request pending even if the toast disappears.
-4. Clicking the toast or bell opens the approval drawer.
+4. Clicking the toast or bell opens the approval popover.
 
 The toast must never approve an operation by itself.
 
-### Approval Drawer
+### Approval Popover
 
-The drawer should overlay the right side of the current page and collapse back
-to the bell without navigating away. On narrow screens it may occupy the full
-viewport width.
+The compact popover should open beside the bell without navigating away or
+obscuring the current page. It uses a bounded, responsive size and remains
+visually tied to the bell on narrow screens.
 
-The drawer has two views:
+The popover has two views:
 
 - `Pending`: newest requests first;
 - `History`: approved, denied, expired, revoked, consumed, and failed
@@ -352,7 +352,7 @@ Update `hf-broker` in sympathy with its existing invariants:
 - point OpenClaw's Hugging Face provider base URL at the local broker;
 - configure HF CLI and supported Hub tooling to use brokered routes where
   available;
-- add the approvals control API, SSE bridge, React drawer, toasts, and badge;
+- add the approvals control API, SSE bridge, React popover, toasts, and badge;
 - surface broker and isolation state on the existing status page;
 - include pending-request count in the gateway overlay;
 - make `mlclaw doctor` run broker health and isolation checks;
