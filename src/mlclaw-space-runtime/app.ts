@@ -599,7 +599,7 @@ function delegatedFailure(c: Context, error: unknown): Response {
     return delegatedErrorResponse(c, error.code, status);
   }
   if (error instanceof BrokerOperatorError) {
-    const code = safeDelegatedBrokerCode(error.code);
+    const code = delegatedBrokerCode(error.code);
     const status = error.status === 404 ? 404 : error.status === 409 ? 409 : 502;
     return delegatedErrorResponse(c, code, status);
   }
@@ -615,10 +615,19 @@ function delegatedHeaders(c: Context): void {
   c.header("x-content-type-options", "nosniff");
 }
 
-function safeDelegatedBrokerCode(value: string | undefined): string {
-  return ["request_not_found", "request_terminal", "revision_stale", "action_not_allowed"].includes(value ?? "")
-    ? (value as string)
-    : "source_unavailable";
+function delegatedBrokerCode(value: string | undefined): string {
+  if (value === "not_found" || value === "request_not_found") return "request_not_found";
+  if (value === "revision_conflict" || value === "revision_stale") return "revision_stale";
+  if (
+    value === "invalid_transition" ||
+    value === "constraint_exceeded" ||
+    value === "idempotency_conflict" ||
+    value === "request_terminal" ||
+    value === "action_not_allowed"
+  ) {
+    return "action_not_allowed";
+  }
+  return "source_unavailable";
 }
 
 function unauthenticated(c: Context, config: SpaceRuntimeConfig): Response {

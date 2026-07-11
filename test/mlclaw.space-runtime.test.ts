@@ -171,6 +171,7 @@ describe("ML Claw Space runtime", () => {
   it("delegates the packaged BrokerKit tab to authenticated admin authority", async () => {
     const brokerPort = await freePort();
     const brokerRequests: Array<{ method: string; url: string; authorization?: string; body: string }> = [];
+    let postAttempts = 0;
     const broker = http.createServer(async (req, res) => {
       let body = "";
       for await (const chunk of req) body += String(chunk);
@@ -180,20 +181,35 @@ describe("ML Claw Space runtime", () => {
         ...(req.headers.authorization ? { authorization: req.headers.authorization } : {}),
         body,
       });
-      res.writeHead(200, { "content-type": "application/json" });
+      res.setHeader("content-type", "application/json");
       if (req.url === "/.well-known/brokerkit-operator") {
+        res.writeHead(200);
         res.end(JSON.stringify({ api_version: "brokerkit.io/operator/v1" }));
       } else if (req.method === "POST") {
+        postAttempts += 1;
+        if (postAttempts === 1) {
+          res.writeHead(409);
+          res.end(
+            JSON.stringify({
+              error: { code: "revision_conflict", message: "changed", correlation_id: "conflict-1" },
+            }),
+          );
+          return;
+        }
+        res.writeHead(200);
         res.end(
           JSON.stringify(brokerApproval("request-1", "active", 2, { max_duration_seconds: 172_800, max_uses: 200 })),
         );
       } else if (req.url?.includes("/request-1")) {
+        res.writeHead(200);
         res.end(
           JSON.stringify(brokerApproval("request-1", "pending", 1, { max_duration_seconds: 172_800, max_uses: 200 })),
         );
       } else if (req.url?.includes("status=active")) {
+        res.writeHead(200);
         res.end(JSON.stringify({ requests: [] }));
       } else {
+        res.writeHead(200);
         res.end(
           JSON.stringify({
             requests: [brokerApproval("request-1", "pending", 1, { max_duration_seconds: 172_800, max_uses: 200 })],
@@ -277,20 +293,31 @@ describe("ML Claw Space runtime", () => {
     });
     expect(legacyShape.status).toBe(400);
 
+    const decisionBody = JSON.stringify({
+      expectedRevision: 1,
+      reason: "approved in the Gateway",
+      constraints: { durationSeconds: 172_800, maxUses: 200 },
+    });
+    const conflict = await fetch(requestUrl, {
+      method: "POST",
+      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      body: decisionBody,
+    });
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ error: { code: "revision_stale" } });
+
     const approve = await fetch(requestUrl, {
       method: "POST",
       headers: { ...authorizedHeaders, "content-type": "application/json" },
-      body: JSON.stringify({
-        expectedRevision: 1,
-        reason: "approved in the Gateway",
-        constraints: { durationSeconds: 172_800, maxUses: 200 },
-      }),
+      body: decisionBody,
     });
     expect(approve.status).toBe(200);
     expect(brokerRequests.map((request) => request.url)).toEqual([
       "/.well-known/brokerkit-operator",
       "/api/operator/v1/requests?status=pending&limit=100",
       "/api/operator/v1/requests?status=active&limit=100",
+      "/api/operator/v1/requests/request-1",
+      "/api/operator/v1/requests/request-1/approve",
       "/api/operator/v1/requests/request-1",
       "/api/operator/v1/requests/request-1/approve",
     ]);

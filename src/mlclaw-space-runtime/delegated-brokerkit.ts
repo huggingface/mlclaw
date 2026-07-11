@@ -104,9 +104,12 @@ export class DelegatedBrokerKit {
       this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt)),
     );
     const selected = selectSnapshotRequests(results, MAX_HANDLES);
+    const reservedHandles = this.selectedExistingHandles(selected);
     return {
       sources: results.map((result) => result.source),
-      requests: selected.map(({ source, request }) => project(source, request, this.handle(source.id, request))),
+      requests: selected.map(({ source, request }) =>
+        project(source, request, this.handle(source.id, request, reservedHandles)),
+      ),
       synchronizedAt,
     };
   }
@@ -198,11 +201,25 @@ export class DelegatedBrokerKit {
     return { requests, truncated: Boolean(cursor) };
   }
 
-  private handle(sourceId: string, request: BrokerApproval): string {
+  private selectedExistingHandles(selected: { source: DelegatedSourceHealth; request: BrokerApproval }[]): Set<string> {
+    const handles = new Set<string>();
+    for (const { source, request } of selected) {
+      const handle = this.handlesByIdentity.get(requestIdentity(source.id, request.id, request.revision));
+      if (handle && this.handles.has(handle)) handles.add(handle);
+    }
+    return handles;
+  }
+
+  private handle(sourceId: string, request: BrokerApproval, reservedHandles: Set<string> = new Set()): string {
     const identity = requestIdentity(sourceId, request.id, request.revision);
     const existing = this.handlesByIdentity.get(identity);
-    if (existing && this.handles.has(existing)) return existing;
-    if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
+    if (existing && this.handles.has(existing)) {
+      reservedHandles.add(existing);
+      return existing;
+    }
+    if (this.handles.size >= MAX_HANDLES && !this.pruneOldestHandle(reservedHandles)) {
+      throw delegatedError("source_unavailable");
+    }
     const handle = randomBytes(18).toString("base64url");
     const requestExpiry = Date.parse(handleExpiry(request));
     const expiresAtMs = Number.isFinite(requestExpiry)
@@ -210,6 +227,7 @@ export class DelegatedBrokerKit {
       : this.now().getTime() + 5 * 60_000;
     this.handles.set(handle, { sourceId, requestId: request.id, revision: request.revision, expiresAtMs });
     this.handlesByIdentity.set(identity, handle);
+    reservedHandles.add(handle);
     return handle;
   }
 
@@ -229,9 +247,13 @@ export class DelegatedBrokerKit {
     }
   }
 
-  private pruneOldestHandle(): void {
-    const oldest = this.handles.entries().next();
-    if (!oldest.done) this.removeHandle(oldest.value[0], oldest.value[1]);
+  private pruneOldestHandle(reservedHandles: Set<string>): boolean {
+    for (const [handle, record] of this.handles) {
+      if (reservedHandles.has(handle)) continue;
+      this.removeHandle(handle, record);
+      return true;
+    }
+    return false;
   }
 
   private removeHandle(handle: string, record: HandleRecord): void {

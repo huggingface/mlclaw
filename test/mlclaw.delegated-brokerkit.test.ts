@@ -160,9 +160,11 @@ describe("DelegatedBrokerKit", () => {
 
   it("caps large snapshots before assigning usable handles", async () => {
     const requests = new Map<string, ReturnType<typeof request>>();
+    let round = 0;
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
+        round += 1;
         return Response.json({ api_version: "brokerkit.io/operator/v1" });
       }
       if (url.pathname.startsWith("/api/operator/v1/requests/request-")) {
@@ -172,7 +174,10 @@ describe("DelegatedBrokerKit", () => {
       const page = Number(url.searchParams.get("cursor") ?? "0");
       const pageCount = status === "pending" ? 32 : 9;
       const items = Array.from({ length: 100 }, (_, index) => {
-        const id = `request-${status}-${page}-${index}`;
+        const id =
+          round === 2 && status === "pending" && page === 0 && index === 0
+            ? "request-pending-0-0"
+            : `${round === 1 ? "request" : "next"}-${status}-${page}-${index}`;
         const item = request(id, status === "active" ? 2 : 1, status);
         requests.set(id, item);
         return item;
@@ -191,6 +196,10 @@ describe("DelegatedBrokerKit", () => {
     expect(snapshot.requests).toHaveLength(4_096);
     await expect(delegated.detail(snapshot.requests[0]?.handle ?? "")).resolves.toBeTruthy();
     await expect(delegated.detail(snapshot.requests.at(-1)?.handle ?? "")).resolves.toBeTruthy();
+    const refreshed = await delegated.snapshot();
+    const retained = refreshed.requests.find((item) => item.id === "request-pending-0-0");
+    expect(retained?.handle).toBe(snapshot.requests.find((item) => item.id === retained?.id)?.handle);
+    await expect(delegated.detail(retained?.handle ?? "")).resolves.toMatchObject({ id: "request-pending-0-0" });
   });
 
   it("keeps bounded partial pages instead of discarding a busy source", async () => {

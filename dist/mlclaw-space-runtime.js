@@ -7413,9 +7413,12 @@ var DelegatedBrokerKit = class {
       this.registry.entries().map(async ([summary, client]) => this.sourceSnapshot(summary, client, synchronizedAt))
     );
     const selected = selectSnapshotRequests(results, MAX_HANDLES);
+    const reservedHandles = this.selectedExistingHandles(selected);
     return {
       sources: results.map((result) => result.source),
-      requests: selected.map(({ source, request }) => project(source, request, this.handle(source.id, request))),
+      requests: selected.map(
+        ({ source, request }) => project(source, request, this.handle(source.id, request, reservedHandles))
+      ),
       synchronizedAt
     };
   }
@@ -7484,16 +7487,30 @@ var DelegatedBrokerKit = class {
     }
     return { requests, truncated: Boolean(cursor) };
   }
-  handle(sourceId, request) {
+  selectedExistingHandles(selected) {
+    const handles = /* @__PURE__ */ new Set();
+    for (const { source, request } of selected) {
+      const handle = this.handlesByIdentity.get(requestIdentity(source.id, request.id, request.revision));
+      if (handle && this.handles.has(handle)) handles.add(handle);
+    }
+    return handles;
+  }
+  handle(sourceId, request, reservedHandles = /* @__PURE__ */ new Set()) {
     const identity = requestIdentity(sourceId, request.id, request.revision);
     const existing = this.handlesByIdentity.get(identity);
-    if (existing && this.handles.has(existing)) return existing;
-    if (this.handles.size >= MAX_HANDLES) this.pruneOldestHandle();
+    if (existing && this.handles.has(existing)) {
+      reservedHandles.add(existing);
+      return existing;
+    }
+    if (this.handles.size >= MAX_HANDLES && !this.pruneOldestHandle(reservedHandles)) {
+      throw delegatedError("source_unavailable");
+    }
     const handle = randomBytes3(18).toString("base64url");
     const requestExpiry = Date.parse(handleExpiry(request));
     const expiresAtMs = Number.isFinite(requestExpiry) ? Math.min(requestExpiry, this.now().getTime() + 24 * 60 * 6e4) : this.now().getTime() + 5 * 6e4;
     this.handles.set(handle, { sourceId, requestId: request.id, revision: request.revision, expiresAtMs });
     this.handlesByIdentity.set(identity, handle);
+    reservedHandles.add(handle);
     return handle;
   }
   resolveHandle(handle) {
@@ -7510,9 +7527,13 @@ var DelegatedBrokerKit = class {
       if (record.expiresAtMs <= this.now().getTime()) this.removeHandle(handle, record);
     }
   }
-  pruneOldestHandle() {
-    const oldest = this.handles.entries().next();
-    if (!oldest.done) this.removeHandle(oldest.value[0], oldest.value[1]);
+  pruneOldestHandle(reservedHandles) {
+    for (const [handle, record] of this.handles) {
+      if (reservedHandles.has(handle)) continue;
+      this.removeHandle(handle, record);
+      return true;
+    }
+    return false;
   }
   removeHandle(handle, record) {
     this.handles.delete(handle);
@@ -9724,7 +9745,7 @@ function delegatedFailure(c, error) {
     return delegatedErrorResponse(c, error.code, status);
   }
   if (error instanceof BrokerOperatorError) {
-    const code = safeDelegatedBrokerCode(error.code);
+    const code = delegatedBrokerCode(error.code);
     const status = error.status === 404 ? 404 : error.status === 409 ? 409 : 502;
     return delegatedErrorResponse(c, code, status);
   }
@@ -9739,8 +9760,13 @@ function delegatedHeaders(c) {
   c.header("vary", "origin");
   c.header("x-content-type-options", "nosniff");
 }
-function safeDelegatedBrokerCode(value) {
-  return ["request_not_found", "request_terminal", "revision_stale", "action_not_allowed"].includes(value ?? "") ? value : "source_unavailable";
+function delegatedBrokerCode(value) {
+  if (value === "not_found" || value === "request_not_found") return "request_not_found";
+  if (value === "revision_conflict" || value === "revision_stale") return "revision_stale";
+  if (value === "invalid_transition" || value === "constraint_exceeded" || value === "idempotency_conflict" || value === "request_terminal" || value === "action_not_allowed") {
+    return "action_not_allowed";
+  }
+  return "source_unavailable";
 }
 function unauthenticated(c, config2) {
   const next = normalizeNext(c.req.path + new URL(c.req.url).search);
