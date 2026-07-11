@@ -9317,11 +9317,8 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!delegatedBridgeOriginAllowed(c, config2)) return delegatedErrorResponse(c, "not_authorized", 403);
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
-    const topLevelSameOrigin = c.req.header("origin") === new URL(config2.publicUrl).origin && !c.req.header("x-mlclaw-csrf");
-    if (!topLevelSameOrigin) {
-      const csrf = requireCsrf(c, config2, auth.username);
-      if (csrf) return csrf;
-    }
+    const csrf = requireCsrf(c, config2, auth.username);
+    if (csrf) return csrf;
     return delegatedBridgeJson(c, delegatedBrokerKit.issueSession(auth.username));
   });
   app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {

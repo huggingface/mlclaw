@@ -219,7 +219,7 @@ describe("ML Claw Space runtime", () => {
       method: "POST",
       headers: { origin: "https://attacker.example", cookie: sessionCookie(config, "alice") },
     });
-    const topLevelSession = await fetch(`${base}/session`, {
+    const missingCsrf = await fetch(`${base}/session`, {
       method: "POST",
       headers: { ...originHeaders, cookie: sessionCookie(config, "alice") },
     });
@@ -234,7 +234,7 @@ describe("ML Claw Space runtime", () => {
     expect(anonymous.status).toBe(401);
     expect(member.status).toBe(403);
     expect(wrongOrigin.status).toBe(403);
-    expect(topLevelSession.status).toBe(200);
+    expect(missingCsrf.status).toBe(403);
     expect(session.status).toBe(200);
     expect(session.headers.get("cache-control")).toBe("no-store");
     const sessionBody = (await session.json()) as { decision_token: string; expires_at: string };

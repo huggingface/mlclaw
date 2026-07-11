@@ -138,12 +138,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     if (!delegatedBridgeOriginAllowed(c, config)) return delegatedErrorResponse(c, "not_authorized", 403);
     const auth = requireAdmin(c, config);
     if (auth instanceof Response) return auth;
-    const topLevelSameOrigin =
-      c.req.header("origin") === new URL(config.publicUrl).origin && !c.req.header("x-mlclaw-csrf");
-    if (!topLevelSameOrigin) {
-      const csrf = requireCsrf(c, config, auth.username);
-      if (csrf) return csrf;
-    }
+    const csrf = requireCsrf(c, config, auth.username);
+    if (csrf) return csrf;
     return delegatedBridgeJson(c, delegatedBrokerKit.issueSession(auth.username));
   });
 
