@@ -12,6 +12,7 @@ const API_VERSION = "brokerkit.io/delegated-web/v1" as const;
 const TOKEN_LIFETIME_SECONDS = 4 * 60;
 const MAX_PAGES_PER_SOURCE = 32;
 const MAX_HANDLES = 4_096;
+const SOURCE_DEADLINE_MS = 15_000;
 
 export type DelegatedAction = "approve" | "deny" | "cancel" | "revoke";
 
@@ -58,6 +59,7 @@ export class DelegatedBrokerKit {
     private readonly registry: OperatorBrokerRegistry,
     sessionSecret: string,
     private readonly now: () => Date = () => new Date(),
+    private readonly sourceDeadlineMs = SOURCE_DEADLINE_MS,
   ) {
     this.key = createHmac("sha256", sessionSecret).update("mlclaw/brokerkit-delegated-web/v1", "utf8").digest();
   }
@@ -154,13 +156,21 @@ export class DelegatedBrokerKit {
     client: BrokerOperatorClient,
     synchronizedAt: string,
   ): Promise<{ source: DelegatedSourceHealth; requests: BrokerApproval[] }> {
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), this.sourceDeadlineMs);
+    timer.unref?.();
     try {
-      await client.discover();
+      await client.discover(deadline.signal);
       const requests = (
-        await Promise.all([this.sourceRequests(client, "pending"), this.sourceRequests(client, "active")])
+        await Promise.all([
+          this.sourceRequests(client, "pending", deadline.signal),
+          this.sourceRequests(client, "active", deadline.signal),
+        ])
       ).flat();
       return {
-        source: { ...summary, healthy: true, lastSyncAt: synchronizedAt },
+        source: deadline.signal.aborted
+          ? { ...summary, healthy: false, error: "broker_timeout" }
+          : { ...summary, healthy: true, lastSyncAt: synchronizedAt },
         requests,
       };
     } catch (error) {
@@ -168,17 +178,27 @@ export class DelegatedBrokerKit {
         source: { ...summary, healthy: false, error: safeSourceError(error) },
         requests: [],
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  private async sourceRequests(client: BrokerOperatorClient, status: "pending" | "active"): Promise<BrokerApproval[]> {
+  private async sourceRequests(
+    client: BrokerOperatorClient,
+    status: "pending" | "active",
+    signal: AbortSignal,
+  ): Promise<BrokerApproval[]> {
     const requests: BrokerApproval[] = [];
     let cursor: string | undefined;
-    for (let pageNumber = 0; pageNumber < MAX_PAGES_PER_SOURCE; pageNumber += 1) {
-      const page = await client.list({ status, ...(cursor ? { cursor } : {}), limit: 100 });
-      requests.push(...page.requests);
-      cursor = page.next_cursor;
-      if (!cursor) return requests;
+    try {
+      for (let pageNumber = 0; pageNumber < MAX_PAGES_PER_SOURCE; pageNumber += 1) {
+        const page = await client.list({ status, ...(cursor ? { cursor } : {}), limit: 100 }, signal);
+        requests.push(...page.requests);
+        cursor = page.next_cursor;
+        if (!cursor) return requests;
+      }
+    } catch (error) {
+      if (!signal.aborted) throw error;
     }
     return requests;
   }

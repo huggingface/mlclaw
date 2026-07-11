@@ -206,4 +206,40 @@ describe("DelegatedBrokerKit", () => {
       }
     }
   });
+
+  it("bounds slow pagination per source and keeps pages fetched before the deadline", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/.well-known/brokerkit-operator") {
+        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+      }
+      const page = Number(url.searchParams.get("cursor") ?? "0");
+      const status = url.searchParams.get("status") ?? "pending";
+      const item = request(`${url.hostname}-${status}-first`, status === "active" ? 2 : 1, status);
+      if (url.hostname === "gh.example") return Response.json({ requests: [item] });
+      if (page === 0) {
+        return Response.json({ requests: [item], next_cursor: "1" });
+      }
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => reject(init?.signal?.reason ?? new Error("aborted"));
+        init?.signal?.addEventListener("abort", onAbort, { once: true });
+        setTimeout(resolve, 5_000).unref();
+      });
+      return Response.json({ requests: [] });
+    });
+    const delegated = new DelegatedBrokerKit(registry(fetchImpl), "s".repeat(48), () => new Date(), 25);
+    const started = Date.now();
+    const snapshot = await delegated.snapshot();
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(snapshot.sources).toEqual([
+      expect.objectContaining({ id: "hf-broker", healthy: false, error: "broker_timeout" }),
+      expect.objectContaining({ id: "gh-broker", healthy: true }),
+    ]);
+    expect(snapshot.requests.map((item) => item.id).sort()).toEqual([
+      "gh.example-active-first",
+      "gh.example-pending-first",
+      "hf.example-active-first",
+      "hf.example-pending-first",
+    ]);
+  });
 });

@@ -177,10 +177,10 @@ export class BrokerOperatorClient {
     return { id: this.options.id, label: this.options.label };
   }
 
-  discover(): Promise<{ api_version: "brokerkit.io/operator/v1" }> {
+  discover(signal?: AbortSignal): Promise<{ api_version: "brokerkit.io/operator/v1" }> {
     return this.request(
       "/.well-known/brokerkit-operator",
-      undefined,
+      signal ? { signal } : undefined,
       z.object({ api_version: z.literal("brokerkit.io/operator/v1") }).passthrough(),
       "discovery",
     );
@@ -188,6 +188,7 @@ export class BrokerOperatorClient {
 
   list(
     params: { status?: "pending" | "active" | "history" | "all"; cursor?: string; limit?: number } = {},
+    signal?: AbortSignal,
   ): Promise<BrokerApprovalPage> {
     const query = new URLSearchParams();
     if (params.status) {
@@ -202,7 +203,7 @@ export class BrokerOperatorClient {
     const suffix = query.size > 0 ? `?${query}` : "";
     return this.request<BrokerApprovalPage>(
       `/api/operator/v1/requests${suffix}`,
-      undefined,
+      signal ? { signal } : undefined,
       approvalPageSchema,
       "request list",
     );
