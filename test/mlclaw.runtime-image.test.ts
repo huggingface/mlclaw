@@ -76,7 +76,8 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain('chmod 0710 "$PROTECTED_STATE_DIR"');
-    expect(entrypoint).toContain('printf \'{"grants":[]}\\n\' > "$HF_BROKER_STATE_DIR/grants/grants.json"');
+    expect(entrypoint).not.toContain("printf '{\"grants\":[]}\\n'");
+    expect(entrypoint).not.toContain("grant_store");
     expect(entrypoint).toContain("HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-${MLCLAW_ROUTER_TOKEN:-");
     expect(entrypoint).toContain('export MLCLAW_TRUSTED_HF_TOKEN_FILE="$token_file"');
     expect(entrypoint).toContain('chown "$OPENCLAW_IDENTITY" "$agent_secret_file"');

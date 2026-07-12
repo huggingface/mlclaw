@@ -81,11 +81,6 @@ start_hf_broker() {
 
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR/grants"
-  if [ ! -e "$HF_BROKER_STATE_DIR/grants/grants.json" ]; then
-    printf '{"grants":[]}\n' > "$HF_BROKER_STATE_DIR/grants/grants.json"
-    chown hf-broker:hf-broker "$HF_BROKER_STATE_DIR/grants/grants.json"
-    chmod 0600 "$HF_BROKER_STATE_DIR/grants/grants.json"
-  fi
   chown -R hf-broker:hf-broker "$HF_BROKER_STATE_DIR"
   chmod 0700 "$HF_BROKER_STATE_DIR"
 

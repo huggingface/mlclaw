@@ -21,6 +21,10 @@ performed separately.
 - Do not add arbitrary HTTP forwarding to broker, Hub, or operator APIs.
 - Validate unknown file, network, OAuth, and broker payloads at their boundary.
 - Generated runtime bundles and control UI assets must match their source.
+- Until BrokerKit's first public release, consume only its version 1 wire APIs,
+  persisted state formats, plan schemas, manifests, and protocols. Do not
+  synthesize broker-owned state files or add v0/v2 compatibility behavior;
+  let each broker initialize its own v1 state after a coordinated cutover.
 
 ## TypeScript
 
