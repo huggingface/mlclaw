@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_OPENCLAW_VERSION = "2026.7.1-beta.5";
 const DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.1.0";
-const DEFAULT_BROKERKIT_VERSION = "0d4b1c081c607a262f50d13860ea1363160ad8b7";
+const DEFAULT_BROKERKIT_VERSION = "fcfc5f2304436d952b18e7c9583bb378d1952776";
 const DEFAULT_RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/mlclaw";
 
 const PACKAGE_METADATA = readPackageMetadata();
