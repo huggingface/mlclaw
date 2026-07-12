@@ -14944,6 +14944,7 @@ async function generateSpaceRepo(sourceDir, outDir, options = {}) {
     [".gitattributes", ".gitattributes"],
     ["assets/assistant-avatar.svg", "assets/assistant-avatar.svg"],
     ["assets/hf-logo.svg", "assets/hf-logo.svg"],
+    ["assets/hf-logo.png", "assets/hf-logo.png"],
     ["assets/mlclaw.svg", "assets/mlclaw.svg"],
     ["assets/mlclaw-control-ui", "assets/mlclaw-control-ui"],
     ["assets/hf-tooling", "assets/hf-tooling"],
