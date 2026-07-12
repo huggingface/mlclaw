@@ -39,6 +39,7 @@ prepare_hf_broker() {
   printf 'mlclaw-control = %s\n' "$operator_secret" > "$broker_operator_secrets"
   printf '{"version":1,"brokers":[{"id":"hf-broker","label":"Hugging Face","url":"http://127.0.0.1:7864","token_file":"%s"}]}\n' "$operator_secret_file" > "$operator_brokers_file"
   chown hf-broker:hf-broker "$token_file" "$broker_agent_secrets" "$broker_operator_secrets"
+  chown "$OPENCLAW_IDENTITY" "$agent_secret_file"
   chmod 0600 "$token_file" "$agent_secret_file" "$operator_secret_file" "$broker_agent_secrets" "$broker_operator_secrets" "$operator_brokers_file"
 
   if [ -z "${MLCLAW_STATE_MOUNT_DIR:-}" ]; then

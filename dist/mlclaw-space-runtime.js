@@ -5105,6 +5105,7 @@ function loadConfig(env = process.env) {
     routerToken: trim(env.MLCLAW_ROUTER_TOKEN ?? env.HF_ROUTER_TOKEN),
     brokerAgentUrl: trim(env.MLCLAW_HF_BROKER_URL),
     brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
+    brokerAgentSecretFile: trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE),
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
@@ -8429,6 +8430,7 @@ async function configureOpenClawGateway(config2) {
   };
   configureOpenClawModels(openclawConfig, config2);
   configureManagedMcpServers(openclawConfig, config2);
+  configureBrokerMcpServer(openclawConfig, config2);
   configureBrokerKitPlugin(openclawConfig, config2);
   await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
   await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
@@ -8437,6 +8439,21 @@ async function configureOpenClawGateway(config2) {
   if (process.getuid?.() === 0) {
     await fs.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
+}
+function configureBrokerMcpServer(openclawConfig, config2) {
+  if (!config2.brokerAgentUrl || !config2.brokerAgentSecretFile) return;
+  const servers = object(object(openclawConfig, "mcp"), "servers");
+  const existing = objectValue2(servers["huggingface-broker"]);
+  servers["huggingface-broker"] = {
+    ...existing,
+    command: "/usr/local/bin/hf-broker",
+    args: ["mcp"],
+    env: {
+      MLCLAW_HF_BROKER_URL: config2.brokerAgentUrl,
+      MLCLAW_HF_BROKER_AGENT_SECRET_FILE: config2.brokerAgentSecretFile
+    },
+    ...existing?.enabled === false ? { enabled: false } : { enabled: true }
+  };
 }
 function configureBrokerKitPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");
