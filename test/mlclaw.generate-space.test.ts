@@ -102,17 +102,14 @@ describe("generated Space repository", () => {
 
     const dockerfile = await fs.readFile(path.join(outDir, "Dockerfile"), "utf8");
     expect(dockerfile).toContain(`FROM ${OPENCLAW_BASE_IMAGE}`);
-    expect(dockerfile).toContain(
-      'git -C /src fetch --depth=1 https://github.com/osolmaz/hf-broker.git "$HF_BROKER_VERSION"',
-    );
-    expect(dockerfile).toContain('test "$(git -C /src rev-parse HEAD)" = "$HF_BROKER_VERSION"');
-    expect(dockerfile.match(/ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8/g)).toHaveLength(2);
     expect(dockerfile).toContain(`ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}`);
     expect(dockerfile).toContain(`ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}`);
     expect(dockerfile).toContain(
       'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION"',
     );
     expect(dockerfile).toContain('test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION"');
+    expect(dockerfile).toContain("GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker");
+    expect(dockerfile).not.toContain("github.com/osolmaz/hf-broker.git");
     expect(dockerfile).toContain(
       "COPY --from=brokerkit-plugin-build /out/openclaw-brokerkit-${BROKERKIT_PLUGIN_VERSION}.tgz",
     );

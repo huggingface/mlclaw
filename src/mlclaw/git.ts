@@ -103,18 +103,17 @@ function imageDockerfile(runtimeImage: string): string {
 }
 
 function bundledDockerfile(): string {
-  return `ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
-ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
+  return `ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
 ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
-ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
+ARG BROKERKIT_VERSION
 RUN git init /src \\
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/hf-broker.git "$HF_BROKER_VERSION" \\
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \\
   && git -C /src checkout --detach FETCH_HEAD \\
-  && test "$(git -C /src rev-parse HEAD)" = "$HF_BROKER_VERSION" \\
+  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION" \\
   && cd /src \\
-  && GOWORK=off go build -trimpath -o /out/hf-broker ./cmd/hf-broker
+  && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker
 
 FROM node:24-bookworm-slim AS brokerkit-plugin-build
 ARG BROKERKIT_VERSION
