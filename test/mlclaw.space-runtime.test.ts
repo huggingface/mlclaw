@@ -279,7 +279,7 @@ describe("ML Claw Space runtime", () => {
       access: string;
       renewal_transport: string;
     };
-    expect(popoverSessionBody.access).toBe("read");
+    expect(popoverSessionBody.access).toBe("decide");
     expect(popoverSessionBody.renewal_transport).toBe("direct");
     expect(session.status).toBe(200);
     expect(session.headers.get("cache-control")).toBe("no-store");
@@ -313,19 +313,12 @@ describe("ML Claw Space runtime", () => {
     expect(snapshotBody.requests).toHaveLength(1);
     expect(snapshotBody.requests[0]?.id).toBe("request-1");
     expect(snapshotBody.requests[0]?.handle).toMatch(/^[A-Za-z0-9_-]{24}$/u);
-    const readOnlyHeaders = {
+    const popoverHeaders = {
       origin: "null",
       authorization: `Bearer ${popoverSessionBody.token}`,
     };
-    const popoverSnapshot = await fetch(`${base}/snapshot`, { headers: readOnlyHeaders });
+    const popoverSnapshot = await fetch(`${base}/snapshot`, { headers: popoverHeaders });
     expect(popoverSnapshot.status).toBe(200);
-    const readOnlyDecision = await fetch(`${base}/requests/${snapshotBody.requests[0]?.handle}/approve`, {
-      method: "POST",
-      headers: { ...readOnlyHeaders, "content-type": "application/json" },
-      body: JSON.stringify({ expectedRevision: 1 }),
-    });
-    expect(readOnlyDecision.status).toBe(401);
-    expect(await readOnlyDecision.json()).toEqual({ error: { code: "not_authorized" } });
     const summary = await fetch(`${base}/summary`, { headers: { cookie: sessionCookie(config, "alice") } });
     expect(summary.status).toBe(200);
     expect(await summary.json()).toEqual({ pending: 1, healthy: true });
@@ -381,13 +374,13 @@ describe("ML Claw Space runtime", () => {
     const requestUrl = `${base}/requests/${snapshotBody.requests[0]?.handle}/approve`;
     const oversized = await fetch(requestUrl, {
       method: "POST",
-      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      headers: { ...popoverHeaders, "content-type": "application/json" },
       body: JSON.stringify({ expectedRevision: 1, reason: "x".repeat(17_000) }),
     });
     expect(oversized.status).toBe(400);
     const legacyShape = await fetch(requestUrl, {
       method: "POST",
-      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      headers: { ...popoverHeaders, "content-type": "application/json" },
       body: JSON.stringify({ expectedRevision: 1, durationSeconds: 300, maxUses: 1 }),
     });
     expect(legacyShape.status).toBe(400);
@@ -399,7 +392,7 @@ describe("ML Claw Space runtime", () => {
     });
     const conflict = await fetch(requestUrl, {
       method: "POST",
-      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      headers: { ...popoverHeaders, "content-type": "application/json" },
       body: decisionBody,
     });
     expect(conflict.status).toBe(409);
@@ -407,7 +400,7 @@ describe("ML Claw Space runtime", () => {
 
     const approve = await fetch(requestUrl, {
       method: "POST",
-      headers: { ...authorizedHeaders, "content-type": "application/json" },
+      headers: { ...popoverHeaders, "content-type": "application/json" },
       body: decisionBody,
     });
     expect(approve.status).toBe(200);
@@ -1394,7 +1387,7 @@ describe("ML Claw Space runtime", () => {
     const popoverSession = popoverHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     expect(JSON.parse(Buffer.from(popoverSession ?? "", "base64url").toString("utf8"))).toMatchObject({
       api_version: "brokerkit.io/delegated-web/v1",
-      access: "read",
+      access: "decide",
       renewal_transport: "direct",
     });
     expect(popover.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
