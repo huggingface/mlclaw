@@ -3,16 +3,15 @@ ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
 ARG BROKERKIT_PLUGIN_VERSION=0.1.0
 ARG BROKERKIT_VERSION=fcfc5f2304436d952b18e7c9583bb378d1952776
 ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/mlclaw:0.3.0-openclaw-2026.7.1-beta.5
-ARG HF_BROKER_VERSION=bb65192b4dca845289427e63e1d5fa72f64914d8
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
-ARG HF_BROKER_VERSION
+ARG BROKERKIT_VERSION
 RUN git init /src \
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/hf-broker.git "$HF_BROKER_VERSION" \
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \
   && git -C /src checkout --detach FETCH_HEAD \
-  && test "$(git -C /src rev-parse HEAD)" = "$HF_BROKER_VERSION" \
+  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION" \
   && cd /src \
-  && GOWORK=off go build -trimpath -o /out/hf-broker ./cmd/hf-broker
+  && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker
 
 FROM node:24-bookworm-slim AS brokerkit-plugin-build
 ARG BROKERKIT_VERSION
