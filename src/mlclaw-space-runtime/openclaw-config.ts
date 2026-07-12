@@ -28,6 +28,7 @@ export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Prom
   };
   configureOpenClawModels(openclawConfig, config);
   configureManagedMcpServers(openclawConfig, config);
+  configureBrokerMcpServer(openclawConfig, config);
   configureBrokerKitPlugin(openclawConfig, config);
 
   await fs.mkdir(path.dirname(config.openclawConfigPath), { recursive: true });
@@ -36,6 +37,25 @@ export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Prom
   if (process.getuid?.() === 0) {
     await fs.chown(config.openclawConfigPath, config.openclawUid, config.openclawGid);
   }
+}
+
+function configureBrokerMcpServer(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
+  const servers = object(object(openclawConfig, "mcp"), "servers");
+  if (!config.brokerAgentUrl || !config.brokerAgentSecretFile) {
+    delete servers["huggingface-broker"];
+    return;
+  }
+  const existing = objectValue(servers["huggingface-broker"]);
+  servers["huggingface-broker"] = {
+    ...existing,
+    command: "/usr/local/bin/hf-broker",
+    args: ["mcp"],
+    env: {
+      MLCLAW_HF_BROKER_URL: config.brokerAgentUrl,
+      MLCLAW_HF_BROKER_AGENT_SECRET_FILE: config.brokerAgentSecretFile,
+    },
+    ...(existing?.enabled === false ? { enabled: false } : { enabled: true }),
+  };
 }
 
 function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {

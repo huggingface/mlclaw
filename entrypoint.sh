@@ -29,7 +29,9 @@ prepare_hf_broker() {
   local operator_brokers_file="$HF_BROKER_RUN_DIR/operator-brokers.json"
   local agent_secret operator_secret
 
-  install -d -m 0750 -o root -g hf-broker "$HF_BROKER_RUN_DIR"
+  # OpenClaw may traverse this directory only to its own 0600 credential file.
+  # It cannot list the directory or read any broker-owned credential.
+  install -d -m 0711 -o root -g hf-broker "$HF_BROKER_RUN_DIR"
   agent_secret="$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n')"
   operator_secret="$(od -An -N48 -tx1 /dev/urandom | tr -d ' \n')"
   printf '%s\n' "$broker_token" > "$token_file"
@@ -39,6 +41,7 @@ prepare_hf_broker() {
   printf 'mlclaw-control = %s\n' "$operator_secret" > "$broker_operator_secrets"
   printf '{"version":1,"brokers":[{"id":"hf-broker","label":"Hugging Face","url":"http://127.0.0.1:7864","token_file":"%s"}]}\n' "$operator_secret_file" > "$operator_brokers_file"
   chown hf-broker:hf-broker "$token_file" "$broker_agent_secrets" "$broker_operator_secrets"
+  chown "$OPENCLAW_IDENTITY" "$agent_secret_file"
   chmod 0600 "$token_file" "$agent_secret_file" "$operator_secret_file" "$broker_agent_secrets" "$broker_operator_secrets" "$operator_brokers_file"
 
   if [ -z "${MLCLAW_STATE_MOUNT_DIR:-}" ]; then

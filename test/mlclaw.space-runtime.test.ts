@@ -1818,6 +1818,7 @@ describe("ML Claw Space runtime", () => {
     const config = await testConfig({
       brokerAgentUrl: "http://127.0.0.1:7863/",
       brokerAgentSecret: "agent-secret",
+      brokerAgentSecretFile: "/run/mlclaw-hf-broker/agent-secret",
       routerToken: undefined,
     });
 
@@ -1829,7 +1830,28 @@ describe("ML Claw Space runtime", () => {
       apiKey: "agent-secret",
       api: "openai-completions",
     });
+    expect(rewritten.mcp.servers["huggingface-broker"]).toEqual({
+      command: "/usr/local/bin/hf-broker",
+      args: ["mcp"],
+      env: {
+        MLCLAW_HF_BROKER_URL: "http://127.0.0.1:7863/",
+        MLCLAW_HF_BROKER_AGENT_SECRET_FILE: "/run/mlclaw-hf-broker/agent-secret",
+      },
+      enabled: true,
+    });
     expect(JSON.stringify(rewritten)).not.toContain("operator-secret");
+  });
+
+  it("removes a stale managed broker MCP server when the broker is unavailable", async () => {
+    const config = await testConfig({ brokerAgentUrl: undefined, brokerAgentSecretFile: undefined });
+    const existing = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    existing.mcp = { servers: { "huggingface-broker": { command: "/missing/hf-broker", enabled: true } } };
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify(existing));
+
+    await configureOpenClawGateway(config);
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.mcp.servers["huggingface-broker"]).toBeUndefined();
   });
 
   it("makes the duplicated Space owner the default admin", () => {
@@ -2004,6 +2026,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     routerToken: undefined,
     brokerAgentUrl: undefined,
     brokerAgentSecret: undefined,
+    brokerAgentSecretFile: undefined,
     operatorBrokers: [],
     hubUrl: "https://huggingface.co",
     openaiCredentialFile: path.join(root, "secrets", "openai.env"),

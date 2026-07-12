@@ -19,6 +19,48 @@
       ]
     },
     {
+      "id": "mlclaw-request-repository-creation",
+      "effect": "request",
+      "clients": ["default"],
+      "operations": ["repo.create"],
+      "targets": [
+        {"kind": "repo", "type": "model", "owner": "*", "name": "*"},
+        {"kind": "repo", "type": "dataset", "owner": "*", "name": "*"}
+      ],
+      "attrs": {
+        "private": "*"
+      },
+      "grant_policy": {
+        "mode": "execution",
+        "default_minutes": 5,
+        "max_minutes": 5,
+        "request_ttl_minutes": 15,
+        "default_max_uses": 1,
+        "max_uses": 1
+      }
+    },
+    {
+      "id": "mlclaw-request-space-creation",
+      "effect": "request",
+      "clients": ["default"],
+      "operations": ["repo.create"],
+      "targets": [
+        {"kind": "repo", "type": "space", "owner": "*", "name": "*"}
+      ],
+      "attrs": {
+        "private": "*",
+        "sdk": "*"
+      },
+      "grant_policy": {
+        "mode": "execution",
+        "default_minutes": 5,
+        "max_minutes": 5,
+        "request_ttl_minutes": 15,
+        "default_max_uses": 1,
+        "max_uses": 1
+      }
+    },
+    {
       "id": "mlclaw-request-protected-repository-writes",
       "effect": "request",
       "clients": ["default"],

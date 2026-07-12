@@ -35,6 +35,7 @@ export type SpaceRuntimeConfig = {
   routerToken: string | undefined;
   brokerAgentUrl: string | undefined;
   brokerAgentSecret: string | undefined;
+  brokerAgentSecretFile: string | undefined;
   operatorBrokers: OperatorBrokerConfig[];
   hubUrl: string;
   openaiCredentialFile: string;
@@ -142,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     routerToken: trim(env.MLCLAW_ROUTER_TOKEN ?? env.HF_ROUTER_TOKEN),
     brokerAgentUrl: trim(env.MLCLAW_HF_BROKER_URL),
     brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
+    brokerAgentSecretFile: trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE),
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
