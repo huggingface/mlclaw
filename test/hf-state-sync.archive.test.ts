@@ -93,9 +93,9 @@ describe("staging", () => {
     const staging = path.join(dir, "ordinary-stage");
 
     await expect(stageLiveDir(live, staging)).resolves.toMatchObject({ kind: "staged" });
-    await expect(
-      fs.readFile(path.join(staging, PROTECTED_STATE_DIR_NAME, "hf-broker/state.db"), "utf8"),
-    ).resolves.toBe("protected broker state");
+    await expect(fs.readFile(path.join(staging, PROTECTED_STATE_DIR_NAME, "hf-broker/state.db"), "utf8")).resolves.toBe(
+      "protected broker state",
+    );
   });
 });
 
