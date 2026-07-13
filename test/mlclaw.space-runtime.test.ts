@@ -284,7 +284,7 @@ describe("ML Claw Space runtime", () => {
     expect(popoverSessionBody.renewal_transport).toBe("direct");
     expect(session.status).toBe(200);
     expect(session.headers.get("cache-control")).toBe("no-store");
-    expect(session.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    expect(session.headers.get("content-security-policy")).not.toContain("sandbox");
     expect(session.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(session.headers.get("content-security-policy")).toContain(
       `script-src 'self' http://127.0.0.1:${config.port}`,
@@ -1315,6 +1315,7 @@ describe("ML Claw Space runtime", () => {
     expect(body).toContain("data-mlclaw-control-branding");
     expect(body).toContain("data-mlclaw-approvals-button");
     expect(body).toContain("data-mlclaw-approvals-frame");
+    expect(body).toContain('title="Approval requests" sandbox="allow-scripts"');
     expect(body).toContain("data-mlclaw-approvals-popover");
     const popoverSrc = body.match(/data-mlclaw-approvals-frame data-src="([^"]+)"/u)?.[1];
     expect(popoverSrc).toBeDefined();
@@ -1409,7 +1410,7 @@ describe("ML Claw Space runtime", () => {
     expect(launcherHtml).not.toContain("brokerkit-delegated-session");
     expect(page.headers.get("cache-control")).toBe("no-store");
     expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
-    expect(page.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    expect(page.headers.get("content-security-policy")).not.toContain("sandbox");
     expect(page.headers.get("content-security-policy")).toContain(`connect-src 'self' http://127.0.0.1:${config.port}`);
     expect(page.headers.get("x-frame-options")).toBe("SAMEORIGIN");
 
