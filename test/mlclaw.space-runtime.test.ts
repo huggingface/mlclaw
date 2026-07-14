@@ -226,9 +226,11 @@ describe("ML Claw Space runtime", () => {
     });
     await listen(broker, brokerPort);
     cleanups.push(() => closeServer(broker));
+    const hostEdgePort = await freePort();
     const config = await testConfig({
       allowedUsers: ["alice", "bob"],
       adminUsers: ["alice"],
+      publicUrl: `http://127.0.0.1:${hostEdgePort}`,
       brokerKitPluginPath: pluginRoot,
       brokerKitPopoverDecisions: true,
       operatorBrokers: [
@@ -246,7 +248,6 @@ describe("ML Claw Space runtime", () => {
       () => closeServer(server),
       () => runtime.stop(),
     );
-    const hostEdgePort = await freePort();
     const hostEdge = identityAwareHostEdge(config.port);
     await listen(hostEdge, hostEdgePort);
     cleanups.push(() => closeServer(hostEdge));
@@ -291,8 +292,9 @@ describe("ML Claw Space runtime", () => {
     expect(session.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
     expect(session.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(session.headers.get("content-security-policy")).toContain(
-      `script-src 'self' http://127.0.0.1:${config.port}`,
+      `script-src 'self' http://127.0.0.1:${hostEdgePort}`,
     );
+    expect(session.headers.get("content-security-policy")).not.toContain(`http://127.0.0.1:${config.port}`);
     expect(session.headers.get("x-frame-options")).toBe("DENY");
     const sessionHtml = await session.text();
     const embedded = sessionHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];

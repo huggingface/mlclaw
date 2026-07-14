@@ -9973,7 +9973,7 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
       if (!template.includes("</head>")) return c.text("not found\n", 404);
       const headers2 = trustedBrokerKitHeaders(
         embeddedPopover ? "popover" : destination === "iframe" ? "launcher" : "top-level",
-        new URL(c.req.url).origin
+        new URL(config2.publicUrl).origin
       );
       headers2.set("content-type", "text/html; charset=utf-8");
       return new Response(template.replace("</head>", `${marker}</head>`), { status: 200, headers: headers2 });
@@ -9983,7 +9983,7 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
   }
   const response = await serveFile(file, contentType(file), true);
   if (response.status !== 200) return response;
-  const headers = trustedBrokerKitHeaders("asset", new URL(c.req.url).origin);
+  const headers = trustedBrokerKitHeaders("asset", new URL(config2.publicUrl).origin);
   headers.set("content-type", response.headers.get("content-type") ?? "application/octet-stream");
   return new Response(response.body, { status: response.status, headers });
 }
