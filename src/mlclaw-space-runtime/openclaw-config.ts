@@ -50,7 +50,6 @@ function configureBrokerMcpServer(openclawConfig: Record<string, unknown>, confi
   }
   const existing = objectValue(servers["huggingface-broker"]);
   servers["huggingface-broker"] = {
-    ...existing,
     command: "/usr/local/bin/hf-broker",
     args: ["mcp"],
     connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,

@@ -2031,6 +2031,8 @@ describe("ML Claw Space runtime", () => {
           args: ["serve"],
           connectionTimeoutMs: 1,
           requestTimeoutMs: 900_000,
+          cwd: "/tmp",
+          unexpected: "stale",
           env: {
             MLCLAW_HF_BROKER_URL: "https://example.invalid",
             MLCLAW_HF_BROKER_AGENT_SECRET_FILE: "/tmp/secret",
