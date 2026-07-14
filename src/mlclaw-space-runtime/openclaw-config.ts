@@ -4,6 +4,9 @@ import type { SpaceRuntimeConfig } from "./config.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
+export const BROKER_MCP_CONNECTION_TIMEOUT_MS = 10_000;
+export const BROKER_MCP_REQUEST_TIMEOUT_MS = 45_000;
+
 export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Promise<void> {
   const raw = await fs.readFile(config.openclawConfigPath, "utf8");
   const openclawConfig = JSON.parse(raw) as Record<string, unknown>;
@@ -47,15 +50,54 @@ function configureBrokerMcpServer(openclawConfig: Record<string, unknown>, confi
   }
   const existing = objectValue(servers["huggingface-broker"]);
   servers["huggingface-broker"] = {
-    ...existing,
+    ...preservedBrokerMcpFields(existing),
     command: "/usr/local/bin/hf-broker",
     args: ["mcp"],
+    connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+    requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
     env: {
       MLCLAW_HF_BROKER_URL: config.brokerAgentUrl,
       MLCLAW_HF_BROKER_AGENT_SECRET_FILE: config.brokerAgentSecretFile,
     },
     ...(existing?.enabled === false ? { enabled: false } : { enabled: true }),
   };
+}
+
+function preservedBrokerMcpFields(existing: Record<string, unknown> | undefined): Record<string, unknown> {
+  const codex = preservedBrokerCodexConfig(objectValue(existing?.codex));
+  return {
+    ...(existing?.toolFilter && typeof existing.toolFilter === "object" ? { toolFilter: existing.toolFilter } : {}),
+    ...(typeof existing?.supportsParallelToolCalls === "boolean"
+      ? { supportsParallelToolCalls: existing.supportsParallelToolCalls }
+      : {}),
+    ...(codex ? { codex } : {}),
+  };
+}
+
+function preservedBrokerCodexConfig(
+  existing: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const agents = brokerAgentScope(existing?.agents);
+  const defaultToolsApprovalMode = brokerApprovalMode(existing?.defaultToolsApprovalMode);
+  const nativeApprovalMode = brokerApprovalMode(existing?.default_tools_approval_mode);
+  const preserved = {
+    ...(agents ? { agents } : {}),
+    ...(defaultToolsApprovalMode ? { defaultToolsApprovalMode } : {}),
+    ...(nativeApprovalMode ? { default_tools_approval_mode: nativeApprovalMode } : {}),
+  };
+  return Object.keys(preserved).length > 0 ? preserved : undefined;
+}
+
+function brokerAgentScope(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const agents = value
+    .filter((agent): agent is string => typeof agent === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(agent.trim()))
+    .map((agent) => agent.trim());
+  return agents.length > 0 ? agents : undefined;
+}
+
+function brokerApprovalMode(value: unknown): "auto" | "prompt" | "approve" | undefined {
+  return value === "auto" || value === "prompt" || value === "approve" ? value : undefined;
 }
 
 function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {

@@ -9,7 +9,11 @@ import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
-import { configureOpenClawGateway } from "../src/mlclaw-space-runtime/openclaw-config.js";
+import {
+  BROKER_MCP_CONNECTION_TIMEOUT_MS,
+  BROKER_MCP_REQUEST_TIMEOUT_MS,
+  configureOpenClawGateway,
+} from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
 import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
@@ -2002,6 +2006,8 @@ describe("ML Claw Space runtime", () => {
     expect(rewritten.mcp.servers["huggingface-broker"]).toEqual({
       command: "/usr/local/bin/hf-broker",
       args: ["mcp"],
+      connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+      requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
       env: {
         MLCLAW_HF_BROKER_URL: "http://127.0.0.1:7863/",
         MLCLAW_HF_BROKER_AGENT_SECRET_FILE: "/run/mlclaw-hf-broker/agent-secret",
@@ -2009,6 +2015,63 @@ describe("ML Claw Space runtime", () => {
       enabled: true,
     });
     expect(JSON.stringify(rewritten)).not.toContain("operator-secret");
+    expect(BROKER_MCP_REQUEST_TIMEOUT_MS).toBeGreaterThan(25_000);
+  });
+
+  it("replaces stale managed broker settings while preserving disablement and tool filtering", async () => {
+    const config = await testConfig({
+      brokerAgentUrl: "http://127.0.0.1:7863/",
+      brokerAgentSecretFile: "/run/mlclaw-hf-broker/agent-secret",
+    });
+    const existing = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    existing.mcp = {
+      servers: {
+        "huggingface-broker": {
+          command: "/tmp/untrusted-broker",
+          args: ["serve"],
+          connectionTimeoutMs: 1,
+          requestTimeoutMs: 900_000,
+          cwd: "/tmp",
+          unexpected: "stale",
+          env: {
+            MLCLAW_HF_BROKER_URL: "https://example.invalid",
+            MLCLAW_HF_BROKER_AGENT_SECRET_FILE: "/tmp/secret",
+          },
+          enabled: false,
+          toolFilter: { include: ["hf_operation_get"] },
+          supportsParallelToolCalls: true,
+          codex: {
+            agents: [" main ", "reviewer"],
+            defaultToolsApprovalMode: "prompt",
+            unexpected: "stale",
+          },
+        },
+        custom: { command: "/usr/local/bin/custom", enabled: true },
+      },
+    };
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify(existing));
+
+    await configureOpenClawGateway(config);
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.mcp.servers["huggingface-broker"]).toEqual({
+      command: "/usr/local/bin/hf-broker",
+      args: ["mcp"],
+      connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+      requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
+      env: {
+        MLCLAW_HF_BROKER_URL: "http://127.0.0.1:7863/",
+        MLCLAW_HF_BROKER_AGENT_SECRET_FILE: "/run/mlclaw-hf-broker/agent-secret",
+      },
+      enabled: false,
+      toolFilter: { include: ["hf_operation_get"] },
+      supportsParallelToolCalls: true,
+      codex: {
+        agents: ["main", "reviewer"],
+        defaultToolsApprovalMode: "prompt",
+      },
+    });
+    expect(rewritten.mcp.servers.custom).toEqual({ command: "/usr/local/bin/custom", enabled: true });
   });
 
   it("removes a stale managed broker MCP server when the broker is unavailable", async () => {

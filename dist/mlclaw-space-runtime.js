@@ -8523,6 +8523,8 @@ function remainingUpstreamTimeout(deadline) {
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
+var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
+var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
 async function configureOpenClawGateway(config2) {
   const raw2 = await fs.readFile(config2.openclawConfigPath, "utf8");
   const openclawConfig = JSON.parse(raw2);
@@ -8565,15 +8567,44 @@ function configureBrokerMcpServer(openclawConfig, config2) {
   }
   const existing = objectValue2(servers["huggingface-broker"]);
   servers["huggingface-broker"] = {
-    ...existing,
+    ...preservedBrokerMcpFields(existing),
     command: "/usr/local/bin/hf-broker",
     args: ["mcp"],
+    connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+    requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
     env: {
       MLCLAW_HF_BROKER_URL: config2.brokerAgentUrl,
       MLCLAW_HF_BROKER_AGENT_SECRET_FILE: config2.brokerAgentSecretFile
     },
     ...existing?.enabled === false ? { enabled: false } : { enabled: true }
   };
+}
+function preservedBrokerMcpFields(existing) {
+  const codex = preservedBrokerCodexConfig(objectValue2(existing?.codex));
+  return {
+    ...existing?.toolFilter && typeof existing.toolFilter === "object" ? { toolFilter: existing.toolFilter } : {},
+    ...typeof existing?.supportsParallelToolCalls === "boolean" ? { supportsParallelToolCalls: existing.supportsParallelToolCalls } : {},
+    ...codex ? { codex } : {}
+  };
+}
+function preservedBrokerCodexConfig(existing) {
+  const agents = brokerAgentScope(existing?.agents);
+  const defaultToolsApprovalMode = brokerApprovalMode(existing?.defaultToolsApprovalMode);
+  const nativeApprovalMode = brokerApprovalMode(existing?.default_tools_approval_mode);
+  const preserved = {
+    ...agents ? { agents } : {},
+    ...defaultToolsApprovalMode ? { defaultToolsApprovalMode } : {},
+    ...nativeApprovalMode ? { default_tools_approval_mode: nativeApprovalMode } : {}
+  };
+  return Object.keys(preserved).length > 0 ? preserved : void 0;
+}
+function brokerAgentScope(value) {
+  if (!Array.isArray(value)) return void 0;
+  const agents = value.filter((agent) => typeof agent === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(agent.trim())).map((agent) => agent.trim());
+  return agents.length > 0 ? agents : void 0;
+}
+function brokerApprovalMode(value) {
+  return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
 }
 function configureBrokerKitPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");
