@@ -4,6 +4,9 @@ import type { SpaceRuntimeConfig } from "./config.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
+export const BROKER_MCP_CONNECTION_TIMEOUT_MS = 10_000;
+export const BROKER_MCP_REQUEST_TIMEOUT_MS = 45_000;
+
 export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Promise<void> {
   const raw = await fs.readFile(config.openclawConfigPath, "utf8");
   const openclawConfig = JSON.parse(raw) as Record<string, unknown>;
@@ -50,10 +53,13 @@ function configureBrokerMcpServer(openclawConfig: Record<string, unknown>, confi
     ...existing,
     command: "/usr/local/bin/hf-broker",
     args: ["mcp"],
+    connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+    requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
     env: {
       MLCLAW_HF_BROKER_URL: config.brokerAgentUrl,
       MLCLAW_HF_BROKER_AGENT_SECRET_FILE: config.brokerAgentSecretFile,
     },
+    ...(existing?.toolFilter && typeof existing.toolFilter === "object" ? { toolFilter: existing.toolFilter } : {}),
     ...(existing?.enabled === false ? { enabled: false } : { enabled: true }),
   };
 }

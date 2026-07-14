@@ -139,8 +139,11 @@ describe("Hugging Face tooling baseline", () => {
     expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
     expect(agentsMd).toContain("`huggingface-datasets`");
     expect(agentsMd).toContain("Never ask");
-    expect(agentsMd).toContain("`hf_repo_create`");
-    expect(agentsMd).toContain("`hf-broker client repo create OWNER/NAME --type dataset`");
+    expect(agentsMd).toContain("matching `hf_*` MCP tool for the operation");
+    expect(agentsMd).toContain("Omit `request_id` for a new");
+    expect(agentsMd).toContain("`hf_operation_list`");
+    expect(agentsMd).toContain("Never reuse a request ID");
+    expect(agentsMd).toContain("instead of restarting the");
     expect(agentsMd).not.toContain("old block");
   });
 
