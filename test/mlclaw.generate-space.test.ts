@@ -124,10 +124,19 @@ describe("generated Space repository", () => {
     const encodedHfLogo = await fs.readFile(path.join(outDir, "assets/hf-logo.png.base64"), "utf8");
     expect([...Buffer.from(encodedHfLogo.trim(), "base64").subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
     const brokerScope = JSON.parse(await fs.readFile(path.join(outDir, "runtime/hf-broker.scope.json"), "utf8")) as {
-      rules: Array<{ operations: string[] }>;
+      rules: Array<{
+        effect: string;
+        operations: string[];
+        grant_policy?: { mode?: string; default_max_uses?: number; max_uses?: number };
+      }>;
     };
     expect(brokerScope.rules.some((rule) => rule.operations.includes("inference.models.list"))).toBe(true);
     expect(brokerScope.rules.some((rule) => rule.operations.includes("inference.chat.complete"))).toBe(true);
+    const deleteRule = brokerScope.rules.find((rule) => rule.operations.includes("repo.delete"));
+    expect(deleteRule).toMatchObject({
+      effect: "request",
+      grant_policy: { mode: "execution", default_max_uses: 1, max_uses: 1 },
+    });
     expect(dockerfile).toContain("COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js");
     expect(dockerfile).toContain("COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js");
     expect(dockerfile).toContain('"hf-discover==1.3.7"');

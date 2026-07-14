@@ -79,6 +79,23 @@
       }
     },
     {
+      "id": "mlclaw-request-repository-deletion",
+      "effect": "request",
+      "clients": ["default"],
+      "operations": ["repo.delete"],
+      "targets": [
+        {"kind": "repo", "type": "*", "owner": "*", "name": "*"}
+      ],
+      "grant_policy": {
+        "mode": "execution",
+        "default_minutes": 5,
+        "max_minutes": 5,
+        "request_ttl_minutes": 15,
+        "default_max_uses": 1,
+        "max_uses": 1
+      }
+    },
+    {
       "id": "mlclaw-request-protected-repository-writes",
       "effect": "request",
       "clients": ["default"],
