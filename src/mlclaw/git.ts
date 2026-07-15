@@ -110,9 +110,9 @@ ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
 RUN git init /src \\
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \\
-  && git -C /src checkout --detach FETCH_HEAD \\
-  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION" \\
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \\
+  && git -C /src checkout --detach "$BROKERKIT_VERSION" \\
+  && test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)" \\
   && cd /src \\
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \\
   && /out/hf-broker policy render \\
@@ -132,9 +132,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
   && rm -rf /var/lib/apt/lists/* \
   && git init /src \
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \
-  && git -C /src checkout --detach FETCH_HEAD \
-  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION"
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \
+  && git -C /src checkout --detach "$BROKERKIT_VERSION" \
+  && test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"
 WORKDIR /src
 RUN corepack enable \
   && pnpm install --frozen-lockfile \

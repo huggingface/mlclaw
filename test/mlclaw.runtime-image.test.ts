@@ -17,7 +17,7 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain(`ARG OPENCLAW_VERSION=${OPENCLAW_VERSION}`);
     expect(dockerfile).toContain(`ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}`);
     expect(dockerfile).toContain(`ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}`);
-    expect(BROKERKIT_VERSION).toMatch(/^[0-9a-f]{40}$/u);
+    expect(BROKERKIT_VERSION).toMatch(/^hf-broker\/v\d+\.\d+\.\d+$/u);
     expect(DEFAULT_BROKERKIT_VERSION).toBe(BROKERKIT_VERSION);
     expect(
       dockerfile.match(/git -C \/src fetch --depth=1 https:\/\/github\.com\/osolmaz\/brokerkit\.git/g),
@@ -27,9 +27,11 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain(`ARG MLCLAW_RUNTIME_IMAGE=${DEFAULT_RUNTIME_IMAGE}`);
     expect(dockerfile).toContain("FROM ${OPENCLAW_BASE_IMAGE}");
     expect(dockerfile).toContain(
-      'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION"',
+      'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"',
     );
-    expect(dockerfile).toContain('test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION"');
+    expect(dockerfile).toContain(
+      'test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
+    );
     expect(dockerfile).toContain(
       "COPY --from=brokerkit-plugin-build /out/openclaw-brokerkit-${BROKERKIT_PLUGIN_VERSION}.tgz",
     );
