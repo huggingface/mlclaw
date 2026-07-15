@@ -1,15 +1,15 @@
 ARG OPENCLAW_VERSION=2026.7.1
 ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
-ARG BROKERKIT_PLUGIN_VERSION=0.1.0
-ARG BROKERKIT_VERSION=9d66b0ad6b7fc04eb56744bdfe5c0bbcc9fc08c6
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/mlclaw:0.3.3-openclaw-2026.7.1
+ARG BROKERKIT_PLUGIN_VERSION=0.2.1
+ARG BROKERKIT_VERSION=hf-broker/v0.1.0
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/osolmaz/mlclaw:0.3.4-openclaw-2026.7.1
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
 RUN git init /src \
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \
-  && git -C /src checkout --detach FETCH_HEAD \
-  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION" \
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \
+  && git -C /src checkout --detach "$BROKERKIT_VERSION" \
+  && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION" \
   && cd /src \
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \
   && /out/hf-broker policy render \
@@ -29,9 +29,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git \
   && rm -rf /var/lib/apt/lists/* \
   && git init /src \
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \
-  && git -C /src checkout --detach FETCH_HEAD \
-  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION"
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \
+  && git -C /src checkout --detach "$BROKERKIT_VERSION" \
+  && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION"
 WORKDIR /src
 RUN corepack enable \
   && pnpm install --frozen-lockfile \

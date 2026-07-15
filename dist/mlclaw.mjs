@@ -14837,8 +14837,8 @@ import fs11 from "node:fs";
 import path12 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var DEFAULT_OPENCLAW_VERSION = "2026.7.1";
-var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.1.0";
-var DEFAULT_BROKERKIT_VERSION = "9d66b0ad6b7fc04eb56744bdfe5c0bbcc9fc08c6";
+var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.2.1";
+var DEFAULT_BROKERKIT_VERSION = "hf-broker/v0.1.0";
 var DEFAULT_RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/mlclaw";
 var PACKAGE_METADATA = readPackageMetadata();
 var PACKAGE_VERSION = packageString("version", "unknown");
@@ -14981,9 +14981,9 @@ ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
 RUN git init /src \\
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION" \\
-  && git -C /src checkout --detach FETCH_HEAD \\
-  && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION" \\
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \\
+  && git -C /src checkout --detach "$BROKERKIT_VERSION" \\
+  && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION" \\
   && cd /src \\
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \\
   && /out/hf-broker policy render \\
@@ -14999,7 +14999,7 @@ RUN git init /src \\
 
 FROM node:24-bookworm-slim AS brokerkit-plugin-build
 ARG BROKERKIT_VERSION
-RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates git   && rm -rf /var/lib/apt/lists/*   && git init /src   && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "$BROKERKIT_VERSION"   && git -C /src checkout --detach FETCH_HEAD   && test "$(git -C /src rev-parse HEAD)" = "$BROKERKIT_VERSION"
+RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates git   && rm -rf /var/lib/apt/lists/*   && git init /src   && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"   && git -C /src checkout --detach "$BROKERKIT_VERSION"   && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION"
 WORKDIR /src
 RUN corepack enable   && pnpm install --frozen-lockfile   && pnpm --filter openclaw-brokerkit build   && pnpm --filter openclaw-brokerkit pack --pack-destination /out
 
