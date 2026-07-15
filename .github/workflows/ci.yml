@@ -27,7 +27,8 @@ jobs:
           git -C "$RUNNER_TEMP/brokerkit" fetch --depth=1 https://github.com/osolmaz/brokerkit.git \
             "refs/tags/$brokerkit_version:refs/tags/$brokerkit_version"
           git -C "$RUNNER_TEMP/brokerkit" checkout --detach "$brokerkit_version"
-          test "$(git -C "$RUNNER_TEMP/brokerkit" describe --tags --exact-match HEAD)" = "$brokerkit_version"
+          test "$(git -C "$RUNNER_TEMP/brokerkit" rev-parse "refs/tags/$brokerkit_version^{commit}")" = \
+            "$(git -C "$RUNNER_TEMP/brokerkit" rev-parse HEAD)"
           go build -C "$RUNNER_TEMP/brokerkit" -o "$RUNNER_TEMP/hf-broker" ./brokers/huggingface/cmd/hf-broker
       - name: Test pinned BrokerKit agent tools
         env:

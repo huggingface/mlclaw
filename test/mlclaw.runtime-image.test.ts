@@ -29,7 +29,9 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain(
       'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"',
     );
-    expect(dockerfile).toContain('test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION"');
+    expect(dockerfile).toContain(
+      'test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
+    );
     expect(dockerfile).toContain(
       "COPY --from=brokerkit-plugin-build /out/openclaw-brokerkit-${BROKERKIT_PLUGIN_VERSION}.tgz",
     );

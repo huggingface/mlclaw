@@ -14983,7 +14983,7 @@ ARG BROKERKIT_VERSION
 RUN git init /src \\
   && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \\
   && git -C /src checkout --detach "$BROKERKIT_VERSION" \\
-  && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION" \\
+  && test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)" \\
   && cd /src \\
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \\
   && /out/hf-broker policy render \\
@@ -14999,7 +14999,7 @@ RUN git init /src \\
 
 FROM node:24-bookworm-slim AS brokerkit-plugin-build
 ARG BROKERKIT_VERSION
-RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates git   && rm -rf /var/lib/apt/lists/*   && git init /src   && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"   && git -C /src checkout --detach "$BROKERKIT_VERSION"   && test "$(git -C /src describe --tags --exact-match HEAD)" = "$BROKERKIT_VERSION"
+RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates git   && rm -rf /var/lib/apt/lists/*   && git init /src   && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"   && git -C /src checkout --detach "$BROKERKIT_VERSION"   && test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"
 WORKDIR /src
 RUN corepack enable   && pnpm install --frozen-lockfile   && pnpm --filter openclaw-brokerkit build   && pnpm --filter openclaw-brokerkit pack --pack-destination /out
 
