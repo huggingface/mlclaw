@@ -15720,7 +15720,7 @@ async function bootstrap(opts, runtime) {
   if (deployedSpaceRuntime) {
     runtime.stdout.log(`Space runtime: ${deployedSpaceRuntime}`);
   }
-  runtime.prompt.outro(gatewayLocation === "space" ? `Restart requested. Your agent will soon be available at ${spacePublicUrl(names.space)}.` : "Local gateway start requested.");
+  runtime.prompt.outro(gatewayLocation === "space" ? `Deployment requested. Your agent will soon be available at ${spacePublicUrl(names.space)}.` : "Local gateway start requested.");
 }
 function spacePublicUrl(repoId) {
   return `https://${repoId.replace("/", "-")}.hf.space`;
@@ -16122,7 +16122,7 @@ async function deploySpaceGateway(params) {
   } else {
     runtime.stdout.log("Keeping legacy broad Hub token secrets until an HF Broker or Router credential is configured");
   }
-  await hub.restartSpace(manifest.space, true);
+  runtime.stdout.log(`Space deployment triggered: ${manifest.space}`);
   return { runtimeImage: spaceRuntimeRef };
 }
 async function startLocalGateway(params) {
@@ -16708,7 +16708,7 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   if (canonicalTemplate) {
     await hub.addSpaceVariable(repoId, "MLCLAW_CANONICAL_SPACE_ID", canonicalTemplateSpaceId(runtime.env));
     await doctor(repoId, { fix: true }, hub, runtime);
-    await hub.restartSpace(repoId, true);
+    runtime.stdout.log(`Space deployment triggered: ${repoId}`);
     return;
   }
   await hub.addSpaceVariable(repoId, "MLCLAW_GATEWAY_LOCATION", "space");
@@ -16723,7 +16723,7 @@ async function update(repoId, opts, hub, hfToken, runtime) {
     await ensureSpaceStateVolume(hub, repoId, bucket);
   }
   await doctor(repoId, { fix: true }, hub, runtime);
-  await hub.restartSpace(repoId, true);
+  runtime.stdout.log(`Space deployment triggered: ${repoId}`);
 }
 async function ensureUpdateRouterToken(params) {
   if (!isHuggingFaceRouterModel(params.model)) {

@@ -861,12 +861,14 @@ describe("mlclaw CLI", () => {
       message: expect.stringContaining("Hardware: default free CPU"),
     }));
     expect(output.join("\n")).toContain("Agent URL: https://alice-research.hf.space");
+    expect(output.join("\n")).toContain("Space deployment triggered: alice/research");
     expect(output.join("\n")).toContain("Your agent will soon be available at https://alice-research.hf.space.");
     expect(hub.calls).toContainEqual({
       name: "createDockerSpace",
       args: ["alice/research", { private: true }],
     });
     expect(hub.calls.some((call) => call.name === "requestSpaceHardware")).toBe(false);
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
     expect(hub.calls).toContainEqual({
       name: "addSpaceVariable",
       args: ["alice/research", "MLCLAW_ALLOWED_USERS", "alice"],
@@ -1355,11 +1357,9 @@ describe("mlclaw CLI", () => {
       call.args[0] === "alice/research" &&
       call.args[1] === "MLCLAW_ADMINS"
     );
-    const restartIndex = hub.calls.findIndex((call) => call.name === "restartSpace");
     expect(allowedUsersIndex).toBeGreaterThanOrEqual(0);
     expect(adminsIndex).toBeGreaterThanOrEqual(0);
-    expect(restartIndex).toBeGreaterThan(allowedUsersIndex);
-    expect(restartIndex).toBeGreaterThan(adminsIndex);
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
   });
 
   it("upgrades a legacy Router Space to the broker credential during update", async () => {
@@ -1390,7 +1390,7 @@ describe("mlclaw CLI", () => {
       name: "addSpaceSecret",
       args: ["alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_test_token"],
     });
-    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(true);
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
   });
 
   it("replaces an existing Router token when update receives an explicit override", async () => {
@@ -1433,7 +1433,7 @@ describe("mlclaw CLI", () => {
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_ROUTER_TOKEN: "hf_router_replacement",
     });
-    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(true);
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
   });
 
   it("can bundle the current Space runtime during update when requested", async () => {
@@ -1533,10 +1533,7 @@ describe("mlclaw CLI", () => {
       args: [expect.anything()],
     });
     expect(hub.calls.some((call) => call.name === "fetchSpaceLogs")).toBe(false);
-    expect(hub.calls).toContainEqual({
-      name: "restartSpace",
-      args: ["alice/mlclaw-template", true],
-    });
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
   });
 
   it("runs template-aware doctor checks for the canonical template Space", async () => {
@@ -1752,7 +1749,7 @@ describe("mlclaw CLI", () => {
     expect(localHandoffIndex).toBeGreaterThanOrEqual(0);
     expect(createSpaceIndex).toBeGreaterThan(localHandoffIndex);
     expect(hub.calls).toContainEqual({ name: "createDockerSpace", args: ["alice/research", expect.any(Object)] });
-    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
 
     hub.calls.length = 0;
     runtime.dockerRunner.calls.length = 0;
