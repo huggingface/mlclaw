@@ -2096,18 +2096,18 @@ describe("ML Claw Space runtime", () => {
 
     expect(config.adminUsers).toEqual(["osolmaz"]);
     expect(config.allowedUsers).toEqual(["alice", "bob", "osolmaz"]);
-    expect(config.brokerKitPopoverDecisions).toBe(false);
+    expect(config.brokerKitPopoverDecisions).toBe(true);
   });
 
-  it("requires explicit opt-in for decisions inside the Gateway popover", () => {
+  it("allows explicit opt-out from decisions inside the Gateway popover", () => {
     const config = loadConfig({
       SPACE_ID: "osolmaz/research",
-      MLCLAW_BROKERKIT_POPOVER_DECISIONS: "true",
+      MLCLAW_BROKERKIT_POPOVER_DECISIONS: "false",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
       MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
-    expect(config.brokerKitPopoverDecisions).toBe(true);
+    expect(config.brokerKitPopoverDecisions).toBe(false);
   });
 
   it("loads the trusted local integration token from a protected file", async () => {

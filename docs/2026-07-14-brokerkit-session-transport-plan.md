@@ -338,8 +338,8 @@ and must fail the build or deployment verification.
 - MLClaw never reads a delegated credential from standard `Authorization`.
 - Hugging Face remains free to own standard authorization at the Space edge.
 - The opaque iframe sends no cookies and receives no credentialed-CORS grant.
-- Read-only popover and decision-capable top-level sessions retain their
-  current access boundaries.
+- The popover receives decision access by default, while an explicit
+  `MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` opt-out remains read-only.
 - Broker operator credentials remain server-only and never enter browser
   responses or OpenClaw state.
 - Pending requests stream into the mounted popover without page or iframe

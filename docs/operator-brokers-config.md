@@ -113,12 +113,10 @@ UI path and serves the immutable packaged assets from its trusted HTTP boundary.
 An authenticated administrator can inspect and decide requests directly in the
 Gateway popover. The iframe has an opaque CSP-sandboxed origin and a short-lived
 delegated decision session. It renews that session using its current delegated
-session token and never sends ML Claw cookies to the delegated API. The OpenClaw process
-cannot read broker credentials or delegated decision tokens. Because OpenClaw
-controls the surrounding page, deployments that require protection from a
-compromised Gateway frontend should leave
-`MLCLAW_BROKERKIT_POPOVER_DECISIONS` unset. Set it to `true` only when the
-deployment explicitly accepts that tradeoff; the default popover is read-only.
+session token and never sends ML Claw cookies to the delegated API. The
+OpenClaw process cannot read broker credentials or delegated decision tokens.
+Decisions are enabled in the popover by default. Set
+`MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` to make the popover read-only.
 
 The sandbox sends the raw delegated token only in `BrokerKit-Session`. ML Claw
 does not accept it from `Authorization`, cookies, URLs, or request bodies. This
