@@ -55,6 +55,16 @@ afterEach(async () => {
 });
 
 describe("ML Claw Space runtime", () => {
+  it("defaults to GLM 5.2 on Fireworks", () => {
+    const config = loadConfig({
+      SPACE_ID: "osolmaz/research",
+      MLCLAW_SESSION_SECRET: "x".repeat(48),
+      MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
+    });
+
+    expect(config.model).toBe("huggingface/zai-org/GLM-5.2:fireworks-ai");
+  });
+
   it("fails closed when an app deployment has no durable credential key", () => {
     expect(() =>
       loadConfig({

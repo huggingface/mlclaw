@@ -127,7 +127,7 @@ the current presets on 2026-07-10. They are provider-specific and can change.
 
 | Choice | Fixed cost | Variable cost | Notes |
 | --- | ---: | ---: | --- |
-| `huggingface/google/gemma-4-26B-A4B-it:deepinfra` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Default quality target; supports tools |
+| `huggingface/google/gemma-4-26B-A4B-it:deepinfra` | None beyond Space | DeepInfra: $0.07 input / $0.34 output | Lower-cost Gemma option; supports tools |
 | `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra` | None beyond Space | DeepInfra: $0.15 input / $0.95 output | Strong Qwen 3.6 option; supports tools and structured output |
 | `huggingface/Qwen/Qwen3.6-27B:deepinfra` | None beyond Space | DeepInfra: $0.32 input / $3.20 output | Live Qwen 3.6 option; supports tools and structured output |
 | `huggingface/zai-org/GLM-5.2:deepinfra` | None beyond Space | DeepInfra: $0.93 input / $3.00 output | Long-context GLM option; supports tools and structured output |
@@ -137,7 +137,7 @@ the current presets on 2026-07-10. They are provider-specific and can change.
 | `huggingface/deepseek-ai/DeepSeek-V4-Flash:deepinfra` | None beyond Space | DeepInfra: $0.09 input / $0.18 output | Low-cost long-context DeepSeek V4 option; supports tools and structured output |
 | `huggingface/deepseek-ai/DeepSeek-V4-Pro:deepinfra` | None beyond Space | DeepInfra: $1.30 input / $2.60 output | Higher-quality long-context DeepSeek V4 option; supports tools and structured output |
 | `huggingface/MiniMaxAI/MiniMax-M3:together` | None beyond Space | Together: $0.30 input / $1.20 output | Long-context MiniMax option; supports tools and structured output |
-| `huggingface/zai-org/GLM-5.2:fireworks-ai` | None beyond Space | Fireworks: $1.40 input / $4.40 output | Fireworks alternative; supports tools |
+| `huggingface/zai-org/GLM-5.2:fireworks-ai` | None beyond Space | Fireworks: $1.40 input / $4.40 output | Default long-context model; supports tools |
 | `huggingface/moonshotai/Kimi-K2.7-Code:fireworks-ai` | None beyond Space | Fireworks: $0.95 input / $4.00 output | Fireworks coding alternative; supports tools |
 | `huggingface/openai/gpt-oss-120b:fireworks-ai` | None beyond Space | Fireworks: $0.15 input / $0.60 output | Fireworks GPT-OSS alternative; supports tools |
 | `huggingface/openai/gpt-oss-20b:fireworks-ai` | None beyond Space | Fireworks: $0.07 input / $0.30 output | Fireworks GPT-OSS alternative; supports tools |
@@ -259,14 +259,14 @@ Default:
 
 ```text
 gatewayLocation: local
-model: huggingface/google/gemma-4-26B-A4B-it:deepinfra
+model: huggingface/zai-org/GLM-5.2:fireworks-ai
 provider policy: default/fastest unless the user explicitly chooses cheapest
 ```
 
 Configurable model examples:
 
 ```text
-OPENCLAW_MODEL=huggingface/google/gemma-4-26B-A4B-it:deepinfra
+OPENCLAW_MODEL=huggingface/zai-org/GLM-5.2:fireworks-ai
 OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra
 OPENCLAW_MODEL=huggingface/Qwen/Qwen3.6-27B:deepinfra
 ```

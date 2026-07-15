@@ -129,16 +129,19 @@ function normalizeAssetRef(value, fallback) {
   return normalized;
 }
 
+// src/mlclaw-space-runtime/model-default.ts
+var DEFAULT_MODEL_ID = "zai-org/GLM-5.2";
+var DEFAULT_MODEL_PROVIDER = "fireworks-ai";
+var DEFAULT_MODEL = `huggingface/${DEFAULT_MODEL_ID}:${DEFAULT_MODEL_PROVIDER}`;
+
 // src/mlclaw-space-runtime/model-choices.ts
 var DEFAULT_ROUTER_PROVIDER = "deepinfra";
-var DEFAULT_ROUTER_MODEL_ID = "google/gemma-4-26B-A4B-it";
-var DEFAULT_MODEL = formatOpenClawModelRef(DEFAULT_ROUTER_MODEL_ID, DEFAULT_ROUTER_PROVIDER);
 var PRESET_MODEL_CHOICES = [
   freezeChoice({
     modelId: "google/gemma-4-26B-A4B-it",
     provider: "deepinfra",
     label: "Gemma 4 26B A4B",
-    note: "Default quality target on DeepInfra",
+    note: "Low-cost Gemma preset on DeepInfra",
     contextLength: 262144,
     pricing: { input: 0.07, output: 0.34 },
     supportsTools: true,
@@ -298,7 +301,7 @@ var PRESET_MODEL_CHOICES = [
     modelId: "zai-org/GLM-5.2",
     provider: "fireworks-ai",
     label: "GLM 5.2",
-    note: "Long-context GLM alternative on Fireworks",
+    note: "Default long-context GLM preset on Fireworks",
     contextLength: 1048576,
     pricing: { input: 1.4, output: 4.4 },
     supportsTools: true,

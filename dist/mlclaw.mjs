@@ -15180,6 +15180,11 @@ async function assertNoLiveForeignLease(params) {
   );
 }
 
+// src/mlclaw-space-runtime/model-default.ts
+var DEFAULT_MODEL_ID = "zai-org/GLM-5.2";
+var DEFAULT_MODEL_PROVIDER = "fireworks-ai";
+var DEFAULT_MODEL = `huggingface/${DEFAULT_MODEL_ID}:${DEFAULT_MODEL_PROVIDER}`;
+
 // src/mlclaw/local-config.ts
 import fs13 from "node:fs/promises";
 import os5 from "node:os";
@@ -15319,7 +15324,7 @@ function delay(ms) {
 }
 
 // src/mlclaw/cli.ts
-var DEFAULT_MODEL = "huggingface/google/gemma-4-26B-A4B-it:deepinfra";
+var DEFAULT_MODEL2 = DEFAULT_MODEL;
 var DEFAULT_HARDWARE = "cpu-basic";
 var TELEGRAM_HARDWARE = "cpu-upgrade";
 var TELEGRAM_SLEEP_TIME = -1;
@@ -15367,7 +15372,7 @@ function createProgram(runtimeOverrides = {}) {
   program2.name("mlclaw").description("Deploy OpenClaw to a Hugging Face Space and private bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL).option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Create the Hugging Face Space as public instead of private", false).addOption(new Option("--gateway-token <token>").hideHelp()).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
+  program2.command("bootstrap", { isDefault: true }).description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--telegram-user-id <id>", "Allowed Telegram user ID").option("--telegram-api-root <url>", "Telegram API root override").option("--telegram-proxy <url>", "Telegram proxy URL override").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL2).option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Create the Hugging Face Space as public instead of private", false).addOption(new Option("--gateway-token <token>").hideHelp()).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--docker-context <name>", "Docker context for local gateway mode").option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if a stale runtime lease is present", false).option("--yes", "Confirm paid hardware prompts for automation", false).action(async (opts) => {
     await bootstrap(opts, runtime);
   });
   program2.command("update").description("Regenerate and upload current ML Claw Space files").argument("<owner/space>", "Hugging Face Space repo ID").option("--runtime-image <image>", "Runtime image to write into the generated Space Dockerfile").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--router-token <token>", "Dedicated Hugging Face Router inference token").option("--router-token-file <path>", "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token").option("--force", "Update even if the Space does not look like ML Claw", false).action(async (repoId, opts) => {
@@ -15438,7 +15443,7 @@ async function bootstrap(opts, runtime) {
   const bot = telegramToken ? await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot) : void 0;
   let agentName = slugifyAgentName(opts.name ?? bot?.username ?? await promptAgentName(runtime));
   const telegramUserId = telegramToken ? opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime) : void 0;
-  const model = opts.model ?? DEFAULT_MODEL;
+  const model = opts.model ?? DEFAULT_MODEL2;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
   const templateRuntimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
   let plan;
@@ -16527,7 +16532,7 @@ async function update(repoId, opts, hub, hfToken, runtime) {
     await ensureUpdateRouterToken({
       repoId,
       agentName,
-      model: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL,
+      model: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL2,
       opts,
       hub,
       runtime
@@ -16699,7 +16704,7 @@ async function doctor(repoId, opts, hub, runtime) {
   }
   const staleTokenSecrets = ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].filter((key) => secrets.has(key));
   if (staleTokenSecrets.length > 0) {
-    const model = variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL;
+    const model = variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL2;
     const canDelete = canDeleteBroadTokenSecrets({
       model,
       routerTokenPresent: hasBrokerOrRouterTokenSecretMap(secrets)
@@ -17105,7 +17110,7 @@ export {
   DEFAULT_GATEWAY_LOCATION,
   DEFAULT_HARDWARE,
   DEFAULT_LOCAL_PORT,
-  DEFAULT_MODEL,
+  DEFAULT_MODEL2 as DEFAULT_MODEL,
   DEFAULT_SPACE_OPENCLAW_PORT,
   LOCAL_LIVE_DIR,
   LOCAL_VOLUME_MOUNT_PATH,

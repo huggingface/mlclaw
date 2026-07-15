@@ -302,6 +302,7 @@ describe("mlclaw CLI", () => {
         message: expect.stringContaining("Bucket: alice/research-data (will be created as private)"),
       }),
     ]);
+    expect(notes[0]?.message).toContain("Model: huggingface/zai-org/GLM-5.2:fireworks-ai");
     expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
     expect(hub.calls.some((call) => call.name === "createDockerSpace")).toBe(false);
     expect(runtime.dockerRunner.calls).toContainEqual({

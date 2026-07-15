@@ -1,3 +1,5 @@
+import { DEFAULT_MODEL, DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER } from "./model-default.js";
+
 export type ModelPricing = {
   input?: number;
   output?: number;
@@ -23,15 +25,14 @@ export type ModelChoice = {
 };
 
 export const DEFAULT_ROUTER_PROVIDER = "deepinfra";
-export const DEFAULT_ROUTER_MODEL_ID = "google/gemma-4-26B-A4B-it";
-export const DEFAULT_MODEL = formatOpenClawModelRef(DEFAULT_ROUTER_MODEL_ID, DEFAULT_ROUTER_PROVIDER);
+export { DEFAULT_MODEL, DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER };
 
 export const PRESET_MODEL_CHOICES: ModelChoice[] = [
   freezeChoice({
     modelId: "google/gemma-4-26B-A4B-it",
     provider: "deepinfra",
     label: "Gemma 4 26B A4B",
-    note: "Default quality target on DeepInfra",
+    note: "Low-cost Gemma preset on DeepInfra",
     contextLength: 262144,
     pricing: { input: 0.07, output: 0.34 },
     supportsTools: true,
@@ -191,7 +192,7 @@ export const PRESET_MODEL_CHOICES: ModelChoice[] = [
     modelId: "zai-org/GLM-5.2",
     provider: "fireworks-ai",
     label: "GLM 5.2",
-    note: "Long-context GLM alternative on Fireworks",
+    note: "Default long-context GLM preset on Fireworks",
     contextLength: 1048576,
     pricing: { input: 1.4, output: 4.4 },
     supportsTools: true,

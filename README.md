@@ -86,12 +86,13 @@ Choose a Hugging Face Router model with `--model`:
 ```bash
 npx mlclaw@latest bootstrap \
   --name mlclaw \
-  --model huggingface/google/gemma-4-26B-A4B-it:deepinfra
+  --model huggingface/zai-org/GLM-5.2:fireworks-ai
 ```
 
 Recommended router-compatible options:
 
-- `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: default quality target.
+- `huggingface/zai-org/GLM-5.2:fireworks-ai`: default long-context model with tool support.
+- `huggingface/google/gemma-4-26B-A4B-it:deepinfra`: lower-cost Gemma option with tool and structured-output support.
 - `huggingface/Qwen/Qwen3.6-35B-A3B:deepinfra`: strong Qwen 3.6 option with tool and structured-output support.
 - `huggingface/Qwen/Qwen3.6-27B:deepinfra`: live Qwen 3.6 option with tool and structured-output support.
 - `huggingface/zai-org/GLM-5.2:deepinfra`: long-context GLM option with tool and structured-output support.
@@ -102,10 +103,10 @@ Recommended router-compatible options:
 - `huggingface/deepseek-ai/DeepSeek-V4-Pro:deepinfra`: higher-quality long-context DeepSeek V4 option.
 - `huggingface/MiniMaxAI/MiniMax-M3:together`: long-context MiniMax option with tool and structured-output support.
 
-Fireworks alternatives are also included for GLM 5.2, Kimi K2.7 Code,
-GPT-OSS 120B and 20B, DeepSeek V4 Flash and Pro, and MiniMax M3. Use the
-provider suffix `:fireworks-ai`. The current Router catalog does not expose the
-Gemma 4 or Qwen 3.6 presets through Fireworks.
+Fireworks options are also included for Kimi K2.7 Code, GPT-OSS 120B and 20B,
+DeepSeek V4 Flash and Pro, and MiniMax M3. Use the provider suffix
+`:fireworks-ai`. The current Router catalog does not expose the Gemma 4 or Qwen
+3.6 presets through Fireworks.
 
 ## Optional Telegram
 
