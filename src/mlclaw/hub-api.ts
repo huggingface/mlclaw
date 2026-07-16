@@ -31,6 +31,7 @@ export type SpaceRuntime = {
   volumes?: SpaceVolume[] | null;
 };
 type SpaceInfo = {
+  private?: boolean;
   runtime?: SpaceRuntime | null;
 };
 export type HubCommitFile = { path: string; content: Uint8Array | Buffer };
@@ -158,6 +159,19 @@ export class HubApi {
       }
       throw err;
     }
+  }
+
+  async getSpaceVisibility(repoId: string): Promise<"private" | "public"> {
+    const info = await this.requestJson<SpaceInfo>(`/api/spaces/${repoId}`);
+    return info.private === true ? "private" : "public";
+  }
+
+  async updateSpaceVisibility(repoId: string, visibility: "private" | "public"): Promise<void> {
+    await this.requestJson(`/api/spaces/${repoId}/settings`, {
+      method: "PUT",
+      body: JSON.stringify({ visibility }),
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   async addSpaceVariable(repoId: string, key: string, value: string): Promise<void> {

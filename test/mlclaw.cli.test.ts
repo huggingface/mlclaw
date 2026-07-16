@@ -54,6 +54,7 @@ function createFakeHub(
     spaceRuntime?: SpaceRuntime;
     existingBuckets?: string[];
     existingSpaces?: string[];
+    spaceVisibilities?: Record<string, "private" | "public">;
     createDockerSpaceError?: Error;
     failFirstTombstoneUpload?: boolean;
   } = {},
@@ -68,6 +69,9 @@ function createFakeHub(
   let tombstoneUploadFailed = false;
   const existingBuckets = new Set(opts.existingBuckets ?? []);
   const existingSpaces = new Set(opts.existingSpaces ?? []);
+  const spaceVisibilities = new Map(
+    [...existingSpaces].map((repoId) => [repoId, opts.spaceVisibilities?.[repoId] ?? "private"] as const),
+  );
   const bucketClient = {
     async uploadFiles(files: Array<{ path: string; content: Blob }>) {
       if (
@@ -146,7 +150,10 @@ function createFakeHub(
       if (opts.createDockerSpaceError) {
         throw opts.createDockerSpaceError;
       }
-      existingSpaces.add(String(args[0]));
+      const repoId = String(args[0]);
+      existingSpaces.add(repoId);
+      const options = args[1] as { private?: boolean } | undefined;
+      spaceVisibilities.set(repoId, options?.private === false ? "public" : "private");
     },
     async bucketExists(bucket: string) {
       calls.push({ name: "bucketExists", args: [bucket] });
@@ -174,6 +181,14 @@ function createFakeHub(
     async spaceExists(repoId: string) {
       calls.push({ name: "spaceExists", args: [repoId] });
       return existingSpaces.has(repoId);
+    },
+    async getSpaceVisibility(repoId: string) {
+      calls.push({ name: "getSpaceVisibility", args: [repoId] });
+      return spaceVisibilities.get(repoId) ?? "private";
+    },
+    async updateSpaceVisibility(repoId: string, visibility: "private" | "public") {
+      calls.push({ name: "updateSpaceVisibility", args: [repoId, visibility] });
+      spaceVisibilities.set(repoId, visibility);
     },
     async addSpaceVariable(repoId: string, key: string, value: string) {
       calls.push({ name: "addSpaceVariable", args: [repoId, key, value] });
@@ -597,11 +612,19 @@ describe("mlclaw CLI", () => {
 
     await expect(main(["gateway", "stop", "research"], runtime)).resolves.toBe(0);
     runtime.dockerRunner.calls.length = 0;
+    runtime.tailscaleRunner.discovery = {
+      ready: true,
+      ipv4: "100.100.100.101",
+      dnsName: "gateway.example.ts.net",
+    };
     await expect(main(["gateway", "start", "research", "--no-pull"], runtime)).resolves.toBe(0);
     expect(runtime.dockerRunner.calls.find((call) => call.name === "run")?.args[0]).toMatchObject({
       publishedPorts: expect.arrayContaining([
-        { hostAddress: "100.100.100.100", hostPort: 17860, containerPort: 7860 },
+        { hostAddress: "100.100.100.101", hostPort: 17860, containerPort: 7860 },
       ]),
+    });
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      networkAccess: { provider: "tailscale-direct", ipv4: "100.100.100.101" },
     });
   });
 
@@ -1019,6 +1042,11 @@ describe("mlclaw CLI", () => {
     expect([...hub.bucketObjects.values()].some((value) => value.includes('"state": "waiting_for_approval"'))).toBe(
       true,
     );
+
+    output.length = 0;
+    await expect(main(["gateway", "status", "research"], runtime)).resolves.toBe(0);
+    expect(output).toContain("Tailscale Serve: pending administrator approval");
+    expect(output.some((line) => line.startsWith("Tailnet URL:"))).toBe(false);
 
     await expect(
       main(["--gateway", "local", "--name", "research", "--tailscale=serve", "--no-pull"], runtime),
@@ -2242,6 +2270,49 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "requestSpaceHardware")).toBe(false);
   });
 
+  it("updates an existing private Space when public visibility is requested", async () => {
+    const hub = createFakeHub({ existingSpaces: ["alice/research"] });
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+
+    await expect(main(["bootstrap", "--name", "research", "--public-space", "--yes"], runtime)).resolves.toBe(0);
+
+    expect(hub.calls).toContainEqual({
+      name: "updateSpaceVisibility",
+      args: ["alice/research", "public"],
+    });
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
+      space: { visibility: "public" },
+    });
+  });
+
+  it("preserves the actual visibility of a legacy Space manifest", async () => {
+    const hub = createFakeHub({
+      existingSpaces: ["alice/research"],
+      spaceVisibilities: { "alice/research": "public" },
+    });
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "space",
+      model: DEFAULT_MODEL,
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+
+    expect(hub.calls.some((call) => call.name === "updateSpaceVisibility")).toBe(false);
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
+      space: { visibility: "public" },
+    });
+  });
+
   it("preserves portable Space settings when rerun flags are omitted", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
@@ -2289,6 +2360,21 @@ describe("mlclaw CLI", () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it("persists a newer canonical generation during an unchanged Space bootstrap", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    const desired = JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null") as Record<
+      string,
+      unknown
+    >;
+    hub.bucketObjects.set(".mlclaw/desired-state.json", JSON.stringify({ ...desired, generation: 7 }));
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({ desiredGeneration: 7 });
   });
 
   it("applies rotated credentials to an unchanged Space without redeploying it", async () => {

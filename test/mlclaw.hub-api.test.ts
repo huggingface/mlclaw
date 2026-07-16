@@ -124,6 +124,42 @@ describe("HubApi Space commits", () => {
     });
   });
 
+  it("reads and updates Space visibility through the settings API", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const hub = new HubApi({
+      token: "hf_test_token",
+      fetch: async (url, init) => {
+        const request = { url: String(url), init: init ?? {} };
+        requests.push(request);
+        if (request.url.endsWith("/api/spaces/alice/research")) {
+          return Response.json({ private: false });
+        }
+        return Response.json({});
+      },
+    });
+
+    await expect(hub.getSpaceVisibility("alice/research")).resolves.toBe("public");
+    await hub.updateSpaceVisibility("alice/research", "private");
+
+    expect(requests).toEqual([
+      {
+        url: "https://huggingface.co/api/spaces/alice/research",
+        init: expect.objectContaining({ headers: { Authorization: "Bearer hf_test_token" } }),
+      },
+      {
+        url: "https://huggingface.co/api/spaces/alice/research/settings",
+        init: expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ visibility: "private" }),
+          headers: {
+            Authorization: "Bearer hf_test_token",
+            "Content-Type": "application/json",
+          },
+        }),
+      },
+    ]);
+  });
+
   it("uploads files and deletes stale paths through the commit API", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const hub = new HubApi({

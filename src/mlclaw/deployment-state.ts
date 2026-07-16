@@ -282,10 +282,9 @@ export async function withDeploymentLock<T>(root: string, deploymentId: string, 
     await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    if (!(await reclaimDeadLocalLock(file))) {
+    if (!(await replaceStaleLocalLock(file, lock))) {
       throw new Error(`deployment ${deploymentId} is already being reconciled on this host`);
     }
-    await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   }
   let heartbeat = Promise.resolve();
   const heartbeatTimer = setInterval(() => {
@@ -301,7 +300,14 @@ export async function withDeploymentLock<T>(root: string, deploymentId: string, 
   }
 }
 
-async function reclaimDeadLocalLock(file: string): Promise<boolean> {
+async function replaceStaleLocalLock(file: string, replacement: string): Promise<boolean> {
+  const guard = `${file}.reclaim`;
+  try {
+    await fs.mkdir(guard);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
   try {
     const [raw, stat] = await Promise.all([fs.readFile(file, "utf8"), fs.stat(file)]);
     const value = JSON.parse(raw) as { pid?: unknown; host?: unknown; createdAt?: unknown };
@@ -310,9 +316,12 @@ async function reclaimDeadLocalLock(file: string): Promise<boolean> {
     const lastRefresh = Number.isFinite(createdAt) ? Math.max(createdAt, stat.mtimeMs) : stat.mtimeMs;
     if (processIsAlive(value.pid) && Date.now() - lastRefresh <= LOCAL_LOCK_STALE_MS) return false;
     await fs.rm(file);
+    await fs.writeFile(file, replacement, { flag: "wx", mode: 0o600 });
     return true;
   } catch {
     return false;
+  } finally {
+    await fs.rm(guard, { recursive: true, force: true });
   }
 }
 

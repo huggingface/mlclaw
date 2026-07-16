@@ -207,6 +207,7 @@ type BootstrapSpacePlan = {
   space: string;
   exists: boolean;
   visibility: "private" | "public";
+  currentVisibility?: "private" | "public";
 };
 
 type SpaceHardwareRequest =
@@ -839,6 +840,8 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
           } else {
             runtime.stdout.log(`Space deployment already matches desired state: ${activePlan.manifest.space}`);
           }
+          await assertLease();
+          await writeManifest(runtime.configRoot, activePlan.manifest);
           return;
         }
         await assertLease();
@@ -1226,14 +1229,17 @@ async function resolveBootstrapPlan(params: {
     existingSecrets,
     model,
   });
-  const spacePlan =
-    gatewayLocation === "space"
-      ? {
-          space: names.space,
-          exists: await hub.spaceExists(names.space),
-          visibility: opts.publicSpace ? ("public" as const) : (existingManifest?.spaceVisibility ?? "private"),
-        }
-      : undefined;
+  let spacePlan: BootstrapSpacePlan | undefined;
+  if (gatewayLocation === "space") {
+    const exists = await hub.spaceExists(names.space);
+    const currentVisibility = exists ? await hub.getSpaceVisibility(names.space) : undefined;
+    spacePlan = {
+      space: names.space,
+      exists,
+      visibility: opts.publicSpace ? "public" : (existingManifest?.spaceVisibility ?? currentVisibility ?? "private"),
+      ...(currentVisibility ? { currentVisibility } : {}),
+    };
+  }
 
   const effectiveModel = opts.model ?? existingManifest?.model ?? model;
   const effectiveRuntimeImage = opts.runtimeImage ? runtimeImage : (existingManifest?.runtimeImage ?? runtimeImage);
@@ -1575,6 +1581,9 @@ async function createOrAdoptSpace(params: {
 }): Promise<void> {
   if (params.spacePlan.exists) {
     params.runtime.stdout.log(`Updating existing Space ${params.spacePlan.space}`);
+    if (params.spacePlan.currentVisibility !== params.spacePlan.visibility) {
+      await params.hub.updateSpaceVisibility(params.spacePlan.space, params.spacePlan.visibility);
+    }
     return;
   }
   params.runtime.stdout.log(`Creating ${params.spacePlan.visibility} Space ${params.spacePlan.space}`);
@@ -2228,6 +2237,7 @@ async function startLocalGateway(params: {
 }): Promise<void> {
   const { manifest, runtime } = params;
   const assertLease = params.assertLease ?? (async () => undefined);
+  await refreshDirectNetworkAccess(manifest, runtime);
   if (manifest.networkAccess?.enabled) {
     assertLocalNetworkAccessHost(manifest);
   }
@@ -2494,7 +2504,7 @@ async function gatewayStatus(agent: string, runtime: Required<CliRuntime>): Prom
       }
     }
     runtime.stdout.log(`Gateway URL: ${localGatewayAccessUrl(manifest, secrets)}`);
-    if (manifest.networkAccess?.enabled) {
+    if (manifest.networkAccess?.enabled && !networkAccessPendingApproval(manifest.networkAccess)) {
       runtime.stdout.log(`Tailnet URL: ${networkAccessUrl(manifest.networkAccess, manifest.agent, secrets)}`);
       if (manifest.networkAccess.provider === "tailscale-direct") {
         runtime.stdout.log(`Tailscale direct: ${manifest.networkAccess.ipv4}:${manifest.networkAccess.port}`);
@@ -2509,6 +2519,8 @@ async function gatewayStatus(agent: string, runtime: Required<CliRuntime>): Prom
           );
         }
       }
+    } else if (manifest.networkAccess && networkAccessPendingApproval(manifest.networkAccess)) {
+      runtime.stdout.log("Tailscale Serve: pending administrator approval");
     }
     runtime.stdout.log(localGatewayRemoteAccess(manifest));
     const inspect = await localRunnerFor(manifest, runtime).inspect(
@@ -2989,6 +3001,22 @@ function networkAccessMode(binding: NetworkAccessBinding | undefined): Tailscale
 
 function networkAccessPendingApproval(binding: NetworkAccessBinding): boolean {
   return binding.provider === "tailscale-serve" && binding.pendingApproval === true;
+}
+
+async function refreshDirectNetworkAccess(manifest: DeploymentManifest, runtime: Required<CliRuntime>): Promise<void> {
+  const binding = manifest.networkAccess;
+  if (binding?.provider !== "tailscale-direct" || !binding.enabled) return;
+  assertLocalNetworkAccessHost(manifest);
+  const discovery = await runtime.tailscaleRunner.discover();
+  if (!discovery.ready) throw new Error(discovery.reason);
+  manifest.networkAccess = {
+    provider: "tailscale-direct",
+    enabled: true,
+    ipv4: discovery.ipv4,
+    ...(discovery.dnsName ? { dnsName: discovery.dnsName } : {}),
+    port: binding.port,
+    accessOrigin: `http://${discovery.ipv4}:${binding.port}`,
+  };
 }
 
 function networkAccessPort(binding: NetworkAccessBinding | undefined): number | undefined {

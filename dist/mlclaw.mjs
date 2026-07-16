@@ -14991,6 +14991,17 @@ var HubApi = class {
       throw err;
     }
   }
+  async getSpaceVisibility(repoId) {
+    const info = await this.requestJson(`/api/spaces/${repoId}`);
+    return info.private === true ? "private" : "public";
+  }
+  async updateSpaceVisibility(repoId, visibility) {
+    await this.requestJson(`/api/spaces/${repoId}/settings`, {
+      method: "PUT",
+      body: JSON.stringify({ visibility }),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
   async addSpaceVariable(repoId, key, value) {
     await this.requestJson(`/api/spaces/${repoId}/variables`, {
       method: "POST",
@@ -20089,10 +20100,9 @@ async function withDeploymentLock(root, deploymentId, task) {
     await fs15.writeFile(file, lock, { flag: "wx", mode: 384 });
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
-    if (!await reclaimDeadLocalLock(file)) {
+    if (!await replaceStaleLocalLock(file, lock)) {
       throw new Error(`deployment ${deploymentId} is already being reconciled on this host`);
     }
-    await fs15.writeFile(file, lock, { flag: "wx", mode: 384 });
   }
   let heartbeat = Promise.resolve();
   const heartbeatTimer = setInterval(() => {
@@ -20107,7 +20117,14 @@ async function withDeploymentLock(root, deploymentId, task) {
     await removeOwnedLocalLock(file, token);
   }
 }
-async function reclaimDeadLocalLock(file) {
+async function replaceStaleLocalLock(file, replacement) {
+  const guard = `${file}.reclaim`;
+  try {
+    await fs15.mkdir(guard);
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
   try {
     const [raw, stat] = await Promise.all([fs15.readFile(file, "utf8"), fs15.stat(file)]);
     const value = JSON.parse(raw);
@@ -20116,9 +20133,12 @@ async function reclaimDeadLocalLock(file) {
     const lastRefresh = Number.isFinite(createdAt) ? Math.max(createdAt, stat.mtimeMs) : stat.mtimeMs;
     if (processIsAlive(value.pid) && Date.now() - lastRefresh <= LOCAL_LOCK_STALE_MS) return false;
     await fs15.rm(file);
+    await fs15.writeFile(file, replacement, { flag: "wx", mode: 384 });
     return true;
   } catch {
     return false;
+  } finally {
+    await fs15.rm(guard, { recursive: true, force: true });
   }
 }
 async function refreshOwnedLocalLock(file, token) {
@@ -20856,6 +20876,8 @@ async function bootstrap(opts, runtime) {
           } else {
             runtime.stdout.log(`Space deployment already matches desired state: ${activePlan.manifest.space}`);
           }
+          await assertLease();
+          await writeManifest(runtime.configRoot, activePlan.manifest);
           return;
         }
         await assertLease();
@@ -21168,11 +21190,17 @@ async function resolveBootstrapPlan(params) {
     existingSecrets,
     model
   });
-  const spacePlan = gatewayLocation === "space" ? {
-    space: names.space,
-    exists: await hub.spaceExists(names.space),
-    visibility: opts.publicSpace ? "public" : existingManifest?.spaceVisibility ?? "private"
-  } : void 0;
+  let spacePlan;
+  if (gatewayLocation === "space") {
+    const exists = await hub.spaceExists(names.space);
+    const currentVisibility = exists ? await hub.getSpaceVisibility(names.space) : void 0;
+    spacePlan = {
+      space: names.space,
+      exists,
+      visibility: opts.publicSpace ? "public" : existingManifest?.spaceVisibility ?? currentVisibility ?? "private",
+      ...currentVisibility ? { currentVisibility } : {}
+    };
+  }
   const effectiveModel = opts.model ?? existingManifest?.model ?? model;
   const effectiveRuntimeImage = opts.runtimeImage ? runtimeImage : existingManifest?.runtimeImage ?? runtimeImage;
   const manifest = {
@@ -21445,6 +21473,9 @@ async function createOrAdoptBucket(params) {
 async function createOrAdoptSpace(params) {
   if (params.spacePlan.exists) {
     params.runtime.stdout.log(`Updating existing Space ${params.spacePlan.space}`);
+    if (params.spacePlan.currentVisibility !== params.spacePlan.visibility) {
+      await params.hub.updateSpaceVisibility(params.spacePlan.space, params.spacePlan.visibility);
+    }
     return;
   }
   params.runtime.stdout.log(`Creating ${params.spacePlan.visibility} Space ${params.spacePlan.space}`);
@@ -21958,6 +21989,7 @@ async function deploySpaceGateway(params) {
 async function startLocalGateway(params) {
   const { manifest, runtime } = params;
   const assertLease = params.assertLease ?? (async () => void 0);
+  await refreshDirectNetworkAccess(manifest, runtime);
   if (manifest.networkAccess?.enabled) {
     assertLocalNetworkAccessHost(manifest);
   }
@@ -22209,7 +22241,7 @@ async function gatewayStatus(agent, runtime) {
       }
     }
     runtime.stdout.log(`Gateway URL: ${localGatewayAccessUrl(manifest, secrets)}`);
-    if (manifest.networkAccess?.enabled) {
+    if (manifest.networkAccess?.enabled && !networkAccessPendingApproval(manifest.networkAccess)) {
       runtime.stdout.log(`Tailnet URL: ${networkAccessUrl(manifest.networkAccess, manifest.agent, secrets)}`);
       if (manifest.networkAccess.provider === "tailscale-direct") {
         runtime.stdout.log(`Tailscale direct: ${manifest.networkAccess.ipv4}:${manifest.networkAccess.port}`);
@@ -22224,6 +22256,8 @@ async function gatewayStatus(agent, runtime) {
           );
         }
       }
+    } else if (manifest.networkAccess && networkAccessPendingApproval(manifest.networkAccess)) {
+      runtime.stdout.log("Tailscale Serve: pending administrator approval");
     }
     runtime.stdout.log(localGatewayRemoteAccess(manifest));
     const inspect = await localRunnerFor(manifest, runtime).inspect(
@@ -22638,6 +22672,21 @@ function networkAccessMode(binding) {
 }
 function networkAccessPendingApproval(binding) {
   return binding.provider === "tailscale-serve" && binding.pendingApproval === true;
+}
+async function refreshDirectNetworkAccess(manifest, runtime) {
+  const binding = manifest.networkAccess;
+  if (binding?.provider !== "tailscale-direct" || !binding.enabled) return;
+  assertLocalNetworkAccessHost(manifest);
+  const discovery = await runtime.tailscaleRunner.discover();
+  if (!discovery.ready) throw new Error(discovery.reason);
+  manifest.networkAccess = {
+    provider: "tailscale-direct",
+    enabled: true,
+    ipv4: discovery.ipv4,
+    ...discovery.dnsName ? { dnsName: discovery.dnsName } : {},
+    port: binding.port,
+    accessOrigin: `http://${discovery.ipv4}:${binding.port}`
+  };
 }
 function networkAccessPort(binding) {
   if (!binding) return void 0;

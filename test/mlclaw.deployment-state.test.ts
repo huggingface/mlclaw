@@ -170,4 +170,42 @@ describe("deployment state", () => {
 
     await expect(withDeploymentLock(root, manifest.deploymentId, async () => "reclaimed")).resolves.toBe("reclaimed");
   });
+
+  it("allows only one concurrent claimant to replace a stale local lock", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-racing-stale-lock-"));
+    const lock = path.join(localConfigPaths(root).locksDir, `${manifest.deploymentId}.lock`);
+    await fs.mkdir(path.dirname(lock), { recursive: true });
+    await fs.writeFile(lock, JSON.stringify({ pid: 2_000_000_000, host: os.hostname() }));
+    let entrants = 0;
+    let releaseWinner: () => void = () => undefined;
+    const winnerGate = new Promise<void>((resolve) => {
+      releaseWinner = resolve;
+    });
+    let announceWinner: () => void = () => undefined;
+    const winnerEntered = new Promise<void>((resolve) => {
+      announceWinner = resolve;
+    });
+    const claim = () =>
+      withDeploymentLock(root, manifest.deploymentId, async () => {
+        entrants += 1;
+        announceWinner();
+        await winnerGate;
+        return "reclaimed";
+      });
+
+    const claims = [claim(), claim()].map((candidate) =>
+      candidate.then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason: unknown) => ({ status: "rejected" as const, reason }),
+      ),
+    );
+    await winnerEntered;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    releaseWinner();
+    const results = await Promise.all(claims);
+
+    expect(entrants).toBe(1);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
 });
