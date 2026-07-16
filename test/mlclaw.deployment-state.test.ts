@@ -151,4 +151,23 @@ describe("deployment state", () => {
     await fs.writeFile(lock, JSON.stringify({ pid: 2_000_000_000, host: os.hostname() }));
     await expect(withDeploymentLock(root, manifest.deploymentId, async () => "reclaimed")).resolves.toBe("reclaimed");
   });
+
+  it("reclaims an expired same-host lock even when its PID was reused", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-reused-pid-lock-"));
+    const lock = path.join(localConfigPaths(root).locksDir, `${manifest.deploymentId}.lock`);
+    await fs.mkdir(path.dirname(lock), { recursive: true });
+    await fs.writeFile(
+      lock,
+      JSON.stringify({
+        pid: process.pid,
+        host: os.hostname(),
+        token: "stale-owner",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    );
+    const stale = new Date("2020-01-01T00:00:00.000Z");
+    await fs.utimes(lock, stale, stale);
+
+    await expect(withDeploymentLock(root, manifest.deploymentId, async () => "reclaimed")).resolves.toBe("reclaimed");
+  });
 });

@@ -692,7 +692,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
 
   const model = opts.model ?? DEFAULT_MODEL;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
-  const templateRuntimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
+  resolveSpaceRuntimeImage(opts, runtime.env);
 
   let plan: BootstrapResolvedPlan;
   for (;;) {
@@ -806,10 +806,27 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       });
       await reconcileDeployment(activePlan, hub, runtime, async (changed, assertLease) => {
         if (!changed) {
-          const [spaceRuntime, variables] = await Promise.all([
+          const [spaceRuntime, variables, previousSecrets] = await Promise.all([
             hub.getSpaceRuntime(activePlan.manifest.space),
             hub.getSpaceVariables(activePlan.manifest.space),
+            readSecretEnv(runtime.configRoot, activePlan.agentName).catch(() => ({})),
           ]);
+          const secretsChanged = JSON.stringify(previousSecrets) !== JSON.stringify(activePlan.secrets);
+          if (secretsChanged) {
+            await assertLease();
+            await setSpaceGatewaySecrets(hub, activePlan.manifest.space, hfToken, activePlan.secrets);
+            if (
+              canDeleteBroadTokenSecrets({
+                model: activePlan.manifest.model,
+                routerTokenPresent: hasBrokerOrRouterTokenSecretRecord(activePlan.secrets),
+              })
+            ) {
+              await assertLease();
+              await deleteStaleSpaceTokenSecrets(hub, activePlan.manifest.space);
+            }
+            await assertLease();
+            await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
+          }
           const stage = typeof spaceRuntime.stage === "string" ? spaceRuntime.stage.toUpperCase() : "";
           const disabled = variables.has("MLCLAW_GATEWAY_DISABLED");
           const stopped = disabled || stage === "PAUSED" || stage === "STOPPED" || stage === "SLEEPING";
@@ -837,7 +854,9 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
           assertLease,
           ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
           ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
-          ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
+          ...(!opts.bundledRuntime && !activePlan.manifest.runtimeImage.startsWith("bundled:")
+            ? { templateRuntimeImage: activePlan.manifest.runtimeImage }
+            : {}),
         });
         deployedSpaceRuntime = deployed.runtimeImage;
         await assertLease();
@@ -936,14 +955,21 @@ type ReconcileManifestContext = {
   assertLease: () => Promise<void>;
 };
 
+type ReconcileManifestFinalizer = (context: {
+  manifest: DeploymentManifest;
+  assertLease: () => Promise<void>;
+}) => Promise<DeploymentManifest | void>;
+
 async function reconcileManifest(params: {
   manifest: DeploymentManifest;
   bucketPrefix?: string | undefined;
   visibility?: "private" | "public" | undefined;
   credentialKey?: string | undefined;
+  previousIdentityBucket?: string | undefined;
   hub: HubApi;
   runtime: Required<CliRuntime>;
   apply: (context: ReconcileManifestContext) => Promise<{ waitingForApproval?: string } | void>;
+  finalize?: ReconcileManifestFinalizer;
 }): Promise<{ manifest: DeploymentManifest; waitingForApproval?: string }> {
   const { hub, runtime } = params;
   return await withDeploymentLock(runtime.configRoot, params.manifest.deploymentId, async () => {
@@ -956,8 +982,19 @@ async function reconcileManifest(params: {
       );
     }
     const currentIdentity = await readDeploymentIdentity(client);
-    if (currentIdentity && currentIdentity.deploymentId !== requestedManifest.deploymentId) {
-      throw new Error(`bucket ${requestedManifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+    const identityMatches =
+      currentIdentity?.deploymentId === requestedManifest.deploymentId &&
+      currentIdentity.owner === requestedManifest.owner &&
+      currentIdentity.agent === requestedManifest.agent &&
+      currentIdentity.bucket === requestedManifest.bucket;
+    const permittedBucketTransition =
+      currentIdentity?.deploymentId === requestedManifest.deploymentId &&
+      currentIdentity.owner === requestedManifest.owner &&
+      currentIdentity.agent === requestedManifest.agent &&
+      currentIdentity.bucket === params.previousIdentityBucket &&
+      currentIdentity.bucket !== requestedManifest.bucket;
+    if (currentIdentity && !identityMatches && !permittedBucketTransition) {
+      throw new Error(`bucket ${requestedManifest.bucket} has a different canonical deployment identity`);
     }
     if (currentIdentity) {
       if (
@@ -1018,7 +1055,7 @@ async function reconcileManifest(params: {
       ? currentDesired.generation
       : (interruptedOperation?.targetGeneration ??
         Math.max(currentDesired?.generation ?? 0, requestedManifest.desiredGeneration) + 1);
-    const manifest: DeploymentManifest = {
+    let manifest: DeploymentManifest = {
       ...requestedManifest,
       spaceVisibility: visibility,
       desiredGeneration: generation,
@@ -1053,10 +1090,10 @@ async function reconcileManifest(params: {
       await assertLease();
       const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
       await assertLease();
-      if (!sameDesired || !currentIdentity) {
+      if (!sameDesired || !identityMatches) {
         await writeCanonicalState(
           client,
-          currentIdentity ?? deploymentIdentity(manifest, params.bucketPrefix),
+          identityMatches ? currentIdentity : deploymentIdentity(manifest, params.bucketPrefix),
           deploymentDesiredState(manifest, visibility),
         );
         await assertLease();
@@ -1071,6 +1108,11 @@ async function reconcileManifest(params: {
       const verified = await readDesiredState(client);
       if (verified?.deploymentId !== manifest.deploymentId || verified.generation !== generation) {
         throw new Error("canonical deployment state could not be verified after reconciliation");
+      }
+      if (params.finalize) {
+        await assertLease();
+        manifest = (await params.finalize({ manifest, assertLease })) ?? manifest;
+        await assertLease();
       }
       await writeOperationState("completed");
       return { manifest };
@@ -1699,6 +1741,7 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
   const reconciled = await reconcileManifest({
     manifest: updated,
     bucketPrefix,
+    ...(updated.pendingTombstoneBucket ? { previousIdentityBucket: updated.pendingTombstoneBucket } : {}),
     hub,
     runtime,
     apply: async ({ manifest: targetManifest, assertLease }) => {
@@ -1769,15 +1812,22 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
         runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
       }
     },
+    finalize: async ({ manifest, assertLease }) => {
+      if (!manifest.pendingTombstoneBucket) return;
+      await assertLease();
+      await writeDeploymentTombstone(
+        hub.bucket(manifest.pendingTombstoneBucket),
+        current.deploymentId,
+        bucket,
+        runtime.now(),
+      );
+      const { pendingTombstoneBucket: _completed, ...completed } = manifest;
+      await assertLease();
+      await writeManifest(runtime.configRoot, completed);
+      return completed;
+    },
   });
   updated = reconciled.manifest;
-  const pendingTombstoneBucket = updated.pendingTombstoneBucket;
-  if (pendingTombstoneBucket) {
-    await writeDeploymentTombstone(hub.bucket(pendingTombstoneBucket), current.deploymentId, bucket, runtime.now());
-    const { pendingTombstoneBucket: _completed, ...completed } = updated;
-    updated = completed;
-    await writeManifest(runtime.configRoot, updated);
-  }
   runtime.stdout.log(`State bucket: ${bucket}`);
 }
 
@@ -1966,6 +2016,7 @@ async function deployLocalBootstrap(
           localConnectionFor(previousManifest),
         )
       : null;
+  const runtimeImageDrift = Boolean(previousContainer?.image && previousContainer.image !== plan.manifest.runtimeImage);
   const networkAccessChanged =
     JSON.stringify(previousManifest?.networkAccess) !== JSON.stringify(plan.manifest.networkAccess);
   const previousNetworkState =
@@ -1986,7 +2037,7 @@ async function deployLocalBootstrap(
       manifest: plan.manifest,
       runtime,
       pull: shouldPull(opts),
-      refresh: desiredChanged || JSON.stringify(previousSecrets) !== JSON.stringify(plan.secrets),
+      refresh: desiredChanged || runtimeImageDrift || JSON.stringify(previousSecrets) !== JSON.stringify(plan.secrets),
       existing: previousContainer,
       assertLease,
     });
@@ -2150,16 +2201,7 @@ async function deploySpaceGateway(params: {
   await assertLease();
   await clearSpaceGatewayDisabled(hub, manifest.space);
   await assertLease();
-  await setDeploymentSecrets(hub, manifest.space, {
-    MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
-    MLCLAW_CREDENTIAL_KEY: requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY"),
-    MLCLAW_BROKER_HF_TOKEN: hfToken,
-    ...(secrets.MLCLAW_ROUTER_TOKEN ? { MLCLAW_ROUTER_TOKEN: secrets.MLCLAW_ROUTER_TOKEN } : {}),
-    ...(secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {}),
-    ...(secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {}),
-    ...(secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {}),
-    ...(secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}),
-  });
+  await setSpaceGatewaySecrets(hub, manifest.space, hfToken, secrets);
   if (
     canDeleteBroadTokenSecrets({
       model: manifest.model,
@@ -3911,6 +3953,24 @@ async function setDeploymentSecrets(hub: HubApi, repoId: string, secrets: Record
   for (const [key, value] of Object.entries(secrets)) {
     await hub.addSpaceSecret(repoId, key, value);
   }
+}
+
+async function setSpaceGatewaySecrets(
+  hub: HubApi,
+  repoId: string,
+  hfToken: string,
+  secrets: Record<string, string>,
+): Promise<void> {
+  await setDeploymentSecrets(hub, repoId, {
+    MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
+    MLCLAW_CREDENTIAL_KEY: requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY"),
+    MLCLAW_BROKER_HF_TOKEN: hfToken,
+    ...(secrets.MLCLAW_ROUTER_TOKEN ? { MLCLAW_ROUTER_TOKEN: secrets.MLCLAW_ROUTER_TOKEN } : {}),
+    ...(secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {}),
+    ...(secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {}),
+    ...(secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {}),
+    ...(secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}),
+  });
 }
 
 async function deleteStaleSpaceTokenSecrets(hub: HubApi, repoId: string): Promise<void> {

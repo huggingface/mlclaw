@@ -11,6 +11,8 @@ export const DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 export const DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
 export const TOMBSTONE_PATH = ".mlclaw/tombstone.json";
 const MAX_CONTROL_BYTES = 64 * 1024;
+const LOCAL_LOCK_HEARTBEAT_MS = 30_000;
+const LOCAL_LOCK_STALE_MS = 5 * 60_000;
 
 const identitySchema = z
   .object({
@@ -274,7 +276,8 @@ export async function readResumableOperation(
 export async function withDeploymentLock<T>(root: string, deploymentId: string, task: () => Promise<T>): Promise<T> {
   const file = path.join(localConfigPaths(root).locksDir, `${deploymentId}.lock`);
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const lock = stringify({ pid: process.pid, host: os.hostname(), createdAt: new Date().toISOString() });
+  const token = randomUUID();
+  const lock = stringify({ pid: process.pid, host: os.hostname(), token, createdAt: new Date().toISOString() });
   try {
     await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   } catch (error) {
@@ -284,19 +287,49 @@ export async function withDeploymentLock<T>(root: string, deploymentId: string, 
     }
     await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   }
+  let heartbeat = Promise.resolve();
+  const heartbeatTimer = setInterval(() => {
+    heartbeat = heartbeat.then(async () => await refreshOwnedLocalLock(file, token)).catch(() => undefined);
+  }, LOCAL_LOCK_HEARTBEAT_MS);
+  heartbeatTimer.unref();
   try {
     return await task();
   } finally {
-    await fs.rm(file, { force: true });
+    clearInterval(heartbeatTimer);
+    await heartbeat;
+    await removeOwnedLocalLock(file, token);
   }
 }
 
 async function reclaimDeadLocalLock(file: string): Promise<boolean> {
   try {
-    const value = JSON.parse(await fs.readFile(file, "utf8")) as { pid?: unknown; host?: unknown };
-    if (value.host !== os.hostname() || typeof value.pid !== "number" || processIsAlive(value.pid)) return false;
+    const [raw, stat] = await Promise.all([fs.readFile(file, "utf8"), fs.stat(file)]);
+    const value = JSON.parse(raw) as { pid?: unknown; host?: unknown; createdAt?: unknown };
+    if (value.host !== os.hostname() || typeof value.pid !== "number") return false;
+    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : Number.NaN;
+    const lastRefresh = Number.isFinite(createdAt) ? Math.max(createdAt, stat.mtimeMs) : stat.mtimeMs;
+    if (processIsAlive(value.pid) && Date.now() - lastRefresh <= LOCAL_LOCK_STALE_MS) return false;
     await fs.rm(file);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function refreshOwnedLocalLock(file: string, token: string): Promise<void> {
+  if (!(await localLockHasToken(file, token))) return;
+  const now = new Date();
+  await fs.utimes(file, now, now);
+}
+
+async function removeOwnedLocalLock(file: string, token: string): Promise<void> {
+  if (await localLockHasToken(file, token)) await fs.rm(file, { force: true });
+}
+
+async function localLockHasToken(file: string, token: string): Promise<boolean> {
+  try {
+    const value = JSON.parse(await fs.readFile(file, "utf8")) as { token?: unknown };
+    return value.token === token;
   } catch {
     return false;
   }

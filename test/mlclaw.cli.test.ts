@@ -1456,6 +1456,29 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("recreates a local gateway when its running image drifts from desired state", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([]).prompt);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    runtime.dockerRunner.inspectValue = {
+      exists: true,
+      running: true,
+      status: "running",
+      image: "registry.example/mlclaw:drifted",
+    };
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main(["bootstrap", "--name", "research", "--no-pull"], runtime)).resolves.toBe(0);
+
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "rm")).toBe(true);
+    expect(runtime.dockerRunner.calls).toContainEqual({
+      name: "run",
+      args: [expect.objectContaining({ image: DEFAULT_RUNTIME_IMAGE })],
+    });
+  });
+
   it("resumes an interrupted target generation without applying a new generation", async () => {
     const hub = createFakeHub();
     const runtime = await createRuntime(hub, createPrompt([]).prompt);
@@ -1535,6 +1558,23 @@ describe("mlclaw CLI", () => {
 
     expect(errors.join("\n")).toContain("was moved to alice/research-archive-data and cannot be reconciled");
     expect(runtime.dockerRunner.calls.some((call) => call.name === "stop")).toBe(false);
+  });
+
+  it("refuses to reconcile a bucket through a different owner identity", async () => {
+    const hub = createFakeHub();
+    const errors: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([]).prompt, errors);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(
+      main(["bootstrap", "--gateway", "local", "--name", "research", "--owner", "research-org", "--no-pull"], runtime),
+    ).resolves.toBe(1);
+
+    expect(errors.join("\n")).toContain("different canonical deployment identity");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
 
   it("does not rewrite local config when bootstrap is blocked by a live Space lease", async () => {
@@ -2249,6 +2289,54 @@ describe("mlclaw CLI", () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it("applies rotated credentials to an unchanged Space without redeploying it", async () => {
+    const hub = createFakeHub();
+    const baseRuntime = await createRuntime(hub, createPrompt([], false).prompt);
+    let pushes = 0;
+    const runtime = {
+      ...baseRuntime,
+      pushTemplateToSpace: async () => {
+        pushes += 1;
+        return { templateRev: "test-template" };
+      },
+    };
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    pushes = 0;
+    hub.calls.length = 0;
+
+    await expect(main(["bootstrap", "--yes", "--router-token", "hf_router_rotated"], runtime)).resolves.toBe(0);
+
+    expect(pushes).toBe(0);
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router_rotated"],
+    });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      MLCLAW_ROUTER_TOKEN: "hf_router_rotated",
+    });
+  });
+
+  it("preserves a deployment's custom runtime image during a Space update", async () => {
+    const hub = createFakeHub();
+    const baseRuntime = await createRuntime(hub, createPrompt([], false).prompt);
+    const pushed: Array<string | undefined> = [];
+    const runtime = {
+      ...baseRuntime,
+      pushTemplateToSpace: async (params: { runtimeImage?: string }) => {
+        pushed.push(params.runtimeImage);
+        return { templateRev: "test-template" };
+      },
+    };
+    await expect(
+      main(["bootstrap", "--name", "research", "--runtime-image", "registry.example/mlclaw:custom", "--yes"], runtime),
+    ).resolves.toBe(0);
+    pushed.length = 0;
+
+    await expect(main(["bootstrap", "--model", "example/provider-model", "--yes"], runtime)).resolves.toBe(0);
+
+    expect(pushed).toEqual(["registry.example/mlclaw:custom"]);
   });
 
   it("restarts a paused Space during an unchanged bootstrap", async () => {
