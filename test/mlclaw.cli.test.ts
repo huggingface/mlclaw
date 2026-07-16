@@ -595,6 +595,35 @@ describe("mlclaw CLI", () => {
     expect(hub.bucketObjects.get(".mlclaw/desired-state.json")).not.toContain("hf_test_token");
   });
 
+  it("preserves an organization owner when selecting its only local deployment", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const runtime = await createRuntime(hub, prompt);
+    await expect(
+      main(
+        [
+          "--gateway",
+          "local",
+          "--owner",
+          "research-org",
+          "--name",
+          "research",
+          "--gateway-token",
+          "gateway-token",
+          "--no-pull",
+        ],
+        runtime,
+      ),
+    ).resolves.toBe(0);
+
+    await expect(main(["--gateway", "local", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      owner: "research-org",
+      bucket: "research-org/research-data",
+      space: "research-org/research",
+    });
+  });
+
   it("recovers the only trusted remote deployment when local state is absent", async () => {
     const hub = createFakeHub({ existingBuckets: ["alice/research-data"] });
     hub.bucketObjects.set(
@@ -616,15 +645,25 @@ describe("mlclaw CLI", () => {
         deploymentId: "33333333-3333-5333-a333-333333333333",
         generation: 2,
         updatedAt: "2026-07-16T00:10:00.000Z",
-        gateway: { location: "local", port: 7860, tailscaleMode: "off" },
+        gateway: { location: "local", port: 7860, tailscaleMode: "direct" },
         model: DEFAULT_MODEL,
         runtimeImage: DEFAULT_RUNTIME_IMAGE,
-        space: { repo: "alice/research", visibility: "private" },
+        space: {
+          repo: "alice/research",
+          visibility: "public",
+          hardware: "cpu-upgrade",
+          sleepTime: -1,
+        },
       }),
     );
     const { prompt } = createPrompt([true]);
     const runtime = await createRuntime(hub, prompt);
     runtime.dockerRunner.contexts.clear();
+    runtime.tailscaleRunner.discovery = {
+      ready: true,
+      ipv4: "100.100.100.100",
+      dnsName: "gateway.example.ts.net",
+    };
 
     await expect(main(["--gateway", "local", "--no-pull"], runtime)).resolves.toBe(0);
     await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
@@ -632,6 +671,11 @@ describe("mlclaw CLI", () => {
       desiredGeneration: 2,
       bucket: "alice/research-data",
       localGateway: { engine: "podman", podmanConnection: "local" },
+      tailscaleMode: "direct",
+      spaceVisibility: "public",
+      spaceHardware: "cpu-upgrade",
+      spaceSleepTime: -1,
+      networkAccess: { provider: "tailscale-direct", ipv4: "100.100.100.100" },
     });
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       OPENCLAW_HF_STATE_PREFIX: "custom-state-prefix",
@@ -1250,6 +1294,29 @@ describe("mlclaw CLI", () => {
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_RUNTIME_ID: original.localRuntimeId,
     });
+  });
+
+  it("fails closed when canonical desired state is newer than the local cache", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    await expect(
+      main(["--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"], runtime),
+    ).resolves.toBe(0);
+    const desired = JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null") as Record<
+      string,
+      unknown
+    >;
+    hub.bucketObjects.set(
+      ".mlclaw/desired-state.json",
+      JSON.stringify({ ...desired, generation: 5, model: "huggingface/example/newer-model:provider" }),
+    );
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main(["gateway", "stop", "research"], runtime)).resolves.toBe(1);
+    expect(stderr.join("\n")).toContain("canonical desired state generation 5 is newer");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "stop")).toBe(false);
   });
 
   it("does not rewrite local config when bootstrap is blocked by a live Space lease", async () => {
@@ -1917,6 +1984,38 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "requestSpaceHardware")).toBe(false);
   });
 
+  it("preserves portable Space settings when rerun flags are omitted", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const runtime = await createRuntime(hub, prompt);
+    await expect(
+      main(
+        [
+          "bootstrap",
+          "--name",
+          "research",
+          "--public-space",
+          "--hardware",
+          "cpu-upgrade",
+          "--sleep-time",
+          "42",
+          "--yes",
+        ],
+        runtime,
+      ),
+    ).resolves.toBe(0);
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      spaceVisibility: "public",
+      spaceHardware: "cpu-upgrade",
+      spaceSleepTime: 42,
+    });
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
+      space: { visibility: "public", hardware: "cpu-upgrade", sleepTime: 42 },
+    });
+  });
+
   it("allowlists the authenticated user for org-owned browser Spaces", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
@@ -2536,7 +2635,7 @@ describe("mlclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(startIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
-    expect(runtime.tailscaleRunner.state).toBe("free");
+    expect(runtime.tailscaleRunner.state).toBe("owned");
   });
 
   it("reuses a persisted Router token when migrating local to Space", async () => {
@@ -2768,6 +2867,9 @@ describe("mlclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(runIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/tombstone.json") ?? "null")).toMatchObject({
+      movedTo: "alice/research-archive-data",
+    });
   });
 
   it("does not hand off a legacy local gateway before Router credential validation", async () => {

@@ -9,6 +9,7 @@ import { localConfigPaths, type DeploymentManifest } from "./local-config.js";
 export const DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 export const DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
 export const CONTROL_LEASE_PATH = ".mlclaw/control-lease.json";
+export const TOMBSTONE_PATH = ".mlclaw/tombstone.json";
 const MAX_CONTROL_BYTES = 64 * 1024;
 
 const identitySchema = z
@@ -85,11 +86,21 @@ const leaseSchema = z
   })
   .strict();
 
+const tombstoneSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    deploymentId: z.string().uuid(),
+    movedTo: z.string().min(3).max(256),
+    tombstonedAt: z.string().datetime(),
+  })
+  .strict();
+
 export type DeploymentIdentity = z.infer<typeof identitySchema>;
 export type DeploymentDesiredState = z.infer<typeof desiredStateSchema>;
 export type DeploymentOperation = z.infer<typeof operationSchema>;
 export type DeploymentOperationState = z.infer<typeof operationStateSchema>;
 export type DeploymentControlLease = z.infer<typeof leaseSchema>;
+export type DeploymentTombstone = z.infer<typeof tombstoneSchema>;
 
 export function deploymentIdentity(manifest: DeploymentManifest, statePrefix = "openclaw-state"): DeploymentIdentity {
   return identitySchema.parse({
@@ -116,11 +127,12 @@ export function deploymentDesiredState(
       location: manifest.gatewayLocation,
       port: manifest.localPort ?? 7860,
       tailscaleMode:
-        manifest.networkAccess?.provider === "tailscale-direct"
+        manifest.tailscaleMode ??
+        (manifest.networkAccess?.provider === "tailscale-direct"
           ? "direct"
           : manifest.networkAccess?.provider === "tailscale-serve" && manifest.networkAccess.enabled
             ? "serve"
-            : "off",
+            : "off"),
     },
     model: manifest.model,
     runtimeImage: manifest.runtimeImage,
@@ -143,6 +155,27 @@ export async function readDesiredState(
   client: Pick<BucketClient, "downloadFile">,
 ): Promise<DeploymentDesiredState | null> {
   return await readDocument(client, DESIRED_STATE_PATH, desiredStateSchema);
+}
+
+export async function readDeploymentTombstone(
+  client: Pick<BucketClient, "downloadFile">,
+): Promise<DeploymentTombstone | null> {
+  return await readDocument(client, TOMBSTONE_PATH, tombstoneSchema);
+}
+
+export async function writeDeploymentTombstone(
+  client: Pick<BucketClient, "uploadFiles">,
+  deploymentId: string,
+  movedTo: string,
+  now: Date,
+): Promise<void> {
+  const tombstone = tombstoneSchema.parse({
+    schemaVersion: 1,
+    deploymentId,
+    movedTo,
+    tombstonedAt: now.toISOString(),
+  });
+  await client.uploadFiles([jsonBlob(TOMBSTONE_PATH, tombstone)]);
 }
 
 export async function writeCanonicalState(

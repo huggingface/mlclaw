@@ -19674,6 +19674,7 @@ var manifestFields = {
   gatewayLocation: external_exports.enum(["local", "space"]),
   model: external_exports.string().min(1).max(512),
   runtimeImage: external_exports.string().min(1).max(1024),
+  tailscaleMode: external_exports.enum(["off", "direct", "serve"]).optional(),
   spaceVisibility: external_exports.enum(["private", "public"]).optional(),
   spaceHardware: external_exports.string().min(1).max(128).optional(),
   spaceSleepTime: external_exports.number().int().min(-1).optional(),
@@ -19810,6 +19811,7 @@ import { randomUUID } from "node:crypto";
 var DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 var DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
 var CONTROL_LEASE_PATH = ".mlclaw/control-lease.json";
+var TOMBSTONE_PATH = ".mlclaw/tombstone.json";
 var MAX_CONTROL_BYTES = 64 * 1024;
 var identitySchema = external_exports.object({
   schemaVersion: external_exports.literal(1),
@@ -19869,6 +19871,12 @@ var leaseSchema = external_exports.object({
   acquiredAt: external_exports.string().datetime(),
   expiresAt: external_exports.string().datetime()
 }).strict();
+var tombstoneSchema = external_exports.object({
+  schemaVersion: external_exports.literal(1),
+  deploymentId: external_exports.string().uuid(),
+  movedTo: external_exports.string().min(3).max(256),
+  tombstonedAt: external_exports.string().datetime()
+}).strict();
 function deploymentIdentity(manifest, statePrefix = "openclaw-state") {
   return identitySchema.parse({
     schemaVersion: 1,
@@ -19889,7 +19897,7 @@ function deploymentDesiredState(manifest, visibility = manifest.spaceVisibility 
     gateway: {
       location: manifest.gatewayLocation,
       port: manifest.localPort ?? 7860,
-      tailscaleMode: manifest.networkAccess?.provider === "tailscale-direct" ? "direct" : manifest.networkAccess?.provider === "tailscale-serve" && manifest.networkAccess.enabled ? "serve" : "off"
+      tailscaleMode: manifest.tailscaleMode ?? (manifest.networkAccess?.provider === "tailscale-direct" ? "direct" : manifest.networkAccess?.provider === "tailscale-serve" && manifest.networkAccess.enabled ? "serve" : "off")
     },
     model: manifest.model,
     runtimeImage: manifest.runtimeImage,
@@ -19906,6 +19914,18 @@ async function readDeploymentIdentity(client) {
 }
 async function readDesiredState(client) {
   return await readDocument(client, DESIRED_STATE_PATH, desiredStateSchema);
+}
+async function readDeploymentTombstone(client) {
+  return await readDocument(client, TOMBSTONE_PATH, tombstoneSchema);
+}
+async function writeDeploymentTombstone(client, deploymentId, movedTo, now) {
+  const tombstone = tombstoneSchema.parse({
+    schemaVersion: 1,
+    deploymentId,
+    movedTo,
+    tombstonedAt: now.toISOString()
+  });
+  await client.uploadFiles([jsonBlob(TOMBSTONE_PATH, tombstone)]);
 }
 async function writeCanonicalState(client, identity, desired) {
   await client.uploadFiles([
@@ -20492,6 +20512,7 @@ async function discoverRemoteDeployments(owner, hub) {
       buckets.slice(offset, offset + 4).map(async (bucket) => {
         try {
           const client = hub.bucket(bucket);
+          if (await readDeploymentTombstone(client)) return null;
           const identity = await readDeploymentIdentity(client);
           if (!identity || identity.owner !== owner || identity.bucket !== bucket) return null;
           const desired = await readDesiredState(client);
@@ -20521,6 +20542,10 @@ async function cacheRecoveredDeployment(deployment, runtime) {
     gatewayLocation: desired.gateway.location,
     model: desired.model,
     runtimeImage: desired.runtimeImage,
+    tailscaleMode: desired.gateway.tailscaleMode,
+    spaceVisibility: desired.space.visibility,
+    ...desired.space.hardware ? { spaceHardware: desired.space.hardware } : {},
+    ...typeof desired.space.sleepTime === "number" ? { spaceSleepTime: desired.space.sleepTime } : {},
     localPort: desired.gateway.port,
     createdAt: identity.createdAt,
     updatedAt: now
@@ -20545,16 +20570,18 @@ async function bootstrap(opts, runtime) {
   });
   const hub = runtime.hubFactory(hfToken);
   const me2 = await hub.whoami();
-  const owner = opts.owner ?? me2.name;
+  const selectionOwner = opts.owner ?? me2.name;
   const telegramToken = await readOptionalTelegramToken(opts, runtime);
   const bot = telegramToken ? await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot) : void 0;
   const requestedAgentName = opts.name ?? bot?.username;
   let agentName = await resolveBootstrapAgentName({
     ...requestedAgentName ? { requestedName: requestedAgentName } : {},
-    owner,
+    owner: selectionOwner,
     hub,
     runtime
   });
+  const selectedManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
+  const owner = opts.owner ?? selectedManifest?.owner ?? selectionOwner;
   const telegramUserId = telegramToken ? opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime) : void 0;
   const model = opts.model ?? DEFAULT_MODEL2;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
@@ -20664,7 +20691,8 @@ async function bootstrap(opts, runtime) {
         runtimeId: spaceRuntimeId(agentName),
         takeover: Boolean(opts.takeover)
       });
-      await reconcileDeployment(activePlan, hub, runtime, async () => {
+      await reconcileDeployment(activePlan, hub, runtime, async (_changed, assertLease) => {
+        await assertLease();
         const deployed = await deploySpaceGateway({
           hub,
           runtime,
@@ -20674,11 +20702,13 @@ async function bootstrap(opts, runtime) {
           allowedUsers: me2.name,
           spaceExists: spacePlan.exists,
           spacePrepared: true,
+          assertLease,
           ...paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {},
           ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {},
           ...templateRuntimeImage ? { templateRuntimeImage } : {}
         });
         deployedSpaceRuntime = deployed.runtimeImage;
+        await assertLease();
         await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
       });
     }
@@ -20708,7 +20738,7 @@ async function bootstrap(opts, runtime) {
       activePlan,
       hub,
       runtime,
-      async (changed) => await deployLocalBootstrap(activePlan, opts, runtime, changed)
+      async (changed, assertLease) => await deployLocalBootstrap(activePlan, opts, runtime, changed, assertLease)
     );
   }
   runtime.stdout.log("");
@@ -20774,6 +20804,11 @@ async function reconcileManifest(params) {
     const visibility = params.visibility ?? params.manifest.spaceVisibility ?? "private";
     const candidate = deploymentDesiredState(params.manifest, visibility);
     const sameDesired = currentDesired && JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) === JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
+    if (currentDesired && currentDesired.generation > params.manifest.desiredGeneration && !sameDesired) {
+      throw new Error(
+        `canonical desired state generation ${currentDesired.generation} is newer than local generation ${params.manifest.desiredGeneration}; recover the deployment before applying changes`
+      );
+    }
     const generation = sameDesired ? currentDesired.generation : Math.max(currentDesired?.generation ?? 0, params.manifest.desiredGeneration) + 1;
     const manifest = {
       ...params.manifest,
@@ -20909,7 +20944,7 @@ async function resolveBootstrapPlan(params) {
   const spacePlan = gatewayLocation === "space" ? {
     space: names.space,
     exists: await hub.spaceExists(names.space),
-    visibility: opts.publicSpace ? "public" : "private"
+    visibility: opts.publicSpace ? "public" : existingManifest?.spaceVisibility ?? "private"
   } : void 0;
   const effectiveModel = opts.model ?? existingManifest?.model ?? model;
   const effectiveRuntimeImage = opts.runtimeImage ? runtimeImage : existingManifest?.runtimeImage ?? runtimeImage;
@@ -20925,6 +20960,10 @@ async function resolveBootstrapPlan(params) {
     gatewayLocation,
     model: effectiveModel,
     runtimeImage: effectiveRuntimeImage,
+    ...existingManifest?.tailscaleMode ? { tailscaleMode: existingManifest.tailscaleMode } : {},
+    ...existingManifest?.spaceVisibility ? { spaceVisibility: existingManifest.spaceVisibility } : {},
+    ...existingManifest?.spaceHardware ? { spaceHardware: existingManifest.spaceHardware } : {},
+    ...typeof existingManifest?.spaceSleepTime === "number" ? { spaceSleepTime: existingManifest.spaceSleepTime } : {},
     ...gatewayLocation === "local" ? { localPort } : existingManifest?.localPort ? { localPort: existingManifest.localPort } : {},
     ...localGateway ? { localGateway } : {},
     ...gatewayLocation === "local" && existingManifest?.networkAccess ? { networkAccess: existingManifest.networkAccess } : {},
@@ -20972,7 +21011,7 @@ async function resolveBootstrapNetworkAccess(plan, opts, runtime) {
     return plan;
   }
   const existing = plan.manifest.networkAccess;
-  let mode = opts.tailscale ?? networkAccessMode(existing);
+  let mode = opts.tailscale ?? plan.manifest.tailscaleMode ?? networkAccessMode(existing);
   let discovery = mode && mode !== "off" ? await runtime.tailscaleRunner.discover() : void 0;
   if (!mode && !opts.yes && runtime.prompt.isInteractive()) {
     discovery = await runtime.tailscaleRunner.discover();
@@ -21031,7 +21070,11 @@ async function resolveBootstrapNetworkAccess(plan, opts, runtime) {
 }
 function withBootstrapNetworkAccess(plan, networkAccess) {
   const { networkAccess: _previous, ...base } = plan.manifest;
-  const manifest = { ...base, ...networkAccess ? { networkAccess } : {} };
+  const manifest = {
+    ...base,
+    tailscaleMode: networkAccessMode(networkAccess) ?? "off",
+    ...networkAccess ? { networkAccess } : {}
+  };
   return {
     ...plan,
     manifest,
@@ -21330,7 +21373,13 @@ async function stateAdopt(agent, opts, runtime) {
       if (updated.gatewayLocation === "local") {
         if (bucketChanged) {
           await assertLease();
-          await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+          await startLocalGateway({
+            manifest: updated,
+            runtime,
+            pull: shouldPull(opts),
+            resetVolume: true,
+            assertLease
+          });
         } else {
           runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
         }
@@ -21363,6 +21412,9 @@ async function stateAdopt(agent, opts, runtime) {
     }
   });
   updated = reconciled.manifest;
+  if (bucketChanged) {
+    await writeDeploymentTombstone(hub.bucket(current.bucket), current.deploymentId, bucket, runtime.now());
+  }
   runtime.stdout.log(`State bucket: ${bucket}`);
 }
 async function inspectStateBucket(hub, bucket, bucketPrefix) {
@@ -21475,7 +21527,7 @@ async function writeLocalDeployment(configRoot2, manifest, secrets) {
   await writeManifest(configRoot2, manifest);
   await writeSecretEnv(configRoot2, manifest.agent, secrets);
 }
-async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true) {
+async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true, assertLease = async () => void 0) {
   const previousManifest = await readManifest(runtime.configRoot, plan.agentName).catch(() => null);
   const previousSecrets = await readSecretEnv(runtime.configRoot, plan.agentName).catch(() => null);
   const previousContainer = previousManifest?.gatewayLocation === "local" && previousManifest.localGateway ? await localRunnerFor(previousManifest, runtime).inspect(
@@ -21487,17 +21539,21 @@ async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true) 
   let startupAttempted = false;
   try {
     if (previousNetworkState === "owned" && previousManifest?.networkAccess) {
+      await assertLease();
       await removeOwnedNetworkAccess(previousManifest.networkAccess, runtime);
     }
     await writeSecretEnv(runtime.configRoot, plan.agentName, plan.secrets);
     startupAttempted = true;
+    await assertLease();
     await startLocalGateway({
       manifest: plan.manifest,
       runtime,
       pull: shouldPull(opts),
       refresh: desiredChanged || JSON.stringify(previousSecrets) !== JSON.stringify(plan.secrets),
-      existing: previousContainer
+      existing: previousContainer,
+      assertLease
     });
+    await assertLease();
     await writeManifest(runtime.configRoot, plan.manifest);
   } catch (error) {
     if (error instanceof TailscaleApprovalRequiredError && plan.manifest.networkAccess?.provider === "tailscale-serve") {
@@ -21515,6 +21571,7 @@ async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true) 
         )
       };
       plan.waitingForApprovalUrl = error.approvalUrl;
+      await assertLease();
       await writeSecretEnv(runtime.configRoot, plan.agentName, plan.secrets);
       await writeManifest(runtime.configRoot, plan.manifest);
       return { waitingForApproval: error.approvalUrl };
@@ -21575,10 +21632,12 @@ async function removeFailedBootstrapContainer(manifest, runtime, removeVolume) {
 }
 async function deploySpaceGateway(params) {
   const { hub, runtime, hfToken, manifest, secrets } = params;
+  const assertLease = params.assertLease ?? (async () => void 0);
   if (!params.spacePrepared) {
     runtime.stdout.log(
       params.spaceExists ? `Updating existing Space ${manifest.space}` : `Creating ${params.publicSpace ? "public" : "private"} Space ${manifest.space}`
     );
+    await assertLease();
     await hub.createDockerSpace(manifest.space, {
       private: !params.publicSpace,
       ...params.hardware && !params.spaceExists ? { hardware: params.hardware } : {},
@@ -21586,19 +21645,23 @@ async function deploySpaceGateway(params) {
     });
   }
   if (params.hardware && params.spaceExists) {
+    await assertLease();
     await hub.requestSpaceHardware(manifest.space, params.hardware, params.sleepTime);
   } else if (!params.hardware && params.spaceExists && typeof params.sleepTime === "number") {
+    await assertLease();
     await hub.setSpaceSleepTime(manifest.space, params.sleepTime);
   }
   runtime.stdout.log(
     params.templateRuntimeImage ? "Generating Space files from prebuilt runtime image" : "Generating bundled Space runtime files"
   );
+  await assertLease();
   const { templateRev } = await runtime.pushTemplateToSpace({
     targetRepo: manifest.space,
     token: hfToken,
     ...params.templateRuntimeImage ? { runtimeImage: params.templateRuntimeImage } : {}
   });
   const spaceRuntimeRef = params.templateRuntimeImage ?? bundledSpaceRuntimeRef(templateRev);
+  await assertLease();
   await setDeploymentVariables(hub, manifest.space, {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
     MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
@@ -21617,8 +21680,11 @@ async function deploySpaceGateway(params) {
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
   });
+  await assertLease();
   await ensureSpaceStateVolume(hub, manifest.space, manifest.bucket, { allowMissingVolumes: !params.spaceExists });
+  await assertLease();
   await clearSpaceGatewayDisabled(hub, manifest.space);
+  await assertLease();
   await setDeploymentSecrets(hub, manifest.space, {
     MLCLAW_SESSION_SECRET: requiredSecret(secrets, "MLCLAW_SESSION_SECRET"),
     MLCLAW_CREDENTIAL_KEY: requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY"),
@@ -21633,6 +21699,7 @@ async function deploySpaceGateway(params) {
     model: manifest.model,
     routerTokenPresent: hasBrokerOrRouterTokenSecretRecord(secrets)
   })) {
+    await assertLease();
     await deleteStaleSpaceTokenSecrets(hub, manifest.space);
   } else {
     runtime.stdout.log("Keeping legacy broad Hub token secrets until an HF Broker or Router credential is configured");
@@ -21642,6 +21709,7 @@ async function deploySpaceGateway(params) {
 }
 async function startLocalGateway(params) {
   const { manifest, runtime } = params;
+  const assertLease = params.assertLease ?? (async () => void 0);
   if (manifest.networkAccess?.enabled) {
     assertLocalNetworkAccessHost(manifest);
   }
@@ -21664,6 +21732,7 @@ async function startLocalGateway(params) {
   const shouldRefresh = Boolean(params.refresh || params.resetVolume);
   if (existing?.running) {
     if (!shouldRefresh) {
+      await assertLease();
       await syncNetworkAccess(manifest, runtime);
       runtime.stdout.log(`Local gateway already running: ${containerName}`);
       logLocalGatewayUrls(manifest, secrets, runtime);
@@ -21671,20 +21740,25 @@ async function startLocalGateway(params) {
     }
   }
   if (params.pull) {
+    await assertLease();
     await runner.pull(manifest.runtimeImage, connection);
   }
   if (existing?.running) {
+    await assertLease();
     await runner.stop(containerName, connection);
     runtime.stdout.log(`Local gateway stopped for config refresh: ${containerName}`);
   }
   if (existing) {
+    await assertLease();
     await runner.rm(containerName, connection);
     runtime.stdout.log(`Local gateway removed for config refresh: ${containerName}`);
   }
   if (params.resetVolume) {
+    await assertLease();
     await runner.rmVolume(volumeName, connection);
     runtime.stdout.log(`Local gateway volume reset for bucket restore: ${volumeName}`);
   }
+  await assertLease();
   await runner.run({
     containerName,
     image: manifest.runtimeImage,
@@ -21700,6 +21774,7 @@ async function startLocalGateway(params) {
   if (!started?.running) {
     throw new Error(`local gateway exited during startup. Inspect it with \`mlclaw gateway logs ${manifest.agent}\``);
   }
+  await assertLease();
   await syncNetworkAccess(manifest, runtime);
   runtime.stdout.log(`Local gateway created: ${containerName}`);
   logLocalGatewayUrls(manifest, secrets, runtime);
@@ -21788,6 +21863,7 @@ async function gatewayStart(agent, opts, runtime) {
             runtime,
             pull: shouldPull(opts),
             refresh,
+            assertLease,
             ...refresh ? { existing: previousContainer ?? null } : {}
           });
         } catch (error) {
@@ -21800,9 +21876,28 @@ async function gatewayStart(agent, opts, runtime) {
             }
             if (previousContainer?.running) {
               await assertLease();
-              await startLocalGateway({ manifest: previousManifest, runtime, pull: false, refresh: true });
+              await startLocalGateway({
+                manifest: previousManifest,
+                runtime,
+                pull: false,
+                refresh: true,
+                assertLease
+              });
               runtime.stdout.log(`Previous local gateway restored: ${containerNameFor(previousManifest.agent)}`);
-            } else if (previousNetworkState === "owned" && previousManifest.networkAccess) {
+            } else if (previousContainer) {
+              await assertLease();
+              await startLocalGateway({ manifest: previousManifest, runtime, pull: false, refresh: true, assertLease });
+              await localRunnerFor(previousManifest, runtime).stop(
+                containerNameFor(previousManifest.agent),
+                localConnectionFor(previousManifest)
+              );
+              runtime.stdout.log(
+                `Previous stopped local gateway restored: ${containerNameFor(previousManifest.agent)}`
+              );
+            } else {
+              await removeFailedBootstrapContainer(manifest, runtime, false);
+            }
+            if (previousNetworkState === "owned" && previousManifest.networkAccess) {
               await runtime.tailscaleRunner.ensureMapping(networkAccessMapping(previousManifest.networkAccess));
             }
           } catch (rollbackError) {
@@ -22009,6 +22104,7 @@ async function gatewayMigrate(agent, opts, runtime) {
           allowedUsers: me2.name,
           publicSpace: updated.spaceVisibility === "public",
           spaceExists,
+          assertLease,
           ...paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {},
           ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {},
           ...templateRuntimeImage ? { templateRuntimeImage } : {}
@@ -22072,7 +22168,13 @@ async function gatewayMigrate(agent, opts, runtime) {
           ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess)
         });
         await assertLease();
-        await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+        await startLocalGateway({
+          manifest: updated,
+          runtime,
+          pull: shouldPull(opts),
+          resetVolume: true,
+          assertLease
+        });
         await writeManifest(runtime.configRoot, updated);
       }
     });
@@ -22152,7 +22254,13 @@ async function gatewayRebind(agent, opts, runtime) {
         );
       }
       await assertLease();
-      await startLocalGateway({ manifest: targetManifest, runtime, pull: shouldPull(opts), resetVolume: true });
+      await startLocalGateway({
+        manifest: targetManifest,
+        runtime,
+        pull: shouldPull(opts),
+        resetVolume: true,
+        assertLease
+      });
       await writeManifest(runtime.configRoot, targetManifest);
     }
   });
@@ -22374,14 +22482,14 @@ async function removeOwnedNetworkAccess(binding, runtime) {
 }
 async function resolveGatewayNetworkAccess(manifest, opts, runtime) {
   const existing = manifest.networkAccess;
-  if (opts.tailscale === void 0 && opts.tailscalePort === void 0 && !existing?.enabled) {
+  if (opts.tailscale === void 0 && opts.tailscalePort === void 0 && !existing?.enabled && (!manifest.tailscaleMode || manifest.tailscaleMode === "off")) {
     return manifest;
   }
-  const mode = opts.tailscale ?? networkAccessMode(existing) ?? "off";
+  const mode = opts.tailscale ?? manifest.tailscaleMode ?? networkAccessMode(existing) ?? "off";
   if (mode === "off") {
     if (opts.tailscalePort !== void 0) throw new Error("--tailscale-port cannot be used with --tailscale=off");
     const { networkAccess: _removed, ...base } = manifest;
-    return { ...base, updatedAt: runtime.now().toISOString() };
+    return { ...base, tailscaleMode: "off", updatedAt: runtime.now().toISOString() };
   }
   assertLocalNetworkAccessHost(manifest);
   const discovery = await runtime.tailscaleRunner.discover();
@@ -22392,6 +22500,7 @@ async function resolveGatewayNetworkAccess(manifest, opts, runtime) {
   if (mode === "direct") {
     return {
       ...manifest,
+      tailscaleMode: "direct",
       networkAccess: {
         provider: "tailscale-direct",
         enabled: true,
@@ -22415,6 +22524,7 @@ async function resolveGatewayNetworkAccess(manifest, opts, runtime) {
   }
   return {
     ...manifest,
+    tailscaleMode: "serve",
     networkAccess: {
       provider: "tailscale-serve",
       enabled: true,
