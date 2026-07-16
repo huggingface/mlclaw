@@ -2,6 +2,35 @@ import { describe, expect, it } from "vitest";
 import { HubApi } from "../src/mlclaw/hub-api.js";
 
 describe("HubApi Space commits", () => {
+  it("uses parent-commit compare-and-swap for deployment control", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const parent = "a".repeat(40);
+    const next = "b".repeat(40);
+    const hub = new HubApi({
+      token: "hf_test_token",
+      fetch: async (url, init) => {
+        const request = { url: String(url), init: init ?? {} };
+        requests.push(request);
+        if (request.url.endsWith("/api/whoami-v2")) return Response.json({ name: "alice" });
+        if (request.url.endsWith("/api/repos/create")) return Response.json({});
+        if (request.url.endsWith("/commit/main")) return Response.json({ commitOid: next });
+        if (request.url.includes("/api/models/")) return Response.json({ sha: parent });
+        if (request.url.includes("/resolve/")) return new Response("missing", { status: 404 });
+        throw new Error(`unexpected request ${request.url}`);
+      },
+    });
+
+    const store = await hub.deploymentControlStore("alice", "11111111-1111-5111-a111-111111111111");
+    await expect(store.read()).resolves.toEqual({ value: null, revision: parent });
+    await expect(store.compareAndSwap(parent, { fencingToken: "token" })).resolves.toBe(next);
+
+    const commit = requests.find((request) => request.url.endsWith("/commit/main"));
+    const lines = String(commit?.init.body)
+      .split("\n")
+      .map((line) => JSON.parse(line)) as Array<{ key: string; value: Record<string, unknown> }>;
+    expect(lines[0]?.value.parentCommit).toBe(parent);
+  });
+
   it("lists owned buckets across Hub pagination", async () => {
     const requests: string[] = [];
     const hub = new HubApi({

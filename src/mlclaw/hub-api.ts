@@ -34,6 +34,7 @@ type SpaceInfo = {
   runtime?: SpaceRuntime | null;
 };
 export type HubCommitFile = { path: string; content: Uint8Array | Buffer };
+type ModelInfo = { sha?: string };
 
 export class HubApi {
   private readonly hubUrl: string;
@@ -95,6 +96,23 @@ export class HubApi {
       url = nextLink(response.headers.get("link"));
     }
     return [...new Set(buckets)].sort();
+  }
+
+  async deploymentControlStore(
+    owner: string,
+    deploymentId: string,
+  ): Promise<{
+    read(): Promise<{ value: unknown | null; revision: string }>;
+    compareAndSwap(expectedRevision: string, value: unknown | null): Promise<string>;
+  }> {
+    const repoId = `${owner}/mlclaw-control-${deploymentId.replaceAll("-", "")}`;
+    await this.ensurePrivateModelRepo(repoId);
+    const path = "control-lease.json";
+    return {
+      read: async () => await this.readModelDocument(repoId, path),
+      compareAndSwap: async (expectedRevision, value) =>
+        await this.commitModelDocument(repoId, path, expectedRevision, value),
+    };
   }
 
   async createDockerSpace(
@@ -347,6 +365,82 @@ export class HubApi {
       headers: { "Content-Type": "application/x-ndjson" },
       body,
     });
+  }
+
+  private async ensurePrivateModelRepo(repoId: string): Promise<void> {
+    const [owner, name] = splitRepoId(repoId);
+    const me = await this.whoami();
+    try {
+      await this.requestJson("/api/repos/create", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          organization: owner === me.name ? null : owner,
+          type: "model",
+          private: true,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      if (!(error instanceof HubApiError) || error.status !== 409) throw error;
+    }
+    const info = await this.requestJson<ModelInfo>(`/api/models/${repoId}`);
+    if (info.sha) return;
+    await this.commitModelDocument(repoId, "README.md", "", "# ML Claw deployment control\n");
+  }
+
+  private async readModelDocument(repoId: string, path: string): Promise<{ value: unknown | null; revision: string }> {
+    const info = await this.requestJson<ModelInfo>(`/api/models/${repoId}`);
+    if (!info.sha) throw new Error(`control repository ${repoId} has no revision`);
+    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path.split("/").map(encodeURIComponent).join("/")}`;
+    const response = await this.fetchImpl(url, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (response.status === 404) return { value: null, revision: info.sha };
+    if (!response.ok) throw new HubApiError(response.status, url, await response.text());
+    return { value: JSON.parse(await response.text()), revision: info.sha };
+  }
+
+  private async commitModelDocument(
+    repoId: string,
+    path: string,
+    parentCommit: string,
+    value: unknown | null,
+  ): Promise<string> {
+    const header: Record<string, string> = {
+      summary: value === null ? "Release deployment control" : "Update deployment control",
+      description: "ML Claw deployment reconciliation state",
+    };
+    if (parentCommit) header.parentCommit = parentCommit;
+    const operation =
+      value === null
+        ? { key: "deletedFile", value: { path } }
+        : {
+            key: "file",
+            value: {
+              path,
+              content: Buffer.from(typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}\n`).toString(
+                "base64",
+              ),
+              encoding: "base64",
+            },
+          };
+    const body = [{ key: "header", value: header }, operation].map((entry) => JSON.stringify(entry)).join("\n");
+    try {
+      const response = await this.request(`/api/models/${repoId}/commit/main`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-ndjson" },
+        body,
+      });
+      const result = (await response.json()) as { commitOid?: string };
+      if (!result.commitOid) throw new Error("Hub commit response omitted commitOid");
+      return result.commitOid;
+    } catch (error) {
+      if (error instanceof HubApiError && (error.status === 409 || error.status === 412)) {
+        throw new Error("deployment control lease changed concurrently", { cause: error });
+      }
+      throw error;
+    }
   }
 
   async assertBucketAccessible(bucketId: string): Promise<void> {

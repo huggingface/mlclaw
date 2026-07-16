@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import process from "node:process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
@@ -634,6 +634,8 @@ async function cacheRecoveredDeployment(
     ...(desired.space.hardware ? { spaceHardware: desired.space.hardware } : {}),
     ...(typeof desired.space.sleepTime === "number" ? { spaceSleepTime: desired.space.sleepTime } : {}),
     localPort: desired.gateway.port,
+    credentialKeySha256: identity.credentialKeySha256,
+    recoveredWithoutCredentialKey: true,
     createdAt: identity.createdAt,
     updatedAt: now,
   });
@@ -911,32 +913,43 @@ async function reconcileManifest(params: {
   apply: (context: ReconcileManifestContext) => Promise<{ waitingForApproval?: string } | void>;
 }): Promise<{ manifest: DeploymentManifest; waitingForApproval?: string }> {
   const { hub, runtime } = params;
-  const client = hub.bucket(params.manifest.bucket);
   return await withDeploymentLock(runtime.configRoot, params.manifest.deploymentId, async () => {
+    let requestedManifest = params.manifest;
+    if (!requestedManifest.credentialKeySha256) {
+      const secrets = await ensureDeploymentCredentialKey(runtime, requestedManifest.agent);
+      requestedManifest = {
+        ...requestedManifest,
+        credentialKeySha256: createHash("sha256")
+          .update(requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY"))
+          .digest("hex"),
+      };
+    }
+    const client = hub.bucket(requestedManifest.bucket);
+    const control = await hub.deploymentControlStore(requestedManifest.owner, requestedManifest.deploymentId);
     const currentIdentity = await readDeploymentIdentity(client);
-    if (currentIdentity && currentIdentity.deploymentId !== params.manifest.deploymentId) {
-      throw new Error(`bucket ${params.manifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+    if (currentIdentity && currentIdentity.deploymentId !== requestedManifest.deploymentId) {
+      throw new Error(`bucket ${requestedManifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
     }
     const currentDesired = await readDesiredState(client);
-    if (currentDesired && currentDesired.deploymentId !== params.manifest.deploymentId) {
-      throw new Error(`bucket ${params.manifest.bucket} desired state belongs to another deployment`);
+    if (currentDesired && currentDesired.deploymentId !== requestedManifest.deploymentId) {
+      throw new Error(`bucket ${requestedManifest.bucket} desired state belongs to another deployment`);
     }
-    const visibility = params.visibility ?? params.manifest.spaceVisibility ?? "private";
-    const candidate = deploymentDesiredState(params.manifest, visibility);
+    const visibility = params.visibility ?? requestedManifest.spaceVisibility ?? "private";
+    const candidate = deploymentDesiredState(requestedManifest, visibility);
     const sameDesired =
       currentDesired &&
       JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) ===
         JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
-    if (currentDesired && currentDesired.generation > params.manifest.desiredGeneration && !sameDesired) {
+    if (currentDesired && currentDesired.generation > requestedManifest.desiredGeneration && !sameDesired) {
       throw new Error(
-        `canonical desired state generation ${currentDesired.generation} is newer than local generation ${params.manifest.desiredGeneration}; recover the deployment before applying changes`,
+        `canonical desired state generation ${currentDesired.generation} is newer than local generation ${requestedManifest.desiredGeneration}; recover the deployment before applying changes`,
       );
     }
     const generation = sameDesired
       ? currentDesired.generation
-      : Math.max(currentDesired?.generation ?? 0, params.manifest.desiredGeneration) + 1;
+      : Math.max(currentDesired?.generation ?? 0, requestedManifest.desiredGeneration) + 1;
     const manifest: DeploymentManifest = {
-      ...params.manifest,
+      ...requestedManifest,
       spaceVisibility: visibility,
       desiredGeneration: generation,
       updatedAt: runtime.now().toISOString(),
@@ -944,14 +957,14 @@ async function reconcileManifest(params: {
     let operation =
       (await readResumableOperation(runtime.configRoot, manifest.deploymentId, manifest.desiredGeneration)) ??
       newOperation(manifest, runtime.now());
-    let lease = await acquireControlLease(client, manifest, operation, runtime.now());
+    let lease = await acquireControlLease(control, manifest, operation, runtime.now());
     let renewalError: unknown;
     let renewal = Promise.resolve();
     const renewalTimer = setInterval(() => {
       renewal = renewal.then(async () => {
         if (renewalError) return;
         try {
-          lease = await renewControlLease(client, lease, runtime.now());
+          lease = await renewControlLease(control, lease, runtime.now());
         } catch (error) {
           renewalError = error;
         }
@@ -960,13 +973,16 @@ async function reconcileManifest(params: {
     const assertLease = async (): Promise<void> => {
       await renewal;
       if (renewalError) throw renewalError;
-      await assertControlLease(client, lease, runtime.now());
+      await assertControlLease(control, lease, runtime.now());
       if (renewalError) throw renewalError;
     };
     try {
       await writeOperationState("planned");
+      await writeOperationState("applying");
+      await assertLease();
+      const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
+      await assertLease();
       if (!sameDesired || !currentIdentity) {
-        await assertLease();
         await writeCanonicalState(
           client,
           currentIdentity ?? deploymentIdentity(manifest, params.bucketPrefix),
@@ -974,10 +990,6 @@ async function reconcileManifest(params: {
         );
         await assertLease();
       }
-      await writeOperationState("applying");
-      await assertLease();
-      const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
-      await assertLease();
       if (outcome?.waitingForApproval) {
         await writeOperationState("waiting_for_approval", "Tailscale Serve administrator approval is required");
         runtime.prompt.note(outcome.waitingForApproval, "TAILSCALE SERVE APPROVAL REQUIRED");
@@ -999,7 +1011,7 @@ async function reconcileManifest(params: {
     } finally {
       clearInterval(renewalTimer);
       await renewal;
-      await releaseControlLease(client, lease);
+      await releaseControlLease(control, lease);
     }
 
     async function writeOperationState(state: Parameters<typeof updateOperation>[3], detail?: string): Promise<void> {
@@ -1050,7 +1062,17 @@ async function resolveBootstrapPlan(params: {
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets: Record<string, string> = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const sessionSecret = existingSecrets.MLCLAW_SESSION_SECRET ?? randomBytes(48).toString("base64url");
-  const credentialKey = existingSecrets.MLCLAW_CREDENTIAL_KEY ?? randomBytes(32).toString("base64url");
+  const restoredCredentialKey = existingSecrets.MLCLAW_CREDENTIAL_KEY ?? runtime.env.MLCLAW_CREDENTIAL_KEY;
+  if (existingManifest?.recoveredWithoutCredentialKey && !restoredCredentialKey) {
+    throw new Error(
+      "recovered deployment requires its existing MLCLAW_CREDENTIAL_KEY; restore it in the environment and rerun bootstrap",
+    );
+  }
+  const credentialKey = restoredCredentialKey ?? randomBytes(32).toString("base64url");
+  const credentialKeySha256 = createHash("sha256").update(credentialKey).digest("hex");
+  if (existingManifest?.credentialKeySha256 && existingManifest.credentialKeySha256 !== credentialKeySha256) {
+    throw new Error("MLCLAW_CREDENTIAL_KEY does not match the recovered deployment");
+  }
   const gatewayLocation = requestedGatewayLocation ?? existingManifest?.gatewayLocation ?? DEFAULT_GATEWAY_LOCATION;
   const containerRuntime = parseContainerRuntimePreference(opts.containerRuntime);
   if (opts.dockerContext && gatewayLocation !== "local") {
@@ -1109,11 +1131,15 @@ async function resolveBootstrapPlan(params: {
     gatewayLocation,
     model: effectiveModel,
     runtimeImage: effectiveRuntimeImage,
+    credentialKeySha256,
     ...(existingManifest?.tailscaleMode ? { tailscaleMode: existingManifest.tailscaleMode } : {}),
     ...(existingManifest?.spaceVisibility ? { spaceVisibility: existingManifest.spaceVisibility } : {}),
     ...(existingManifest?.spaceHardware ? { spaceHardware: existingManifest.spaceHardware } : {}),
     ...(typeof existingManifest?.spaceSleepTime === "number"
       ? { spaceSleepTime: existingManifest.spaceSleepTime }
+      : {}),
+    ...(existingManifest?.pendingTombstoneBucket
+      ? { pendingTombstoneBucket: existingManifest.pendingTombstoneBucket }
       : {}),
     ...(gatewayLocation === "local"
       ? { localPort }
@@ -1542,6 +1568,11 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
   const secrets = await readSecretEnv(runtime.configRoot, agent);
   const bucketPrefix = persistedBucketPrefix(secrets);
   const bucketChanged = current.bucket !== bucket;
+  if (bucketChanged && current.pendingTombstoneBucket) {
+    throw new Error(
+      `finish tombstoning ${current.pendingTombstoneBucket} by adopting ${current.bucket} again before moving state`,
+    );
+  }
   if (bucketChanged && current.gatewayLocation === "local") {
     assertDedicatedRouterToken(current.model, secrets);
   }
@@ -1568,6 +1599,7 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
   let updated: DeploymentManifest = {
     ...current,
     bucket,
+    ...(bucketChanged ? { pendingTombstoneBucket: current.bucket } : {}),
     updatedAt: runtime.now().toISOString(),
   };
   const updatedSecrets = {
@@ -1654,8 +1686,12 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
     },
   });
   updated = reconciled.manifest;
-  if (bucketChanged) {
-    await writeDeploymentTombstone(hub.bucket(current.bucket), current.deploymentId, bucket, runtime.now());
+  const pendingTombstoneBucket = updated.pendingTombstoneBucket;
+  if (pendingTombstoneBucket) {
+    await writeDeploymentTombstone(hub.bucket(pendingTombstoneBucket), current.deploymentId, bucket, runtime.now());
+    const { pendingTombstoneBucket: _completed, ...completed } = updated;
+    updated = completed;
+    await writeManifest(runtime.configRoot, updated);
   }
   runtime.stdout.log(`State bucket: ${bucket}`);
 }

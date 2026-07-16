@@ -17,10 +17,13 @@ export type DeploymentManifest = {
   gatewayLocation: GatewayLocation;
   model: string;
   runtimeImage: string;
+  credentialKeySha256?: string;
   tailscaleMode?: "off" | "direct" | "serve";
   spaceVisibility?: "private" | "public";
   spaceHardware?: string;
   spaceSleepTime?: number;
+  recoveredWithoutCredentialKey?: boolean;
+  pendingTombstoneBucket?: string;
   localPort?: number;
   localGateway?: LocalGatewayBinding;
   networkAccess?: NetworkAccessBinding;
@@ -117,10 +120,16 @@ const manifestFields = {
   gatewayLocation: z.enum(["local", "space"]),
   model: z.string().min(1).max(512),
   runtimeImage: z.string().min(1).max(1024),
+  credentialKeySha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   tailscaleMode: z.enum(["off", "direct", "serve"]).optional(),
   spaceVisibility: z.enum(["private", "public"]).optional(),
   spaceHardware: z.string().min(1).max(128).optional(),
   spaceSleepTime: z.number().int().min(-1).optional(),
+  recoveredWithoutCredentialKey: z.boolean().optional(),
+  pendingTombstoneBucket: z.string().min(3).max(256).optional(),
   localPort: z.number().int().min(1).max(65535).optional(),
   localGateway: localGatewaySchema.optional(),
   networkAccess: networkAccessSchema.optional(),

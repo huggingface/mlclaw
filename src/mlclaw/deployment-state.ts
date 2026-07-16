@@ -8,7 +8,6 @@ import { localConfigPaths, type DeploymentManifest } from "./local-config.js";
 
 export const DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 export const DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
-export const CONTROL_LEASE_PATH = ".mlclaw/control-lease.json";
 export const TOMBSTONE_PATH = ".mlclaw/tombstone.json";
 const MAX_CONTROL_BYTES = 64 * 1024;
 
@@ -20,6 +19,7 @@ const identitySchema = z
     owner: z.string().min(1).max(128),
     bucket: z.string().min(3).max(256),
     statePrefix: z.string().min(1).max(256),
+    credentialKeySha256: z.string().regex(/^[a-f0-9]{64}$/),
     createdAt: z.string().datetime(),
   })
   .strict();
@@ -101,8 +101,14 @@ export type DeploymentOperation = z.infer<typeof operationSchema>;
 export type DeploymentOperationState = z.infer<typeof operationStateSchema>;
 export type DeploymentControlLease = z.infer<typeof leaseSchema>;
 export type DeploymentTombstone = z.infer<typeof tombstoneSchema>;
+export type HeldControlLease = { value: DeploymentControlLease; revision: string };
+export type ControlLeaseStore = {
+  read(): Promise<{ value: unknown | null; revision: string }>;
+  compareAndSwap(expectedRevision: string, value: unknown | null): Promise<string>;
+};
 
 export function deploymentIdentity(manifest: DeploymentManifest, statePrefix = "openclaw-state"): DeploymentIdentity {
+  if (!manifest.credentialKeySha256) throw new Error("deployment credential key fingerprint is missing");
   return identitySchema.parse({
     schemaVersion: 1,
     deploymentId: manifest.deploymentId,
@@ -110,6 +116,7 @@ export function deploymentIdentity(manifest: DeploymentManifest, statePrefix = "
     owner: manifest.owner,
     bucket: manifest.bucket,
     statePrefix,
+    credentialKeySha256: manifest.credentialKeySha256,
     createdAt: manifest.createdAt,
   });
 }
@@ -304,12 +311,13 @@ function processIsAlive(pid: number): boolean {
 }
 
 export async function acquireControlLease(
-  client: Pick<BucketClient, "downloadFile" | "uploadFiles">,
+  store: ControlLeaseStore,
   manifest: DeploymentManifest,
   operation: DeploymentOperation,
   now: Date,
-): Promise<DeploymentControlLease> {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
+): Promise<HeldControlLease> {
+  const snapshot = await store.read();
+  const current = snapshot.value === null ? null : leaseSchema.parse(snapshot.value);
   if (current && Date.parse(current.expiresAt) > now.getTime() && current.operationId !== operation.operationId) {
     throw new Error(`deployment is already controlled by ${current.holderId} until ${current.expiresAt}`);
   }
@@ -323,45 +331,50 @@ export async function acquireControlLease(
     acquiredAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 120_000).toISOString(),
   });
-  await client.uploadFiles([jsonBlob(CONTROL_LEASE_PATH, lease)]);
-  const verified = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (verified?.fencingToken !== lease.fencingToken)
+  const revision = await store.compareAndSwap(snapshot.revision, lease);
+  const verified = await store.read();
+  if (verified.revision !== revision || leaseSchema.parse(verified.value).fencingToken !== lease.fencingToken)
     throw new Error("could not verify deployment control lease ownership");
-  return lease;
+  return { value: lease, revision };
 }
 
-export async function releaseControlLease(
-  client: Pick<BucketClient, "downloadFile" | "deleteFiles">,
-  lease: DeploymentControlLease,
-): Promise<void> {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (current?.fencingToken === lease.fencingToken) await client.deleteFiles([CONTROL_LEASE_PATH]);
+export async function releaseControlLease(store: ControlLeaseStore, lease: HeldControlLease): Promise<void> {
+  const current = await store.read();
+  if (
+    current.revision === lease.revision &&
+    current.value !== null &&
+    leaseSchema.parse(current.value).fencingToken === lease.value.fencingToken
+  ) {
+    await store.compareAndSwap(lease.revision, null);
+  }
 }
 
-export async function assertControlLease(
-  client: Pick<BucketClient, "downloadFile">,
-  lease: DeploymentControlLease,
-  now: Date,
-): Promise<void> {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (current?.fencingToken !== lease.fencingToken || Date.parse(current.expiresAt) <= now.getTime()) {
+export async function assertControlLease(store: ControlLeaseStore, lease: HeldControlLease, now: Date): Promise<void> {
+  const current = await store.read();
+  const currentLease = current.value === null ? null : leaseSchema.parse(current.value);
+  if (
+    current.revision !== lease.revision ||
+    currentLease?.fencingToken !== lease.value.fencingToken ||
+    Date.parse(currentLease.expiresAt) <= now.getTime()
+  ) {
     throw new Error("deployment control lease ownership was lost");
   }
 }
 
 export async function renewControlLease(
-  client: Pick<BucketClient, "downloadFile" | "uploadFiles">,
-  lease: DeploymentControlLease,
+  store: ControlLeaseStore,
+  lease: HeldControlLease,
   now: Date,
-): Promise<DeploymentControlLease> {
-  await assertControlLease(client, lease, now);
+): Promise<HeldControlLease> {
+  await assertControlLease(store, lease, now);
   const renewed = leaseSchema.parse({
-    ...lease,
+    ...lease.value,
     expiresAt: new Date(now.getTime() + 120_000).toISOString(),
   });
-  await client.uploadFiles([jsonBlob(CONTROL_LEASE_PATH, renewed)]);
-  await assertControlLease(client, renewed, now);
-  return renewed;
+  const revision = await store.compareAndSwap(lease.revision, renewed);
+  const held = { value: renewed, revision };
+  await assertControlLease(store, held, now);
+  return held;
 }
 
 async function readDocument<T>(

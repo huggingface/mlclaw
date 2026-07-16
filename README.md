@@ -166,6 +166,13 @@ rerun `mlclaw bootstrap` or `mlclaw configure` without `--name`; ML Claw selects
 it, shows only configuration changes, and verifies no-op runs without restarting
 a healthy gateway. If the local cache is missing, interactive bootstrap can
 recover a deployment from its validated marker in an owned Storage Bucket.
+Recovery never invents a replacement encryption key: restore the deployment's
+existing `MLCLAW_CREDENTIAL_KEY` in the environment for the recovery run. ML
+Claw verifies its stored SHA-256 fingerprint before changing the runtime.
+
+Cross-host reconciliation uses a generated private Hugging Face model repository
+per deployment as its control lock. Parent-commit compare-and-swap prevents two
+controllers from acquiring the same deployment lease concurrently.
 
 The local control plane is published only on loopback. The default URL is
 `http://127.0.0.1:7860`; choose another unprivileged port with `--local-port`

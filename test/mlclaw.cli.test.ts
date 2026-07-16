@@ -54,6 +54,7 @@ function createFakeHub(
     existingBuckets?: string[];
     existingSpaces?: string[];
     createDockerSpaceError?: Error;
+    failFirstTombstoneUpload?: boolean;
   } = {},
 ) {
   const calls: Array<{ name: string; args: unknown[] }> = [];
@@ -61,10 +62,21 @@ function createFakeHub(
   const secrets = new Map<string, { key: string }>();
   const volumes: SpaceVolume[] = [];
   const bucketObjects = new Map<string, string>();
+  let controlValue: unknown | null = null;
+  let controlRevision = 0;
+  let tombstoneUploadFailed = false;
   const existingBuckets = new Set(opts.existingBuckets ?? []);
   const existingSpaces = new Set(opts.existingSpaces ?? []);
   const bucketClient = {
     async uploadFiles(files: Array<{ path: string; content: Blob }>) {
+      if (
+        opts.failFirstTombstoneUpload &&
+        !tombstoneUploadFailed &&
+        files.some((file) => file.path === ".mlclaw/tombstone.json")
+      ) {
+        tombstoneUploadFailed = true;
+        throw new Error("simulated tombstone upload failure");
+      }
       calls.push({ name: "bucket.uploadFiles", args: [files.map((file) => file.path)] });
       for (const file of files) {
         const text = await file.content.text();
@@ -142,6 +154,21 @@ function createFakeHub(
     async listBuckets() {
       calls.push({ name: "listBuckets", args: [] });
       return [...existingBuckets];
+    },
+    async deploymentControlStore() {
+      calls.push({ name: "deploymentControlStore", args: [] });
+      return {
+        async read() {
+          return { value: controlValue, revision: String(controlRevision) };
+        },
+        async compareAndSwap(expectedRevision: string, value: unknown | null) {
+          if (expectedRevision !== String(controlRevision))
+            throw new Error("deployment control lease changed concurrently");
+          controlValue = value;
+          controlRevision += 1;
+          return String(controlRevision);
+        },
+      };
     },
     async spaceExists(repoId: string) {
       calls.push({ name: "spaceExists", args: [repoId] });
@@ -635,6 +662,7 @@ describe("mlclaw CLI", () => {
         owner: "alice",
         bucket: "alice/research-data",
         statePrefix: "custom-state-prefix",
+        credentialKeySha256: "c9357e9e93a12c0d388d115eb3a62a5e4683807b1526e83716fcaafac2761539",
         createdAt: "2026-07-16T00:00:00.000Z",
       }),
     );
@@ -658,6 +686,7 @@ describe("mlclaw CLI", () => {
     );
     const { prompt } = createPrompt([true]);
     const runtime = await createRuntime(hub, prompt);
+    Object.assign(runtime.env, { MLCLAW_CREDENTIAL_KEY: "restored-test-credential-key" });
     runtime.dockerRunner.contexts.clear();
     runtime.tailscaleRunner.discovery = {
       ready: true,
@@ -681,6 +710,41 @@ describe("mlclaw CLI", () => {
       OPENCLAW_HF_STATE_PREFIX: "custom-state-prefix",
     });
     expect(runtime.podmanRunner.calls.some((call) => call.name === "run")).toBe(true);
+  });
+
+  it("refuses remote recovery without the existing credential key", async () => {
+    const hub = createFakeHub({ existingBuckets: ["alice/research-data"] });
+    hub.bucketObjects.set(
+      ".mlclaw/deployment.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        deploymentId: "44444444-4444-5444-a444-444444444444",
+        agent: "research",
+        owner: "alice",
+        bucket: "alice/research-data",
+        statePrefix: "openclaw-state",
+        credentialKeySha256: "a".repeat(64),
+        createdAt: "2026-07-16T00:00:00.000Z",
+      }),
+    );
+    hub.bucketObjects.set(
+      ".mlclaw/desired-state.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        deploymentId: "44444444-4444-5444-a444-444444444444",
+        generation: 1,
+        updatedAt: "2026-07-16T00:10:00.000Z",
+        gateway: { location: "local", port: 7860, tailscaleMode: "off" },
+        model: DEFAULT_MODEL,
+        runtimeImage: DEFAULT_RUNTIME_IMAGE,
+        space: { repo: "alice/research", visibility: "private" },
+      }),
+    );
+    const errors: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([true]).prompt, errors);
+
+    await expect(main(["--gateway", "local", "--no-pull"], runtime)).resolves.toBe(1);
+    expect(errors.join("\n")).toContain("requires its existing MLCLAW_CREDENTIAL_KEY");
   });
 
   it("offers Tailscale access interactively but never enables it implicitly for automation", async () => {
@@ -2867,6 +2931,32 @@ describe("mlclaw CLI", () => {
     expect(removeVolumeIndex).toBeGreaterThan(removeIndex);
     expect(runIndex).toBeGreaterThan(removeVolumeIndex);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "start")).toBe(false);
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/tombstone.json") ?? "null")).toMatchObject({
+      movedTo: "alice/research-archive-data",
+    });
+  });
+
+  it("retries an interrupted old-bucket tombstone", async () => {
+    const hub = createFakeHub({ failFirstTombstoneUpload: true });
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([]).prompt, stderr);
+    await expect(
+      main(
+        ["bootstrap", "--gateway", "local", "--name", "research", "--gateway-token", "gateway-token", "--no-pull"],
+        runtime,
+      ),
+    ).resolves.toBe(0);
+    seedValidStateSnapshot(hub);
+
+    const command = ["state", "adopt", "research", "--bucket", "alice/research-archive-data", "--yes", "--no-pull"];
+    await expect(main(command, runtime)).resolves.toBe(1);
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/research-archive-data",
+      pendingTombstoneBucket: "alice/research-data",
+    });
+
+    await expect(main(command, runtime)).resolves.toBe(0);
+    expect((await readManifest(runtime.configRoot, "research")).pendingTombstoneBucket).toBeUndefined();
     expect(JSON.parse(hub.bucketObjects.get(".mlclaw/tombstone.json") ?? "null")).toMatchObject({
       movedTo: "alice/research-archive-data",
     });

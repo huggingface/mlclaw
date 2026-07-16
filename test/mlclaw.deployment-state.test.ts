@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  CONTROL_LEASE_PATH,
   DEPLOYMENT_PATH,
   DESIRED_STATE_PATH,
   acquireControlLease,
@@ -35,6 +34,25 @@ function memoryBucket() {
   };
 }
 
+function memoryControlStore() {
+  let value: unknown | null = null;
+  let revision = 0;
+  return {
+    get value() {
+      return value;
+    },
+    async read() {
+      return { value, revision: String(revision) };
+    },
+    async compareAndSwap(expectedRevision: string, next: unknown | null) {
+      if (expectedRevision !== String(revision)) throw new Error("deployment control lease changed concurrently");
+      value = next;
+      revision += 1;
+      return String(revision);
+    },
+  };
+}
+
 const manifest: DeploymentManifest = {
   version: 2,
   deploymentId: "11111111-1111-5111-a111-111111111111",
@@ -47,6 +65,7 @@ const manifest: DeploymentManifest = {
   gatewayLocation: "local",
   model: "huggingface/example/model:provider",
   runtimeImage: "example.invalid/mlclaw:test",
+  credentialKeySha256: "a".repeat(64),
   localPort: 7860,
   localGateway: { engine: "podman", podmanConnection: "local" },
   networkAccess: {
@@ -76,29 +95,42 @@ describe("deployment state", () => {
   });
 
   it("verifies lease ownership and releases only its own lease", async () => {
-    const bucket = memoryBucket();
+    const control = memoryControlStore();
     const operation = newOperation(manifest, new Date("2026-07-16T00:00:00.000Z"));
-    const lease = await acquireControlLease(bucket, manifest, operation, new Date("2026-07-16T00:00:00.000Z"));
-    expect(bucket.objects.has(CONTROL_LEASE_PATH)).toBe(true);
-    await releaseControlLease(bucket, { ...lease, fencingToken: "22222222-2222-5222-a222-222222222222" });
-    expect(bucket.objects.has(CONTROL_LEASE_PATH)).toBe(true);
-    await releaseControlLease(bucket, lease);
-    expect(bucket.objects.has(CONTROL_LEASE_PATH)).toBe(false);
+    const lease = await acquireControlLease(control, manifest, operation, new Date("2026-07-16T00:00:00.000Z"));
+    expect(control.value).not.toBeNull();
+    await releaseControlLease(control, {
+      ...lease,
+      value: { ...lease.value, fencingToken: "22222222-2222-5222-a222-222222222222" },
+    });
+    expect(control.value).not.toBeNull();
+    await releaseControlLease(control, lease);
+    expect(control.value).toBeNull();
   });
 
   it("renews a lease only while its fencing token is still current", async () => {
-    const bucket = memoryBucket();
+    const control = memoryControlStore();
     const operation = newOperation(manifest, new Date("2026-07-16T00:00:00.000Z"));
-    const lease = await acquireControlLease(bucket, manifest, operation, new Date("2026-07-16T00:00:00.000Z"));
-    const renewed = await renewControlLease(bucket, lease, new Date("2026-07-16T00:01:00.000Z"));
-    expect(renewed.expiresAt).toBe("2026-07-16T00:03:00.000Z");
-    bucket.objects.set(
-      CONTROL_LEASE_PATH,
-      JSON.stringify({ ...renewed, fencingToken: "22222222-2222-5222-a222-222222222222" }),
-    );
-    await expect(renewControlLease(bucket, renewed, new Date("2026-07-16T00:01:30.000Z"))).rejects.toThrow(
+    const lease = await acquireControlLease(control, manifest, operation, new Date("2026-07-16T00:00:00.000Z"));
+    const renewed = await renewControlLease(control, lease, new Date("2026-07-16T00:01:00.000Z"));
+    expect(renewed.value.expiresAt).toBe("2026-07-16T00:03:00.000Z");
+    await control.compareAndSwap(renewed.revision, {
+      ...renewed.value,
+      fencingToken: "22222222-2222-5222-a222-222222222222",
+    });
+    await expect(renewControlLease(control, renewed, new Date("2026-07-16T00:01:30.000Z"))).rejects.toThrow(
       "ownership was lost",
     );
+  });
+
+  it("allows only one compare-and-swap lease acquisition", async () => {
+    const control = memoryControlStore();
+    const first = newOperation(manifest, new Date("2026-07-16T00:00:00.000Z"));
+    const second = newOperation(manifest, new Date("2026-07-16T00:00:00.000Z"));
+    const snapshot = await control.read();
+    const winner = await acquireControlLease(control, manifest, first, new Date("2026-07-16T00:00:00.000Z"));
+    await expect(control.compareAndSwap(snapshot.revision, second)).rejects.toThrow("changed concurrently");
+    await releaseControlLease(control, winner);
   });
 
   it("prevents concurrent local reconciliation", async () => {

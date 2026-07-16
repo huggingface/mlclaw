@@ -8956,7 +8956,7 @@ import fs16 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os8 from "node:os";
 import process4 from "node:process";
-import { randomBytes, randomUUID as randomUUID2 } from "node:crypto";
+import { createHash as createHash3, randomBytes, randomUUID as randomUUID2 } from "node:crypto";
 import { pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
@@ -14942,6 +14942,15 @@ var HubApi = class {
     }
     return [...new Set(buckets)].sort();
   }
+  async deploymentControlStore(owner, deploymentId) {
+    const repoId = `${owner}/mlclaw-control-${deploymentId.replaceAll("-", "")}`;
+    await this.ensurePrivateModelRepo(repoId);
+    const path17 = "control-lease.json";
+    return {
+      read: async () => await this.readModelDocument(repoId, path17),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
+    };
+  }
   async createDockerSpace(repoId, options) {
     const [owner, name] = splitRepoId(repoId);
     const me2 = await this.whoami();
@@ -15155,6 +15164,72 @@ var HubApi = class {
       headers: { "Content-Type": "application/x-ndjson" },
       body
     });
+  }
+  async ensurePrivateModelRepo(repoId) {
+    const [owner, name] = splitRepoId(repoId);
+    const me2 = await this.whoami();
+    try {
+      await this.requestJson("/api/repos/create", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          organization: owner === me2.name ? null : owner,
+          type: "model",
+          private: true
+        }),
+        headers: { "Content-Type": "application/json" }
+      });
+    } catch (error) {
+      if (!(error instanceof HubApiError2) || error.status !== 409) throw error;
+    }
+    const info = await this.requestJson(`/api/models/${repoId}`);
+    if (info.sha) return;
+    await this.commitModelDocument(repoId, "README.md", "", "# ML Claw deployment control\n");
+  }
+  async readModelDocument(repoId, path17) {
+    const info = await this.requestJson(`/api/models/${repoId}`);
+    if (!info.sha) throw new Error(`control repository ${repoId} has no revision`);
+    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path17.split("/").map(encodeURIComponent).join("/")}`;
+    const response = await this.fetchImpl(url, {
+      headers: { Authorization: `Bearer ${this.token}` }
+    });
+    if (response.status === 404) return { value: null, revision: info.sha };
+    if (!response.ok) throw new HubApiError2(response.status, url, await response.text());
+    return { value: JSON.parse(await response.text()), revision: info.sha };
+  }
+  async commitModelDocument(repoId, path17, parentCommit, value) {
+    const header = {
+      summary: value === null ? "Release deployment control" : "Update deployment control",
+      description: "ML Claw deployment reconciliation state"
+    };
+    if (parentCommit) header.parentCommit = parentCommit;
+    const operation = value === null ? { key: "deletedFile", value: { path: path17 } } : {
+      key: "file",
+      value: {
+        path: path17,
+        content: Buffer.from(typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}
+`).toString(
+          "base64"
+        ),
+        encoding: "base64"
+      }
+    };
+    const body = [{ key: "header", value: header }, operation].map((entry) => JSON.stringify(entry)).join("\n");
+    try {
+      const response = await this.request(`/api/models/${repoId}/commit/main`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-ndjson" },
+        body
+      });
+      const result = await response.json();
+      if (!result.commitOid) throw new Error("Hub commit response omitted commitOid");
+      return result.commitOid;
+    } catch (error) {
+      if (error instanceof HubApiError2 && (error.status === 409 || error.status === 412)) {
+        throw new Error("deployment control lease changed concurrently", { cause: error });
+      }
+      throw error;
+    }
   }
   async assertBucketAccessible(bucketId) {
     try {
@@ -19674,10 +19749,13 @@ var manifestFields = {
   gatewayLocation: external_exports.enum(["local", "space"]),
   model: external_exports.string().min(1).max(512),
   runtimeImage: external_exports.string().min(1).max(1024),
+  credentialKeySha256: external_exports.string().regex(/^[a-f0-9]{64}$/).optional(),
   tailscaleMode: external_exports.enum(["off", "direct", "serve"]).optional(),
   spaceVisibility: external_exports.enum(["private", "public"]).optional(),
   spaceHardware: external_exports.string().min(1).max(128).optional(),
   spaceSleepTime: external_exports.number().int().min(-1).optional(),
+  recoveredWithoutCredentialKey: external_exports.boolean().optional(),
+  pendingTombstoneBucket: external_exports.string().min(3).max(256).optional(),
   localPort: external_exports.number().int().min(1).max(65535).optional(),
   localGateway: localGatewaySchema.optional(),
   networkAccess: networkAccessSchema.optional(),
@@ -19810,7 +19888,6 @@ import path16 from "node:path";
 import { randomUUID } from "node:crypto";
 var DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 var DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
-var CONTROL_LEASE_PATH = ".mlclaw/control-lease.json";
 var TOMBSTONE_PATH = ".mlclaw/tombstone.json";
 var MAX_CONTROL_BYTES = 64 * 1024;
 var identitySchema = external_exports.object({
@@ -19820,6 +19897,7 @@ var identitySchema = external_exports.object({
   owner: external_exports.string().min(1).max(128),
   bucket: external_exports.string().min(3).max(256),
   statePrefix: external_exports.string().min(1).max(256),
+  credentialKeySha256: external_exports.string().regex(/^[a-f0-9]{64}$/),
   createdAt: external_exports.string().datetime()
 }).strict();
 var desiredStateSchema = external_exports.object({
@@ -19878,6 +19956,7 @@ var tombstoneSchema = external_exports.object({
   tombstonedAt: external_exports.string().datetime()
 }).strict();
 function deploymentIdentity(manifest, statePrefix = "openclaw-state") {
+  if (!manifest.credentialKeySha256) throw new Error("deployment credential key fingerprint is missing");
   return identitySchema.parse({
     schemaVersion: 1,
     deploymentId: manifest.deploymentId,
@@ -19885,6 +19964,7 @@ function deploymentIdentity(manifest, statePrefix = "openclaw-state") {
     owner: manifest.owner,
     bucket: manifest.bucket,
     statePrefix,
+    credentialKeySha256: manifest.credentialKeySha256,
     createdAt: manifest.createdAt
   });
 }
@@ -20013,8 +20093,9 @@ function processIsAlive(pid) {
     return error.code !== "ESRCH";
   }
 }
-async function acquireControlLease(client, manifest, operation, now) {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
+async function acquireControlLease(store, manifest, operation, now) {
+  const snapshot = await store.read();
+  const current = snapshot.value === null ? null : leaseSchema.parse(snapshot.value);
   if (current && Date.parse(current.expiresAt) > now.getTime() && current.operationId !== operation.operationId) {
     throw new Error(`deployment is already controlled by ${current.holderId} until ${current.expiresAt}`);
   }
@@ -20028,31 +20109,35 @@ async function acquireControlLease(client, manifest, operation, now) {
     acquiredAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 12e4).toISOString()
   });
-  await client.uploadFiles([jsonBlob(CONTROL_LEASE_PATH, lease)]);
-  const verified = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (verified?.fencingToken !== lease.fencingToken)
+  const revision = await store.compareAndSwap(snapshot.revision, lease);
+  const verified = await store.read();
+  if (verified.revision !== revision || leaseSchema.parse(verified.value).fencingToken !== lease.fencingToken)
     throw new Error("could not verify deployment control lease ownership");
-  return lease;
+  return { value: lease, revision };
 }
-async function releaseControlLease(client, lease) {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (current?.fencingToken === lease.fencingToken) await client.deleteFiles([CONTROL_LEASE_PATH]);
+async function releaseControlLease(store, lease) {
+  const current = await store.read();
+  if (current.revision === lease.revision && current.value !== null && leaseSchema.parse(current.value).fencingToken === lease.value.fencingToken) {
+    await store.compareAndSwap(lease.revision, null);
+  }
 }
-async function assertControlLease(client, lease, now) {
-  const current = await readDocument(client, CONTROL_LEASE_PATH, leaseSchema);
-  if (current?.fencingToken !== lease.fencingToken || Date.parse(current.expiresAt) <= now.getTime()) {
+async function assertControlLease(store, lease, now) {
+  const current = await store.read();
+  const currentLease = current.value === null ? null : leaseSchema.parse(current.value);
+  if (current.revision !== lease.revision || currentLease?.fencingToken !== lease.value.fencingToken || Date.parse(currentLease.expiresAt) <= now.getTime()) {
     throw new Error("deployment control lease ownership was lost");
   }
 }
-async function renewControlLease(client, lease, now) {
-  await assertControlLease(client, lease, now);
+async function renewControlLease(store, lease, now) {
+  await assertControlLease(store, lease, now);
   const renewed = leaseSchema.parse({
-    ...lease,
+    ...lease.value,
     expiresAt: new Date(now.getTime() + 12e4).toISOString()
   });
-  await client.uploadFiles([jsonBlob(CONTROL_LEASE_PATH, renewed)]);
-  await assertControlLease(client, renewed, now);
-  return renewed;
+  const revision = await store.compareAndSwap(lease.revision, renewed);
+  const held = { value: renewed, revision };
+  await assertControlLease(store, held, now);
+  return held;
 }
 async function readDocument(client, file, schema) {
   const blob = await client.downloadFile(file);
@@ -20547,6 +20632,8 @@ async function cacheRecoveredDeployment(deployment, runtime) {
     ...desired.space.hardware ? { spaceHardware: desired.space.hardware } : {},
     ...typeof desired.space.sleepTime === "number" ? { spaceSleepTime: desired.space.sleepTime } : {},
     localPort: desired.gateway.port,
+    credentialKeySha256: identity.credentialKeySha256,
+    recoveredWithoutCredentialKey: true,
     createdAt: identity.createdAt,
     updatedAt: now
   });
@@ -20791,40 +20878,49 @@ async function reconcileDeployment(plan, hub, runtime, apply) {
 }
 async function reconcileManifest(params) {
   const { hub, runtime } = params;
-  const client = hub.bucket(params.manifest.bucket);
   return await withDeploymentLock(runtime.configRoot, params.manifest.deploymentId, async () => {
+    let requestedManifest = params.manifest;
+    if (!requestedManifest.credentialKeySha256) {
+      const secrets = await ensureDeploymentCredentialKey(runtime, requestedManifest.agent);
+      requestedManifest = {
+        ...requestedManifest,
+        credentialKeySha256: createHash3("sha256").update(requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY")).digest("hex")
+      };
+    }
+    const client = hub.bucket(requestedManifest.bucket);
+    const control = await hub.deploymentControlStore(requestedManifest.owner, requestedManifest.deploymentId);
     const currentIdentity = await readDeploymentIdentity(client);
-    if (currentIdentity && currentIdentity.deploymentId !== params.manifest.deploymentId) {
-      throw new Error(`bucket ${params.manifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+    if (currentIdentity && currentIdentity.deploymentId !== requestedManifest.deploymentId) {
+      throw new Error(`bucket ${requestedManifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
     }
     const currentDesired = await readDesiredState(client);
-    if (currentDesired && currentDesired.deploymentId !== params.manifest.deploymentId) {
-      throw new Error(`bucket ${params.manifest.bucket} desired state belongs to another deployment`);
+    if (currentDesired && currentDesired.deploymentId !== requestedManifest.deploymentId) {
+      throw new Error(`bucket ${requestedManifest.bucket} desired state belongs to another deployment`);
     }
-    const visibility = params.visibility ?? params.manifest.spaceVisibility ?? "private";
-    const candidate = deploymentDesiredState(params.manifest, visibility);
+    const visibility = params.visibility ?? requestedManifest.spaceVisibility ?? "private";
+    const candidate = deploymentDesiredState(requestedManifest, visibility);
     const sameDesired = currentDesired && JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) === JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
-    if (currentDesired && currentDesired.generation > params.manifest.desiredGeneration && !sameDesired) {
+    if (currentDesired && currentDesired.generation > requestedManifest.desiredGeneration && !sameDesired) {
       throw new Error(
-        `canonical desired state generation ${currentDesired.generation} is newer than local generation ${params.manifest.desiredGeneration}; recover the deployment before applying changes`
+        `canonical desired state generation ${currentDesired.generation} is newer than local generation ${requestedManifest.desiredGeneration}; recover the deployment before applying changes`
       );
     }
-    const generation = sameDesired ? currentDesired.generation : Math.max(currentDesired?.generation ?? 0, params.manifest.desiredGeneration) + 1;
+    const generation = sameDesired ? currentDesired.generation : Math.max(currentDesired?.generation ?? 0, requestedManifest.desiredGeneration) + 1;
     const manifest = {
-      ...params.manifest,
+      ...requestedManifest,
       spaceVisibility: visibility,
       desiredGeneration: generation,
       updatedAt: runtime.now().toISOString()
     };
     let operation = await readResumableOperation(runtime.configRoot, manifest.deploymentId, manifest.desiredGeneration) ?? newOperation(manifest, runtime.now());
-    let lease = await acquireControlLease(client, manifest, operation, runtime.now());
+    let lease = await acquireControlLease(control, manifest, operation, runtime.now());
     let renewalError;
     let renewal = Promise.resolve();
     const renewalTimer = setInterval(() => {
       renewal = renewal.then(async () => {
         if (renewalError) return;
         try {
-          lease = await renewControlLease(client, lease, runtime.now());
+          lease = await renewControlLease(control, lease, runtime.now());
         } catch (error) {
           renewalError = error;
         }
@@ -20833,13 +20929,16 @@ async function reconcileManifest(params) {
     const assertLease = async () => {
       await renewal;
       if (renewalError) throw renewalError;
-      await assertControlLease(client, lease, runtime.now());
+      await assertControlLease(control, lease, runtime.now());
       if (renewalError) throw renewalError;
     };
     try {
       await writeOperationState("planned");
+      await writeOperationState("applying");
+      await assertLease();
+      const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
+      await assertLease();
       if (!sameDesired || !currentIdentity) {
-        await assertLease();
         await writeCanonicalState(
           client,
           currentIdentity ?? deploymentIdentity(manifest, params.bucketPrefix),
@@ -20847,10 +20946,6 @@ async function reconcileManifest(params) {
         );
         await assertLease();
       }
-      await writeOperationState("applying");
-      await assertLease();
-      const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
-      await assertLease();
       if (outcome?.waitingForApproval) {
         await writeOperationState("waiting_for_approval", "Tailscale Serve administrator approval is required");
         runtime.prompt.note(outcome.waitingForApproval, "TAILSCALE SERVE APPROVAL REQUIRED");
@@ -20872,7 +20967,7 @@ async function reconcileManifest(params) {
     } finally {
       clearInterval(renewalTimer);
       await renewal;
-      await releaseControlLease(client, lease);
+      await releaseControlLease(control, lease);
     }
     async function writeOperationState(state, detail) {
       operation = await updateOperation(
@@ -20908,7 +21003,17 @@ async function resolveBootstrapPlan(params) {
   const existingManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
   const existingSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const sessionSecret = existingSecrets.MLCLAW_SESSION_SECRET ?? randomBytes(48).toString("base64url");
-  const credentialKey = existingSecrets.MLCLAW_CREDENTIAL_KEY ?? randomBytes(32).toString("base64url");
+  const restoredCredentialKey = existingSecrets.MLCLAW_CREDENTIAL_KEY ?? runtime.env.MLCLAW_CREDENTIAL_KEY;
+  if (existingManifest?.recoveredWithoutCredentialKey && !restoredCredentialKey) {
+    throw new Error(
+      "recovered deployment requires its existing MLCLAW_CREDENTIAL_KEY; restore it in the environment and rerun bootstrap"
+    );
+  }
+  const credentialKey = restoredCredentialKey ?? randomBytes(32).toString("base64url");
+  const credentialKeySha256 = createHash3("sha256").update(credentialKey).digest("hex");
+  if (existingManifest?.credentialKeySha256 && existingManifest.credentialKeySha256 !== credentialKeySha256) {
+    throw new Error("MLCLAW_CREDENTIAL_KEY does not match the recovered deployment");
+  }
   const gatewayLocation = requestedGatewayLocation ?? existingManifest?.gatewayLocation ?? DEFAULT_GATEWAY_LOCATION;
   const containerRuntime = parseContainerRuntimePreference(opts.containerRuntime);
   if (opts.dockerContext && gatewayLocation !== "local") {
@@ -20960,10 +21065,12 @@ async function resolveBootstrapPlan(params) {
     gatewayLocation,
     model: effectiveModel,
     runtimeImage: effectiveRuntimeImage,
+    credentialKeySha256,
     ...existingManifest?.tailscaleMode ? { tailscaleMode: existingManifest.tailscaleMode } : {},
     ...existingManifest?.spaceVisibility ? { spaceVisibility: existingManifest.spaceVisibility } : {},
     ...existingManifest?.spaceHardware ? { spaceHardware: existingManifest.spaceHardware } : {},
     ...typeof existingManifest?.spaceSleepTime === "number" ? { spaceSleepTime: existingManifest.spaceSleepTime } : {},
+    ...existingManifest?.pendingTombstoneBucket ? { pendingTombstoneBucket: existingManifest.pendingTombstoneBucket } : {},
     ...gatewayLocation === "local" ? { localPort } : existingManifest?.localPort ? { localPort: existingManifest.localPort } : {},
     ...localGateway ? { localGateway } : {},
     ...gatewayLocation === "local" && existingManifest?.networkAccess ? { networkAccess: existingManifest.networkAccess } : {},
@@ -21307,6 +21414,11 @@ async function stateAdopt(agent, opts, runtime) {
   const secrets = await readSecretEnv(runtime.configRoot, agent);
   const bucketPrefix = persistedBucketPrefix(secrets);
   const bucketChanged = current.bucket !== bucket;
+  if (bucketChanged && current.pendingTombstoneBucket) {
+    throw new Error(
+      `finish tombstoning ${current.pendingTombstoneBucket} by adopting ${current.bucket} again before moving state`
+    );
+  }
   if (bucketChanged && current.gatewayLocation === "local") {
     assertDedicatedRouterToken(current.model, secrets);
   }
@@ -21330,6 +21442,7 @@ async function stateAdopt(agent, opts, runtime) {
   let updated = {
     ...current,
     bucket,
+    ...bucketChanged ? { pendingTombstoneBucket: current.bucket } : {},
     updatedAt: runtime.now().toISOString()
   };
   const updatedSecrets = {
@@ -21412,8 +21525,12 @@ async function stateAdopt(agent, opts, runtime) {
     }
   });
   updated = reconciled.manifest;
-  if (bucketChanged) {
-    await writeDeploymentTombstone(hub.bucket(current.bucket), current.deploymentId, bucket, runtime.now());
+  const pendingTombstoneBucket = updated.pendingTombstoneBucket;
+  if (pendingTombstoneBucket) {
+    await writeDeploymentTombstone(hub.bucket(pendingTombstoneBucket), current.deploymentId, bucket, runtime.now());
+    const { pendingTombstoneBucket: _completed, ...completed } = updated;
+    updated = completed;
+    await writeManifest(runtime.configRoot, updated);
   }
   runtime.stdout.log(`State bucket: ${bucket}`);
 }
