@@ -4,6 +4,7 @@ import {
   isMissingContainerError,
   isMissingVolumeError,
   mergeDockerLogStreams,
+  parsePodmanConnections,
   withContext,
   withPodmanConnection,
 } from "../src/mlclaw/docker.js";
@@ -30,6 +31,34 @@ describe("Docker error matching", () => {
     expect(withPodmanConnection(undefined, ["ps"])).toEqual(["ps"]);
     expect(withPodmanConnection("local", ["ps"])).toEqual(["ps"]);
     expect(withPodmanConnection("machine", ["ps"])).toEqual(["--connection", "machine", "ps"]);
+  });
+
+  it("parses and identifies Podman's named default connection", () => {
+    expect(
+      parsePodmanConnections(
+        JSON.stringify([
+          {
+            Name: "podman-machine-default",
+            URI: "ssh://core@127.0.0.1:51234/run/user/501/podman/podman.sock",
+            Default: true,
+          },
+          { Name: "build-machine", URI: "ssh://core@127.0.0.1:51235/run/user/501/podman/podman.sock", Default: false },
+          { Name: "" },
+        ]),
+      ),
+    ).toEqual([
+      {
+        name: "podman-machine-default",
+        uri: "ssh://core@127.0.0.1:51234/run/user/501/podman/podman.sock",
+        isDefault: true,
+      },
+      {
+        name: "build-machine",
+        uri: "ssh://core@127.0.0.1:51235/run/user/501/podman/podman.sock",
+        isDefault: false,
+      },
+    ]);
+    expect(parsePodmanConnections("{}")).toEqual([]);
   });
 
   it("classifies missing, permission-denied, and unavailable engines", () => {

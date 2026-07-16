@@ -2109,6 +2109,44 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("rejects conflicting local migration runtime flags before changing the deployment", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "space",
+      model: "test-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    const code = await main([
+      "gateway",
+      "migrate",
+      "research",
+      "--to",
+      "local",
+      "--container-runtime",
+      "podman",
+      "--docker-context",
+      "colima",
+    ], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("--docker-context cannot be used with --container-runtime podman");
+    expect(hub.calls).toEqual([]);
+    expect(runtime.dockerRunner.calls).toEqual([]);
+    expect(runtime.podmanRunner.calls).toEqual([]);
+  });
+
   it("adopts a state bucket for a local deployment and resets stale live disk", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt(["telegram-token", "1234567890"]);

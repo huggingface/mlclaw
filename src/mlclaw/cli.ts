@@ -1522,6 +1522,11 @@ async function gatewayMigrate(
   runtime: Required<CliRuntime>,
 ): Promise<void> {
   const target = parseGatewayLocation(requiredOption(opts.to, "--to"));
+  const requestedContainerRuntime =
+    target === "local" ? parseContainerRuntimePreference(opts.containerRuntime) : undefined;
+  if (target === "local" && opts.dockerContext && requestedContainerRuntime === "podman") {
+    throw new Error("--docker-context cannot be used with --container-runtime podman");
+  }
   const current = await readDeploymentManifest(runtime, agent, {
     requestedDockerContext: target === "space" ? opts.dockerContext : undefined,
   });
@@ -1595,7 +1600,7 @@ async function gatewayMigrate(
       MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
     });
   } else {
-    const containerRuntime = parseContainerRuntimePreference(opts.containerRuntime);
+    const containerRuntime = requestedContainerRuntime ?? "auto";
     const reuseLocalBinding =
       !opts.dockerContext && (containerRuntime === "auto" || current.localGateway?.engine === containerRuntime);
     updated.localGateway = await resolveLocalGatewayBinding({

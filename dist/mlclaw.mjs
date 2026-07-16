@@ -9888,8 +9888,8 @@ var CliDockerRunner = class {
 var CliPodmanRunner = class {
   engine = "podman";
   async probe(context) {
-    const selected = normalizePodmanConnection(context);
     try {
+      const selected = context?.trim() || await this.currentContext();
       await podman(withPodmanConnection(selected, ["info", "--format", "json"]), PROBE_TIMEOUT_MS);
       return {
         engine: this.engine,
@@ -9899,11 +9899,16 @@ var CliPodmanRunner = class {
         detail: selected === LOCAL_PODMAN_CONNECTION ? "Podman default connection is ready" : `Podman connection ${selected} is ready`
       };
     } catch (err) {
-      return classifyContainerProbeError(this.engine, err, selected);
+      return classifyContainerProbeError(this.engine, err, context?.trim());
     }
   }
   async currentContext() {
-    return LOCAL_PODMAN_CONNECTION;
+    try {
+      const { stdout } = await podman(["system", "connection", "list", "--format", "json"], PROBE_TIMEOUT_MS);
+      return parsePodmanConnections(stdout).find((connection) => connection.isDefault)?.name ?? LOCAL_PODMAN_CONNECTION;
+    } catch {
+      return LOCAL_PODMAN_CONNECTION;
+    }
   }
   async contextExists(context) {
     return (await this.probe(context)).status === "ready";
@@ -9914,8 +9919,7 @@ var CliPodmanRunner = class {
     }
     try {
       const { stdout } = await podman(["system", "connection", "list", "--format", "json"]);
-      const connections = JSON.parse(stdout);
-      return connections.find((connection) => connection.Name === context)?.URI;
+      return parsePodmanConnections(stdout).find((connection) => connection.name === context)?.uri;
     } catch {
       return void 0;
     }
@@ -10024,6 +10028,31 @@ function classifyContainerProbeError(engine, err, context) {
     );
   }
   return unavailableProbe(engine, `${displayEngine(engine)} is installed but its engine is unavailable`, context);
+}
+function parsePodmanConnections(raw) {
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.flatMap((value) => {
+    if (!value || typeof value !== "object") {
+      return [];
+    }
+    const record = value;
+    const name = record.Name ?? record.name;
+    const uri = record.URI ?? record.uri;
+    const isDefault = record.Default ?? record.default;
+    if (typeof name !== "string" || !name.trim()) {
+      return [];
+    }
+    return [
+      {
+        name: name.trim(),
+        ...typeof uri === "string" && uri.trim() ? { uri: uri.trim() } : {},
+        isDefault: isDefault === true
+      }
+    ];
+  });
 }
 var PROBE_TIMEOUT_MS = 5e3;
 var LOCAL_PODMAN_CONNECTION = "local";
@@ -16638,6 +16667,10 @@ async function gatewayLogs(agent, opts, runtime) {
 }
 async function gatewayMigrate(agent, opts, runtime) {
   const target = parseGatewayLocation(requiredOption(opts.to, "--to"));
+  const requestedContainerRuntime = target === "local" ? parseContainerRuntimePreference(opts.containerRuntime) : void 0;
+  if (target === "local" && opts.dockerContext && requestedContainerRuntime === "podman") {
+    throw new Error("--docker-context cannot be used with --container-runtime podman");
+  }
   const current = await readDeploymentManifest(runtime, agent, {
     requestedDockerContext: target === "space" ? opts.dockerContext : void 0
   });
@@ -16707,7 +16740,7 @@ async function gatewayMigrate(agent, opts, runtime) {
       MLCLAW_RUNTIME_ID: spaceRuntimeId(agent)
     });
   } else {
-    const containerRuntime = parseContainerRuntimePreference(opts.containerRuntime);
+    const containerRuntime = requestedContainerRuntime ?? "auto";
     const reuseLocalBinding = !opts.dockerContext && (containerRuntime === "auto" || current.localGateway?.engine === containerRuntime);
     updated.localGateway = await resolveLocalGatewayBinding({
       manifest: reuseLocalBinding && current.localGateway ? current : void 0,

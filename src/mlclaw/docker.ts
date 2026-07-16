@@ -50,6 +50,12 @@ export type ContainerInspect = {
   image?: string;
 };
 
+type PodmanConnection = {
+  name: string;
+  uri?: string;
+  isDefault: boolean;
+};
+
 export class CliDockerRunner implements ContainerRunner {
   readonly engine = "docker" as const;
 
@@ -106,19 +112,19 @@ export class CliDockerRunner implements ContainerRunner {
   async run(params: ContainerRunParams): Promise<void> {
     await docker(
       withContext(params.context, [
-      "run",
-      "-d",
-      "--name",
-      params.containerName,
-      "--restart",
-      "unless-stopped",
-      "--env-file",
-      params.envFile,
-      "-e",
-      `OPENCLAW_LIVE_DIR=${params.liveDir}`,
-      "-v",
-      `${params.volumeName}:${params.volumeMountPath}`,
-      params.image,
+        "run",
+        "-d",
+        "--name",
+        params.containerName,
+        "--restart",
+        "unless-stopped",
+        "--env-file",
+        params.envFile,
+        "-e",
+        `OPENCLAW_LIVE_DIR=${params.liveDir}`,
+        "-v",
+        `${params.volumeName}:${params.volumeMountPath}`,
+        params.image,
       ]),
     );
   }
@@ -185,8 +191,8 @@ export class CliPodmanRunner implements ContainerRunner {
   readonly engine = "podman" as const;
 
   async probe(context?: string): Promise<ContainerRuntimeProbe> {
-    const selected = normalizePodmanConnection(context);
     try {
+      const selected = context?.trim() || (await this.currentContext());
       await podman(withPodmanConnection(selected, ["info", "--format", "json"]), PROBE_TIMEOUT_MS);
       return {
         engine: this.engine,
@@ -199,12 +205,17 @@ export class CliPodmanRunner implements ContainerRunner {
             : `Podman connection ${selected} is ready`,
       };
     } catch (err) {
-      return classifyContainerProbeError(this.engine, err, selected);
+      return classifyContainerProbeError(this.engine, err, context?.trim());
     }
   }
 
   async currentContext(): Promise<string> {
-    return LOCAL_PODMAN_CONNECTION;
+    try {
+      const { stdout } = await podman(["system", "connection", "list", "--format", "json"], PROBE_TIMEOUT_MS);
+      return parsePodmanConnections(stdout).find((connection) => connection.isDefault)?.name ?? LOCAL_PODMAN_CONNECTION;
+    } catch {
+      return LOCAL_PODMAN_CONNECTION;
+    }
   }
 
   async contextExists(context: string): Promise<boolean> {
@@ -217,8 +228,7 @@ export class CliPodmanRunner implements ContainerRunner {
     }
     try {
       const { stdout } = await podman(["system", "connection", "list", "--format", "json"]);
-      const connections = JSON.parse(stdout) as Array<{ Name?: string; URI?: string }>;
-      return connections.find((connection) => connection.Name === context)?.URI;
+      return parsePodmanConnections(stdout).find((connection) => connection.name === context)?.uri;
     } catch {
       return undefined;
     }
@@ -285,10 +295,10 @@ export class CliPodmanRunner implements ContainerRunner {
     try {
       const { stdout } = await podman(
         withPodmanConnection(context, [
-        "inspect",
-        containerName,
-        "--format",
-        "{{.State.Running}}\t{{.State.Status}}\t{{.Config.Image}}",
+          "inspect",
+          containerName,
+          "--format",
+          "{{.State.Running}}\t{{.State.Status}}\t{{.Config.Image}}",
         ]),
       );
       const [running, status, image] = stdout.trim().split("\t");
@@ -346,6 +356,32 @@ export function classifyContainerProbeError(
     );
   }
   return unavailableProbe(engine, `${displayEngine(engine)} is installed but its engine is unavailable`, context);
+}
+
+export function parsePodmanConnections(raw: string): PodmanConnection[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.flatMap((value): PodmanConnection[] => {
+    if (!value || typeof value !== "object") {
+      return [];
+    }
+    const record = value as Record<string, unknown>;
+    const name = record.Name ?? record.name;
+    const uri = record.URI ?? record.uri;
+    const isDefault = record.Default ?? record.default;
+    if (typeof name !== "string" || !name.trim()) {
+      return [];
+    }
+    return [
+      {
+        name: name.trim(),
+        ...(typeof uri === "string" && uri.trim() ? { uri: uri.trim() } : {}),
+        isDefault: isDefault === true,
+      },
+    ];
+  });
 }
 
 const PROBE_TIMEOUT_MS = 5_000;
