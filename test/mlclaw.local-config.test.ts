@@ -71,6 +71,11 @@ describe("local ML Claw config", () => {
     await expect(readManifest(root, "research")).rejects.toThrow();
   });
 
+  it("rejects agent names that can escape the config directories", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-config-"));
+    await expect(writeSecretEnv(root, "../../outside", { HF_TOKEN: "hf_test" })).rejects.toThrow("invalid agent name");
+  });
+
   it("writes secret env files with user-only permissions", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-config-"));
 

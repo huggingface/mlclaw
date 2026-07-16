@@ -19708,6 +19708,28 @@ var coerce = {
 };
 var NEVER = INVALID;
 
+// src/mlclaw/naming.ts
+var AGENT_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+function assertAgentName(value) {
+  if (!AGENT_NAME_PATTERN.test(value)) {
+    throw new Error(`invalid agent name: ${value}`);
+  }
+  return value;
+}
+function slugifyAgentName(raw) {
+  const cleaned = raw.trim().replace(/^@/, "").replace(/(?:[_-]?bot)$/i, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").replace(/--+/g, "-");
+  if (!cleaned) {
+    throw new Error(`cannot derive an agent name from ${raw}`);
+  }
+  return assertAgentName(cleaned);
+}
+function namesFor(owner, agentName) {
+  return {
+    space: `${owner}/${agentName}`,
+    bucket: `${owner}/${agentName}-data`
+  };
+}
+
 // src/mlclaw/local-config.ts
 var localGatewaySchema = external_exports.discriminatedUnion("engine", [
   external_exports.object({
@@ -19741,7 +19763,7 @@ var networkAccessSchema = external_exports.discriminatedUnion("provider", [
   }).strict()
 ]);
 var manifestFields = {
-  agent: external_exports.string().min(1).max(63),
+  agent: external_exports.string().regex(AGENT_NAME_PATTERN),
   owner: external_exports.string().min(1).max(128),
   bucket: external_exports.string().min(3).max(256),
   space: external_exports.string().min(3).max(256),
@@ -19790,10 +19812,10 @@ function localConfigPaths(root) {
   };
 }
 function manifestPath(root, agent) {
-  return path15.join(localConfigPaths(root).deploymentsDir, `${agent}.json`);
+  return path15.join(localConfigPaths(root).deploymentsDir, `${assertAgentName(agent)}.json`);
 }
 function secretEnvPath(root, agent) {
-  return path15.join(localConfigPaths(root).secretsDir, `${agent}.env`);
+  return path15.join(localConfigPaths(root).secretsDir, `${assertAgentName(agent)}.env`);
 }
 async function writeManifest(root, input) {
   const manifest = input.version === 1 ? importLegacyManifest(legacyManifestSchema.parse(input)) : manifestSchema.parse(input);
@@ -19893,7 +19915,7 @@ var MAX_CONTROL_BYTES = 64 * 1024;
 var identitySchema = external_exports.object({
   schemaVersion: external_exports.literal(1),
   deploymentId: external_exports.string().uuid(),
-  agent: external_exports.string().min(1).max(63),
+  agent: external_exports.string().regex(AGENT_NAME_PATTERN),
   owner: external_exports.string().min(1).max(128),
   bucket: external_exports.string().min(3).max(256),
   statePrefix: external_exports.string().min(1).max(256),
@@ -20158,21 +20180,6 @@ async function atomicPrivateWrite(file, content) {
   await fs15.writeFile(temporary, content, { mode: 384, flag: "wx" });
   await fs15.rename(temporary, file);
   await fs15.chmod(file, 384);
-}
-
-// src/mlclaw/naming.ts
-function slugifyAgentName(raw) {
-  const cleaned = raw.trim().replace(/^@/, "").replace(/(?:[_-]?bot)$/i, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").replace(/--+/g, "-");
-  if (!cleaned) {
-    throw new Error(`cannot derive an agent name from ${raw}`);
-  }
-  return cleaned;
-}
-function namesFor(owner, agentName) {
-  return {
-    space: `${owner}/${agentName}`,
-    bucket: `${owner}/${agentName}-data`
-  };
 }
 
 // src/mlclaw/telegram.ts
@@ -20658,8 +20665,8 @@ async function bootstrap(opts, runtime) {
   const hub = runtime.hubFactory(hfToken);
   const me2 = await hub.whoami();
   const selectionOwner = opts.owner ?? me2.name;
-  const telegramToken = await readOptionalTelegramToken(opts, runtime);
-  const bot = telegramToken ? await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot) : void 0;
+  const suppliedTelegramToken = await readOptionalTelegramToken(opts, runtime);
+  let bot = suppliedTelegramToken ? await runtime.getTelegramBot(suppliedTelegramToken, opts.telegramApiRoot) : void 0;
   const requestedAgentName = opts.name ?? bot?.username;
   let agentName = await resolveBootstrapAgentName({
     ...requestedAgentName ? { requestedName: requestedAgentName } : {},
@@ -20668,8 +20675,13 @@ async function bootstrap(opts, runtime) {
     runtime
   });
   const selectedManifest = await readManifest(runtime.configRoot, agentName).catch(() => null);
+  const selectedSecrets = await readSecretEnv(runtime.configRoot, agentName).catch(() => ({}));
   const owner = opts.owner ?? selectedManifest?.owner ?? selectionOwner;
-  const telegramUserId = telegramToken ? opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime) : void 0;
+  const telegramToken = suppliedTelegramToken ?? selectedSecrets.TELEGRAM_BOT_TOKEN;
+  if (!bot && telegramToken) {
+    bot = await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot ?? selectedSecrets.TELEGRAM_API_ROOT);
+  }
+  const telegramUserId = telegramToken ? opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? selectedSecrets.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime) : void 0;
   const model = opts.model ?? DEFAULT_MODEL2;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
   const templateRuntimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
@@ -20778,7 +20790,12 @@ async function bootstrap(opts, runtime) {
         runtimeId: spaceRuntimeId(agentName),
         takeover: Boolean(opts.takeover)
       });
-      await reconcileDeployment(activePlan, hub, runtime, async (_changed, assertLease) => {
+      await reconcileDeployment(activePlan, hub, runtime, async (changed, assertLease) => {
+        if (!changed) {
+          await hub.getSpaceRuntime(activePlan.manifest.space);
+          runtime.stdout.log(`Space deployment already matches desired state: ${activePlan.manifest.space}`);
+          return;
+        }
         await assertLease();
         const deployed = await deploySpaceGateway({
           hub,
@@ -20867,6 +20884,7 @@ async function reconcileDeployment(plan, hub, runtime, apply) {
     manifest: plan.manifest,
     bucketPrefix: plan.bucketPrefix,
     visibility: plan.spacePlan?.visibility,
+    credentialKey: requiredSecret(plan.secrets, "MLCLAW_CREDENTIAL_KEY"),
     hub,
     runtime,
     apply: async ({ manifest, changed, assertLease }) => {
@@ -20880,19 +20898,38 @@ async function reconcileManifest(params) {
   const { hub, runtime } = params;
   return await withDeploymentLock(runtime.configRoot, params.manifest.deploymentId, async () => {
     let requestedManifest = params.manifest;
-    if (!requestedManifest.credentialKeySha256) {
+    const client = hub.bucket(requestedManifest.bucket);
+    const currentIdentity = await readDeploymentIdentity(client);
+    if (currentIdentity && currentIdentity.deploymentId !== requestedManifest.deploymentId) {
+      throw new Error(`bucket ${requestedManifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+    }
+    if (currentIdentity) {
+      if (requestedManifest.credentialKeySha256 && requestedManifest.credentialKeySha256 !== currentIdentity.credentialKeySha256) {
+        throw new Error("local credential key fingerprint does not match canonical deployment identity");
+      }
+      const verifiedManifest = {
+        ...requestedManifest,
+        credentialKeySha256: currentIdentity.credentialKeySha256
+      };
+      delete verifiedManifest.recoveredWithoutCredentialKey;
+      requestedManifest = verifiedManifest;
+    }
+    if (requestedManifest.credentialKeySha256) {
+      await restoreMatchingDeploymentCredentialKey(
+        runtime,
+        requestedManifest.agent,
+        requestedManifest.credentialKeySha256,
+        params.credentialKey,
+        Boolean(currentIdentity) || !params.credentialKey
+      );
+    } else {
       const secrets = await ensureDeploymentCredentialKey(runtime, requestedManifest.agent);
       requestedManifest = {
         ...requestedManifest,
         credentialKeySha256: createHash3("sha256").update(requiredSecret(secrets, "MLCLAW_CREDENTIAL_KEY")).digest("hex")
       };
     }
-    const client = hub.bucket(requestedManifest.bucket);
     const control = await hub.deploymentControlStore(requestedManifest.owner, requestedManifest.deploymentId);
-    const currentIdentity = await readDeploymentIdentity(client);
-    if (currentIdentity && currentIdentity.deploymentId !== requestedManifest.deploymentId) {
-      throw new Error(`bucket ${requestedManifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
-    }
     const currentDesired = await readDesiredState(client);
     if (currentDesired && currentDesired.deploymentId !== requestedManifest.deploymentId) {
       throw new Error(`bucket ${requestedManifest.bucket} desired state belongs to another deployment`);
@@ -21077,10 +21114,14 @@ async function resolveBootstrapPlan(params) {
     createdAt: existingManifest?.createdAt ?? now,
     updatedAt: now
   };
+  const effectiveTelegramToken = telegramToken ?? existingSecrets.TELEGRAM_BOT_TOKEN;
+  const effectiveTelegramUserId = telegramUserId ?? existingSecrets.TELEGRAM_ALLOWED_USERS;
+  const effectiveTelegramProxy = opts.telegramProxy ?? existingSecrets.TELEGRAM_PROXY;
+  const effectiveTelegramApiRoot = opts.telegramApiRoot ?? existingSecrets.TELEGRAM_API_ROOT;
   const secrets = deploymentSecrets({
     hfToken,
-    ...telegramToken ? { telegramToken } : {},
-    ...telegramUserId ? { telegramUserId } : {},
+    ...effectiveTelegramToken ? { telegramToken: effectiveTelegramToken } : {},
+    ...effectiveTelegramUserId ? { telegramUserId: effectiveTelegramUserId } : {},
     sessionSecret,
     credentialKey,
     owner,
@@ -21092,8 +21133,8 @@ async function resolveBootstrapPlan(params) {
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
     ...bucketPrefix ? { bucketPrefix } : {},
-    ...opts.telegramProxy ? { telegramProxy: opts.telegramProxy } : {},
-    ...opts.telegramApiRoot ? { telegramApiRoot: opts.telegramApiRoot } : {},
+    ...effectiveTelegramProxy ? { telegramProxy: effectiveTelegramProxy } : {},
+    ...effectiveTelegramApiRoot ? { telegramApiRoot: effectiveTelegramApiRoot } : {},
     ...routerToken ? { routerToken } : {}
   });
   return {
@@ -21424,6 +21465,10 @@ async function stateAdopt(agent, opts, runtime) {
   }
   runtime.stdout.log(`Creating or adopting private bucket ${bucket}`);
   await hub.createBucket(bucket, true);
+  const targetTombstone = await readDeploymentTombstone(hub.bucket(bucket));
+  if (targetTombstone) {
+    throw new Error(`state bucket ${bucket} was moved to ${targetTombstone.movedTo} and cannot be adopted again`);
+  }
   await inspectStateBucket(hub, bucket, bucketPrefix);
   await assertNoLiveForeignLease({
     hub,
@@ -22894,6 +22939,19 @@ async function ensureDeploymentCredentialKey(runtime, agent, existing) {
   };
   await writeSecretEnv(runtime.configRoot, agent, updated);
   return updated;
+}
+async function restoreMatchingDeploymentCredentialKey(runtime, agent, expectedSha256, suppliedCredentialKey, persist = true) {
+  const secrets = await readSecretEnv(runtime.configRoot, agent).catch(() => ({}));
+  const candidates = [suppliedCredentialKey, runtime.env.MLCLAW_CREDENTIAL_KEY, secrets.MLCLAW_CREDENTIAL_KEY].filter(
+    (value) => Boolean(value)
+  );
+  const credentialKey = candidates.find((value) => createHash3("sha256").update(value).digest("hex") === expectedSha256);
+  if (!credentialKey) {
+    throw new Error("local MLCLAW_CREDENTIAL_KEY is missing or does not match the canonical deployment identity");
+  }
+  if (persist && secrets.MLCLAW_CREDENTIAL_KEY !== credentialKey) {
+    await writeSecretEnv(runtime.configRoot, agent, { ...secrets, MLCLAW_CREDENTIAL_KEY: credentialKey });
+  }
 }
 function requiredOption(value, label) {
   if (!value) {

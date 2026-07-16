@@ -92,6 +92,8 @@ describe("deployment state", () => {
     expect(bucket.objects.get(DESIRED_STATE_PATH)).not.toContain("100.100.100.100");
     bucket.objects.set(DEPLOYMENT_PATH, JSON.stringify({ ...deploymentIdentity(manifest), extra: true }));
     await expect(readDeploymentIdentity(bucket)).rejects.toThrow();
+    bucket.objects.set(DEPLOYMENT_PATH, JSON.stringify({ ...deploymentIdentity(manifest), agent: "../../outside" }));
+    await expect(readDeploymentIdentity(bucket)).rejects.toThrow();
   });
 
   it("verifies lease ownership and releases only its own lease", async () => {

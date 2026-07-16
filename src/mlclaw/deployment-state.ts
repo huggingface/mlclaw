@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { BucketClient } from "../hf-bucket-client/client.js";
 import { localConfigPaths, type DeploymentManifest } from "./local-config.js";
+import { AGENT_NAME_PATTERN } from "./naming.js";
 
 export const DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 export const DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
@@ -15,7 +16,7 @@ const identitySchema = z
   .object({
     schemaVersion: z.literal(1),
     deploymentId: z.string().uuid(),
-    agent: z.string().min(1).max(63),
+    agent: z.string().regex(AGENT_NAME_PATTERN),
     owner: z.string().min(1).max(128),
     bucket: z.string().min(3).max(256),
     statePrefix: z.string().min(1).max(256),

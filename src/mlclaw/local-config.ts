@@ -4,6 +4,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { GatewayLocation } from "./gateway-location.js";
+import { AGENT_NAME_PATTERN, assertAgentName } from "./naming.js";
 
 export type DeploymentManifest = {
   version: 2;
@@ -112,7 +113,7 @@ const networkAccessSchema = z.discriminatedUnion("provider", [
 ]);
 
 const manifestFields = {
-  agent: z.string().min(1).max(63),
+  agent: z.string().regex(AGENT_NAME_PATTERN),
   owner: z.string().min(1).max(128),
   bucket: z.string().min(3).max(256),
   space: z.string().min(3).max(256),
@@ -171,11 +172,11 @@ export function localConfigPaths(root: string): LocalConfigPaths {
 }
 
 export function manifestPath(root: string, agent: string): string {
-  return path.join(localConfigPaths(root).deploymentsDir, `${agent}.json`);
+  return path.join(localConfigPaths(root).deploymentsDir, `${assertAgentName(agent)}.json`);
 }
 
 export function secretEnvPath(root: string, agent: string): string {
-  return path.join(localConfigPaths(root).secretsDir, `${agent}.env`);
+  return path.join(localConfigPaths(root).secretsDir, `${assertAgentName(agent)}.env`);
 }
 
 export async function writeManifest(root: string, input: DeploymentManifest | LegacyDeploymentManifest): Promise<void> {

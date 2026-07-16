@@ -622,6 +622,40 @@ describe("mlclaw CLI", () => {
     expect(hub.bucketObjects.get(".mlclaw/desired-state.json")).not.toContain("hf_test_token");
   });
 
+  it("preserves Telegram configuration on an automatic bootstrap rerun", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([]).prompt);
+    await expect(
+      main(
+        [
+          "bootstrap",
+          "--gateway",
+          "local",
+          "--name",
+          "research",
+          "--telegram-token",
+          "telegram-token",
+          "--telegram-user-id",
+          "1234567890",
+          "--telegram-proxy",
+          "http://proxy.example",
+          "--telegram-api-root",
+          "https://telegram.example",
+          "--no-pull",
+        ],
+        runtime,
+      ),
+    ).resolves.toBe(0);
+
+    await expect(main(["bootstrap", "--gateway", "local", "--no-pull"], runtime)).resolves.toBe(0);
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      TELEGRAM_BOT_TOKEN: "telegram-token",
+      TELEGRAM_ALLOWED_USERS: "1234567890",
+      TELEGRAM_PROXY: "http://proxy.example",
+      TELEGRAM_API_ROOT: "https://telegram.example",
+    });
+  });
+
   it("preserves an organization owner when selecting its only local deployment", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([]);
@@ -745,6 +779,24 @@ describe("mlclaw CLI", () => {
 
     await expect(main(["--gateway", "local", "--no-pull"], runtime)).resolves.toBe(1);
     expect(errors.join("\n")).toContain("requires its existing MLCLAW_CREDENTIAL_KEY");
+  });
+
+  it("rejects a mismatched credential key through non-bootstrap reconciliation", async () => {
+    const hub = createFakeHub();
+    const errors: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([]).prompt, errors);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    await writeSecretEnv(runtime.configRoot, "research", {
+      ...(await readSecretEnv(runtime.configRoot, "research")),
+      MLCLAW_CREDENTIAL_KEY: "replacement-key",
+    });
+    runtime.dockerRunner.calls.length = 0;
+
+    await expect(main(["gateway", "start", "research", "--no-pull"], runtime)).resolves.toBe(1);
+    expect(errors.join("\n")).toContain("does not match the canonical deployment identity");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
 
   it("offers Tailscale access interactively but never enables it implicitly for automation", async () => {
@@ -2080,6 +2132,23 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("verifies an unchanged Space without redeploying it", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    hub.calls.length = 0;
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+    expect(hub.calls.some((call) => call.name === "getSpaceRuntime")).toBe(true);
+    expect(
+      hub.calls.some((call) =>
+        ["addSpaceVariable", "addSpaceSecret", "requestSpaceHardware", "setSpaceSleepTime", "restartSpace"].includes(
+          call.name,
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it("allowlists the authenticated user for org-owned browser Spaces", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
@@ -2959,6 +3028,33 @@ describe("mlclaw CLI", () => {
     expect((await readManifest(runtime.configRoot, "research")).pendingTombstoneBucket).toBeUndefined();
     expect(JSON.parse(hub.bucketObjects.get(".mlclaw/tombstone.json") ?? "null")).toMatchObject({
       movedTo: "alice/research-archive-data",
+    });
+  });
+
+  it("refuses to adopt a bucket that has already been tombstoned", async () => {
+    const hub = createFakeHub();
+    const errors: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([]).prompt, errors);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    seedValidStateSnapshot(hub);
+    hub.bucketObjects.set(
+      ".mlclaw/tombstone.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        deploymentId: (await readManifest(runtime.configRoot, "research")).deploymentId,
+        movedTo: "alice/current-data",
+        tombstonedAt: "2026-07-16T00:00:00.000Z",
+      }),
+    );
+
+    await expect(
+      main(["state", "adopt", "research", "--bucket", "alice/retired-data", "--yes", "--no-pull"], runtime),
+    ).resolves.toBe(1);
+    expect(errors.join("\n")).toContain("was moved to alice/current-data and cannot be adopted again");
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/research-data",
     });
   });
 
