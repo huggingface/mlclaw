@@ -133,6 +133,9 @@ function createFakeHub(
   const hub = {
     calls,
     bucketObjects,
+    existingSpaces,
+    variables,
+    volumes,
     bucket(bucket: string) {
       calls.push({ name: "bucket", args: [bucket] });
       return bucketClient;
@@ -170,6 +173,7 @@ function createFakeHub(
           return { value: controlValue, revision: String(controlRevision) };
         },
         async compareAndSwap(expectedRevision: string, value: unknown | null) {
+          calls.push({ name: "control.compareAndSwap", args: [expectedRevision, value] });
           if (expectedRevision !== String(controlRevision))
             throw new Error("deployment control lease changed concurrently");
           controlValue = value;
@@ -2280,6 +2284,9 @@ describe("mlclaw CLI", () => {
       name: "updateSpaceVisibility",
       args: ["alice/research", "public"],
     });
+    expect(hub.calls.findIndex((call) => call.name === "updateSpaceVisibility")).toBeGreaterThan(
+      hub.calls.findIndex((call) => call.name === "control.compareAndSwap"),
+    );
     expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
       space: { visibility: "public" },
     });
@@ -2362,6 +2369,59 @@ describe("mlclaw CLI", () => {
     ).toBe(false);
   });
 
+  it("fully redeploys a Space that was deleted outside ML Claw", async () => {
+    const hub = createFakeHub();
+    const baseRuntime = await createRuntime(hub, createPrompt([], false).prompt);
+    let pushes = 0;
+    const runtime = {
+      ...baseRuntime,
+      pushTemplateToSpace: async () => {
+        pushes += 1;
+        return { templateRev: "test-template" };
+      },
+    };
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    hub.existingSpaces.delete("alice/research");
+    pushes = 0;
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+
+    expect(pushes).toBe(1);
+    expect(hub.calls).toContainEqual({
+      name: "createDockerSpace",
+      args: ["alice/research", { private: true }],
+    });
+  });
+
+  it("repairs drifted Space variables and bucket mounts", async () => {
+    const hub = createFakeHub();
+    const baseRuntime = await createRuntime(hub, createPrompt([], false).prompt);
+    let pushes = 0;
+    const runtime = {
+      ...baseRuntime,
+      pushTemplateToSpace: async () => {
+        pushes += 1;
+        return { templateRev: "test-template" };
+      },
+    };
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    hub.variables.delete("OPENCLAW_MODEL");
+    hub.volumes.length = 0;
+    pushes = 0;
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+
+    expect(pushes).toBe(1);
+    expect(hub.variables.get("OPENCLAW_MODEL")?.value).toBe(DEFAULT_MODEL);
+    expect(hub.volumes).toContainEqual(
+      expect.objectContaining({
+        type: "bucket",
+        source: "alice/research-data",
+        mountPath: "/data/mlclaw-state",
+      }),
+    );
+  });
+
   it("persists a newer canonical generation during an unchanged Space bootstrap", async () => {
     const hub = createFakeHub();
     const runtime = await createRuntime(hub, createPrompt([], false).prompt);
@@ -2431,7 +2491,14 @@ describe("mlclaw CLI", () => {
         stage: "PAUSED",
         hardware: "cpu-basic",
         requested_hardware: "cpu-basic",
-        volumes: [],
+        volumes: [
+          {
+            type: "bucket",
+            source: "alice/research-data",
+            mountPath: "/data/mlclaw-state",
+            readOnly: false,
+          },
+        ],
       },
     });
     const runtime = await createRuntime(hub, createPrompt([], false).prompt);

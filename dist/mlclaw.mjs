@@ -20484,6 +20484,8 @@ var SPACE_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
 var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
 var SPACE_HANDOFF_POLL_MS = 5e3;
 var LOCAL_START_SETTLE_MS = 500;
+var REMOTE_DISCOVERY_PROBE_TIMEOUT_MS = 5e3;
+var REMOTE_DISCOVERY_TIMEOUT_MS = 2e4;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 var DEFAULT_CANONICAL_TEMPLATE_SPACE = "osolmaz/mlclaw";
@@ -20649,27 +20651,51 @@ async function resolveBootstrapAgentName(params) {
   return slugifyAgentName(await promptAgentName(params.runtime));
 }
 async function discoverRemoteDeployments(owner, hub) {
-  const buckets = (await hub.listBuckets(owner)).filter((bucket) => bucket.startsWith(`${owner}/`));
+  const deadline = Date.now() + REMOTE_DISCOVERY_TIMEOUT_MS;
+  const buckets = (await withDeadline(hub.listBuckets(owner), REMOTE_DISCOVERY_TIMEOUT_MS, [])).filter(
+    (bucket) => bucket.startsWith(`${owner}/`)
+  );
   const found = [];
   for (let offset = 0; offset < buckets.length; offset += 4) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const page = await Promise.all(
       buckets.slice(offset, offset + 4).map(async (bucket) => {
-        try {
-          const client = hub.bucket(bucket);
-          if (await readDeploymentTombstone(client)) return null;
-          const identity = await readDeploymentIdentity(client);
-          if (!identity || identity.owner !== owner || identity.bucket !== bucket) return null;
-          const desired = await readDesiredState(client);
-          if (!desired || desired.deploymentId !== identity.deploymentId) return null;
-          return { identity, desired };
-        } catch {
-          return null;
-        }
+        return await withDeadline(
+          (async () => {
+            try {
+              const client = hub.bucket(bucket);
+              if (await readDeploymentTombstone(client)) return null;
+              const identity = await readDeploymentIdentity(client);
+              if (!identity || identity.owner !== owner || identity.bucket !== bucket) return null;
+              const desired = await readDesiredState(client);
+              if (!desired || desired.deploymentId !== identity.deploymentId) return null;
+              return { identity, desired };
+            } catch {
+              return null;
+            }
+          })(),
+          Math.min(REMOTE_DISCOVERY_PROBE_TIMEOUT_MS, remaining),
+          null
+        );
       })
     );
     found.push(...page.filter((item) => item !== null));
   }
   return found.sort((a, b2) => a.identity.agent.localeCompare(b2.identity.agent));
+}
+async function withDeadline(promise, milliseconds, fallback) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallback), Math.max(0, milliseconds));
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 async function cacheRecoveredDeployment(deployment, runtime) {
   const { identity, desired } = deployment;
@@ -20844,12 +20870,43 @@ async function bootstrap(opts, runtime) {
         takeover: Boolean(opts.takeover)
       });
       await reconcileDeployment(activePlan, hub, runtime, async (changed, assertLease) => {
-        if (!changed) {
-          const [spaceRuntime, variables, previousSecrets] = await Promise.all([
+        let observed;
+        let requiresDeployment = !spacePlan.exists;
+        if (!changed && !requiresDeployment) {
+          const [spaceRuntime, variables] = await Promise.all([
             hub.getSpaceRuntime(activePlan.manifest.space),
-            hub.getSpaceVariables(activePlan.manifest.space),
-            readSecretEnv(runtime.configRoot, activePlan.agentName).catch(() => ({}))
+            hub.getSpaceVariables(activePlan.manifest.space)
           ]);
+          observed = { runtime: spaceRuntime, variables };
+          requiresDeployment = spaceGatewayNeedsRepair(activePlan.manifest, variables, spaceRuntime, me2.name);
+        }
+        if (spacePlan.currentVisibility !== spacePlan.visibility) {
+          await assertLease();
+          await hub.updateSpaceVisibility(spacePlan.space, spacePlan.visibility);
+        }
+        if (changed || requiresDeployment) {
+          await assertLease();
+          const deployed = await deploySpaceGateway({
+            hub,
+            runtime,
+            hfToken,
+            manifest: activePlan.manifest,
+            secrets: activePlan.secrets,
+            allowedUsers: me2.name,
+            spaceExists: spacePlan.exists,
+            spacePrepared: true,
+            assertLease,
+            ...paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {},
+            ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {},
+            ...!opts.bundledRuntime && !activePlan.manifest.runtimeImage.startsWith("bundled:") ? { templateRuntimeImage: activePlan.manifest.runtimeImage } : {}
+          });
+          deployedSpaceRuntime = deployed.runtimeImage;
+          await assertLease();
+          await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
+          return;
+        }
+        if (observed) {
+          const previousSecrets = await readSecretEnv(runtime.configRoot, activePlan.agentName).catch(() => ({}));
           const secretsChanged = JSON.stringify(previousSecrets) !== JSON.stringify(activePlan.secrets);
           if (secretsChanged) {
             await assertLease();
@@ -20864,8 +20921,8 @@ async function bootstrap(opts, runtime) {
             await assertLease();
             await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
           }
-          const stage = typeof spaceRuntime.stage === "string" ? spaceRuntime.stage.toUpperCase() : "";
-          const disabled = variables.has("MLCLAW_GATEWAY_DISABLED");
+          const stage = typeof observed.runtime.stage === "string" ? observed.runtime.stage.toUpperCase() : "";
+          const disabled = observed.variables.has("MLCLAW_GATEWAY_DISABLED");
           const stopped = disabled || stage === "PAUSED" || stage === "STOPPED" || stage === "SLEEPING";
           if (stopped) {
             await assertLease();
@@ -20880,24 +20937,7 @@ async function bootstrap(opts, runtime) {
           await writeManifest(runtime.configRoot, activePlan.manifest);
           return;
         }
-        await assertLease();
-        const deployed = await deploySpaceGateway({
-          hub,
-          runtime,
-          hfToken,
-          manifest: activePlan.manifest,
-          secrets: activePlan.secrets,
-          allowedUsers: me2.name,
-          spaceExists: spacePlan.exists,
-          spacePrepared: true,
-          assertLease,
-          ...paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {},
-          ...typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {},
-          ...!opts.bundledRuntime && !activePlan.manifest.runtimeImage.startsWith("bundled:") ? { templateRuntimeImage: activePlan.manifest.runtimeImage } : {}
-        });
-        deployedSpaceRuntime = deployed.runtimeImage;
-        await assertLease();
-        await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
+        throw new Error("internal error: Space reconciliation had no observed or changed state");
       });
     }
   }
@@ -21473,9 +21513,6 @@ async function createOrAdoptBucket(params) {
 async function createOrAdoptSpace(params) {
   if (params.spacePlan.exists) {
     params.runtime.stdout.log(`Updating existing Space ${params.spacePlan.space}`);
-    if (params.spacePlan.currentVisibility !== params.spacePlan.visibility) {
-      await params.hub.updateSpaceVisibility(params.spacePlan.space, params.spacePlan.visibility);
-    }
     return;
   }
   params.runtime.stdout.log(`Creating ${params.spacePlan.visibility} Space ${params.spacePlan.space}`);
@@ -21918,6 +21955,25 @@ async function removeFailedBootstrapContainer(manifest, runtime, removeVolume) {
     await runner.rmVolume(volumeNameFor(manifest.agent), connection);
   }
 }
+function spaceGatewayNeedsRepair(manifest, variables, runtime, allowedUsers) {
+  const expected = {
+    OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
+    MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+    OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+    MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+    OPENCLAW_MODEL: manifest.model,
+    OPENCLAW_AGENT_NAME: manifest.agent,
+    MLCLAW_GATEWAY_LOCATION: "space",
+    MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
+    MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+    MLCLAW_ALLOWED_USERS: allowedUsers,
+    MLCLAW_ADMINS: allowedUsers,
+    MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
+    MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
+    OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
+  };
+  return !variables.has("MLCLAW_TEMPLATE_REV") || Object.entries(expected).some(([key, value]) => variables.get(key)?.value !== value) || !hasStateVolume(runtime.volumes, manifest.bucket);
+}
 async function deploySpaceGateway(params) {
   const { hub, runtime, hfToken, manifest, secrets } = params;
   const assertLease = params.assertLease ?? (async () => void 0);
@@ -21964,7 +22020,7 @@ async function deploySpaceGateway(params) {
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
     MLCLAW_ALLOWED_USERS: params.allowedUsers,
     MLCLAW_ADMINS: params.allowedUsers,
-    MLCLAW_CANONICAL_SPACE_ID: "osolmaz/mlclaw",
+    MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT)
   });
