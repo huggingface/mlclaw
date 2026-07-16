@@ -605,7 +605,7 @@ describe("mlclaw CLI", () => {
         agent: "research",
         owner: "alice",
         bucket: "alice/research-data",
-        statePrefix: "openclaw-state",
+        statePrefix: "custom-state-prefix",
         createdAt: "2026-07-16T00:00:00.000Z",
       }),
     );
@@ -624,13 +624,19 @@ describe("mlclaw CLI", () => {
     );
     const { prompt } = createPrompt([true]);
     const runtime = await createRuntime(hub, prompt);
+    runtime.dockerRunner.contexts.clear();
 
     await expect(main(["--gateway", "local", "--no-pull"], runtime)).resolves.toBe(0);
     await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
       deploymentId: "33333333-3333-5333-a333-333333333333",
       desiredGeneration: 2,
       bucket: "alice/research-data",
+      localGateway: { engine: "podman", podmanConnection: "local" },
     });
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      OPENCLAW_HF_STATE_PREFIX: "custom-state-prefix",
+    });
+    expect(runtime.podmanRunner.calls.some((call) => call.name === "run")).toBe(true);
   });
 
   it("offers Tailscale access interactively but never enables it implicitly for automation", async () => {
@@ -1939,16 +1945,36 @@ describe("mlclaw CLI", () => {
   it("updates Space hardware settings through the Hugging Face settings API", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([]);
+    const runtime = await createRuntime(hub, prompt);
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "space",
+      model: DEFAULT_MODEL,
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+    await writeSecretEnv(runtime.configRoot, "research", {
+      OPENCLAW_HF_STATE_BUCKET: "alice/research-data",
+    });
 
     const code = await main(
       ["settings", "alice/research", "--hardware", "cpu-upgrade", "--sleep-time", "-1", "--yes"],
-      await createRuntime(hub, prompt),
+      runtime,
     );
 
     expect(code).toBe(0);
     expect(hub.calls).toContainEqual({
       name: "requestSpaceHardware",
       args: ["alice/research", "cpu-upgrade", -1],
+    });
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
+      space: { repo: "alice/research", hardware: "cpu-upgrade", sleepTime: -1 },
     });
   });
 

@@ -38,7 +38,14 @@ const desiredStateSchema = z
       .strict(),
     model: z.string().min(1).max(512),
     runtimeImage: z.string().min(1).max(1024),
-    space: z.object({ repo: z.string().min(3).max(256), visibility: z.enum(["private", "public"]) }).strict(),
+    space: z
+      .object({
+        repo: z.string().min(3).max(256),
+        visibility: z.enum(["private", "public"]),
+        hardware: z.string().min(1).max(128).optional(),
+        sleepTime: z.number().int().min(-1).optional(),
+      })
+      .strict(),
   })
   .strict();
 
@@ -98,7 +105,7 @@ export function deploymentIdentity(manifest: DeploymentManifest, statePrefix = "
 
 export function deploymentDesiredState(
   manifest: DeploymentManifest,
-  visibility: "private" | "public" = "private",
+  visibility: "private" | "public" = manifest.spaceVisibility ?? "private",
 ): DeploymentDesiredState {
   return desiredStateSchema.parse({
     schemaVersion: 1,
@@ -117,7 +124,12 @@ export function deploymentDesiredState(
     },
     model: manifest.model,
     runtimeImage: manifest.runtimeImage,
-    space: { repo: manifest.space, visibility },
+    space: {
+      repo: manifest.space,
+      visibility,
+      ...(manifest.spaceHardware ? { hardware: manifest.spaceHardware } : {}),
+      ...(typeof manifest.spaceSleepTime === "number" ? { sleepTime: manifest.spaceSleepTime } : {}),
+    },
   });
 }
 
@@ -226,12 +238,35 @@ export async function withDeploymentLock<T>(root: string, deploymentId: string, 
     await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    throw new Error(`deployment ${deploymentId} is already being reconciled on this host`);
+    if (!(await reclaimDeadLocalLock(file))) {
+      throw new Error(`deployment ${deploymentId} is already being reconciled on this host`);
+    }
+    await fs.writeFile(file, lock, { flag: "wx", mode: 0o600 });
   }
   try {
     return await task();
   } finally {
     await fs.rm(file, { force: true });
+  }
+}
+
+async function reclaimDeadLocalLock(file: string): Promise<boolean> {
+  try {
+    const value = JSON.parse(await fs.readFile(file, "utf8")) as { pid?: unknown; host?: unknown };
+    if (value.host !== os.hostname() || typeof value.pid !== "number" || processIsAlive(value.pid)) return false;
+    await fs.rm(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
   }
 }
 
@@ -279,6 +314,21 @@ export async function assertControlLease(
   if (current?.fencingToken !== lease.fencingToken || Date.parse(current.expiresAt) <= now.getTime()) {
     throw new Error("deployment control lease ownership was lost");
   }
+}
+
+export async function renewControlLease(
+  client: Pick<BucketClient, "downloadFile" | "uploadFiles">,
+  lease: DeploymentControlLease,
+  now: Date,
+): Promise<DeploymentControlLease> {
+  await assertControlLease(client, lease, now);
+  const renewed = leaseSchema.parse({
+    ...lease,
+    expiresAt: new Date(now.getTime() + 120_000).toISOString(),
+  });
+  await client.uploadFiles([jsonBlob(CONTROL_LEASE_PATH, renewed)]);
+  await assertControlLease(client, renewed, now);
+  return renewed;
 }
 
 async function readDocument<T>(

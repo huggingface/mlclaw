@@ -12,10 +12,11 @@ import {
   newOperation,
   readDeploymentIdentity,
   releaseControlLease,
+  renewControlLease,
   withDeploymentLock,
   writeCanonicalState,
 } from "../src/mlclaw/deployment-state.js";
-import type { DeploymentManifest } from "../src/mlclaw/local-config.js";
+import { localConfigPaths, type DeploymentManifest } from "../src/mlclaw/local-config.js";
 
 function memoryBucket() {
   const objects = new Map<string, string>();
@@ -85,6 +86,21 @@ describe("deployment state", () => {
     expect(bucket.objects.has(CONTROL_LEASE_PATH)).toBe(false);
   });
 
+  it("renews a lease only while its fencing token is still current", async () => {
+    const bucket = memoryBucket();
+    const operation = newOperation(manifest, new Date("2026-07-16T00:00:00.000Z"));
+    const lease = await acquireControlLease(bucket, manifest, operation, new Date("2026-07-16T00:00:00.000Z"));
+    const renewed = await renewControlLease(bucket, lease, new Date("2026-07-16T00:01:00.000Z"));
+    expect(renewed.expiresAt).toBe("2026-07-16T00:03:00.000Z");
+    bucket.objects.set(
+      CONTROL_LEASE_PATH,
+      JSON.stringify({ ...renewed, fencingToken: "22222222-2222-5222-a222-222222222222" }),
+    );
+    await expect(renewControlLease(bucket, renewed, new Date("2026-07-16T00:01:30.000Z"))).rejects.toThrow(
+      "ownership was lost",
+    );
+  });
+
   it("prevents concurrent local reconciliation", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-lock-"));
     await withDeploymentLock(root, manifest.deploymentId, async () => {
@@ -92,5 +108,13 @@ describe("deployment state", () => {
         "already being reconciled",
       );
     });
+  });
+
+  it("reclaims a dead same-host reconciliation lock", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-stale-lock-"));
+    const lock = path.join(localConfigPaths(root).locksDir, `${manifest.deploymentId}.lock`);
+    await fs.mkdir(path.dirname(lock), { recursive: true });
+    await fs.writeFile(lock, JSON.stringify({ pid: 2_000_000_000, host: os.hostname() }));
+    await expect(withDeploymentLock(root, manifest.deploymentId, async () => "reclaimed")).resolves.toBe("reclaimed");
   });
 });

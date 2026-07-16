@@ -17,6 +17,9 @@ export type DeploymentManifest = {
   gatewayLocation: GatewayLocation;
   model: string;
   runtimeImage: string;
+  spaceVisibility?: "private" | "public";
+  spaceHardware?: string;
+  spaceSleepTime?: number;
   localPort?: number;
   localGateway?: LocalGatewayBinding;
   networkAccess?: NetworkAccessBinding;
@@ -113,6 +116,9 @@ const manifestFields = {
   gatewayLocation: z.enum(["local", "space"]),
   model: z.string().min(1).max(512),
   runtimeImage: z.string().min(1).max(1024),
+  spaceVisibility: z.enum(["private", "public"]).optional(),
+  spaceHardware: z.string().min(1).max(128).optional(),
+  spaceSleepTime: z.number().int().min(-1).optional(),
   localPort: z.number().int().min(1).max(65535).optional(),
   localGateway: localGatewaySchema.optional(),
   networkAccess: networkAccessSchema.optional(),

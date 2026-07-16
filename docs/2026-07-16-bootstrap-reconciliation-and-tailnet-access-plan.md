@@ -1,6 +1,6 @@
 # Bootstrap Reconciliation and Tailnet Access Implementation Plan
 
-Status: planned
+Status: implemented (2026-07-16)
 
 ## Objective
 

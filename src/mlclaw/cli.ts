@@ -60,6 +60,7 @@ import {
   readDesiredState,
   readResumableOperation,
   releaseControlLease,
+  renewControlLease,
   updateOperation,
   withDeploymentLock,
   writeCanonicalState,
@@ -629,6 +630,11 @@ async function cacheRecoveredDeployment(
     createdAt: identity.createdAt,
     updatedAt: now,
   });
+  if (identity.statePrefix !== "openclaw-state") {
+    await writeSecretEnv(runtime.configRoot, identity.agent, {
+      OPENCLAW_HF_STATE_PREFIX: identity.statePrefix,
+    });
+  }
 }
 
 async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>): Promise<void> {
@@ -714,6 +720,12 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       yes: Boolean(opts.yes),
       runtime,
     });
+    activePlan.manifest = {
+      ...activePlan.manifest,
+      spaceVisibility: spacePlan.visibility,
+      ...(paidHardware.kind === "explicit" ? { spaceHardware: paidHardware.hardware } : {}),
+      ...(typeof paidHardware.sleepTime === "number" ? { spaceSleepTime: paidHardware.sleepTime } : {}),
+    };
     await confirmBootstrapPlan({
       manifest: activePlan.manifest,
       ...(activePlan.previousManifest ? { previousManifest: activePlan.previousManifest } : {}),
@@ -856,59 +868,120 @@ async function reconcileDeployment(
   plan: BootstrapResolvedPlan,
   hub: HubApi,
   runtime: Required<CliRuntime>,
-  apply: (changed: boolean) => Promise<{ waitingForApproval?: string } | void>,
+  apply: (changed: boolean, assertLease: () => Promise<void>) => Promise<{ waitingForApproval?: string } | void>,
 ): Promise<void> {
-  const client = hub.bucket(plan.bucket);
-  const currentIdentity = await readDeploymentIdentity(client);
-  if (currentIdentity && currentIdentity.deploymentId !== plan.manifest.deploymentId) {
-    throw new Error(`bucket ${plan.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
-  }
-  const currentDesired = await readDesiredState(client);
-  if (currentDesired && currentDesired.deploymentId !== plan.manifest.deploymentId) {
-    throw new Error(`bucket ${plan.bucket} desired state belongs to another deployment`);
-  }
-  const candidate = deploymentDesiredState(plan.manifest, plan.spacePlan?.visibility ?? "private");
-  const sameDesired =
-    currentDesired &&
-    JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) ===
-      JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
-  const generation = sameDesired
-    ? currentDesired.generation
-    : Math.max(currentDesired?.generation ?? 0, plan.manifest.desiredGeneration) + 1;
-  plan.manifest = { ...plan.manifest, desiredGeneration: generation, updatedAt: runtime.now().toISOString() };
+  const result = await reconcileManifest({
+    manifest: plan.manifest,
+    bucketPrefix: plan.bucketPrefix,
+    visibility: plan.spacePlan?.visibility,
+    hub,
+    runtime,
+    apply: async ({ manifest, changed, assertLease }) => {
+      plan.manifest = manifest;
+      return await apply(changed, assertLease);
+    },
+  });
+  plan.manifest = result.manifest;
+}
 
-  await withDeploymentLock(runtime.configRoot, plan.manifest.deploymentId, async () => {
+type ReconcileManifestContext = {
+  manifest: DeploymentManifest;
+  changed: boolean;
+  assertLease: () => Promise<void>;
+};
+
+async function reconcileManifest(params: {
+  manifest: DeploymentManifest;
+  bucketPrefix?: string | undefined;
+  visibility?: "private" | "public" | undefined;
+  hub: HubApi;
+  runtime: Required<CliRuntime>;
+  apply: (context: ReconcileManifestContext) => Promise<{ waitingForApproval?: string } | void>;
+}): Promise<{ manifest: DeploymentManifest; waitingForApproval?: string }> {
+  const { hub, runtime } = params;
+  const client = hub.bucket(params.manifest.bucket);
+  return await withDeploymentLock(runtime.configRoot, params.manifest.deploymentId, async () => {
+    const currentIdentity = await readDeploymentIdentity(client);
+    if (currentIdentity && currentIdentity.deploymentId !== params.manifest.deploymentId) {
+      throw new Error(`bucket ${params.manifest.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+    }
+    const currentDesired = await readDesiredState(client);
+    if (currentDesired && currentDesired.deploymentId !== params.manifest.deploymentId) {
+      throw new Error(`bucket ${params.manifest.bucket} desired state belongs to another deployment`);
+    }
+    const visibility = params.visibility ?? params.manifest.spaceVisibility ?? "private";
+    const candidate = deploymentDesiredState(params.manifest, visibility);
+    const sameDesired =
+      currentDesired &&
+      JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) ===
+        JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
+    const generation = sameDesired
+      ? currentDesired.generation
+      : Math.max(currentDesired?.generation ?? 0, params.manifest.desiredGeneration) + 1;
+    const manifest: DeploymentManifest = {
+      ...params.manifest,
+      spaceVisibility: visibility,
+      desiredGeneration: generation,
+      updatedAt: runtime.now().toISOString(),
+    };
     let operation =
-      (await readResumableOperation(runtime.configRoot, plan.manifest.deploymentId, plan.manifest.desiredGeneration)) ??
-      newOperation(plan.manifest, runtime.now());
-    const lease = await acquireControlLease(client, plan.manifest, operation, runtime.now());
+      (await readResumableOperation(runtime.configRoot, manifest.deploymentId, manifest.desiredGeneration)) ??
+      newOperation(manifest, runtime.now());
+    let lease = await acquireControlLease(client, manifest, operation, runtime.now());
+    let renewalError: unknown;
+    let renewal = Promise.resolve();
+    const renewalTimer = setInterval(() => {
+      renewal = renewal.then(async () => {
+        if (renewalError) return;
+        try {
+          lease = await renewControlLease(client, lease, runtime.now());
+        } catch (error) {
+          renewalError = error;
+        }
+      });
+    }, 45_000);
+    const assertLease = async (): Promise<void> => {
+      await renewal;
+      if (renewalError) throw renewalError;
+      await assertControlLease(client, lease, runtime.now());
+      if (renewalError) throw renewalError;
+    };
     try {
       await writeOperationState("planned");
-      await writeCanonicalState(
-        client,
-        currentIdentity ?? deploymentIdentity(plan.manifest, plan.bucketPrefix),
-        deploymentDesiredState(plan.manifest, plan.spacePlan?.visibility ?? "private"),
-      );
-      await assertControlLease(client, lease, runtime.now());
+      if (!sameDesired || !currentIdentity) {
+        await assertLease();
+        await writeCanonicalState(
+          client,
+          currentIdentity ?? deploymentIdentity(manifest, params.bucketPrefix),
+          deploymentDesiredState(manifest, visibility),
+        );
+        await assertLease();
+      }
       await writeOperationState("applying");
-      const outcome = await apply(!sameDesired);
+      await assertLease();
+      const outcome = await params.apply({ manifest, changed: !sameDesired, assertLease });
+      await assertLease();
       if (outcome?.waitingForApproval) {
         await writeOperationState("waiting_for_approval", "Tailscale Serve administrator approval is required");
         runtime.prompt.note(outcome.waitingForApproval, "TAILSCALE SERVE APPROVAL REQUIRED");
-        return;
+        return { manifest, waitingForApproval: outcome.waitingForApproval };
       }
       await writeOperationState("verifying");
+      await assertLease();
       const verified = await readDesiredState(client);
-      if (verified?.deploymentId !== plan.manifest.deploymentId || verified.generation !== generation) {
+      if (verified?.deploymentId !== manifest.deploymentId || verified.generation !== generation) {
         throw new Error("canonical deployment state could not be verified after reconciliation");
       }
       await writeOperationState("completed");
+      return { manifest };
     } catch (error) {
       await writeOperationState("failed", "Reconciliation failed; inspect local CLI diagnostics").catch(
         () => undefined,
       );
       throw error;
     } finally {
+      clearInterval(renewalTimer);
+      await renewal;
       await releaseControlLease(client, lease);
     }
 
@@ -1465,26 +1538,6 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
     });
   }
 
-  if (bucketChanged) {
-    if (current.gatewayLocation === "local") {
-      await handoffAndStopLocalGateway({
-        manifest: current,
-        hub,
-        runtime,
-        bucketPrefix,
-        targetRuntimeId: current.localRuntimeId,
-      });
-    } else {
-      await disableAndPauseSpaceGateway({
-        manifest: current,
-        hub,
-        runtime,
-        bucketPrefix,
-        targetRuntimeId: spaceRuntimeId(current.agent),
-      });
-    }
-  }
-
   let updated: DeploymentManifest = {
     ...current,
     bucket,
@@ -1499,40 +1552,75 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
     MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
     MLCLAW_RUNTIME_ID: runtimeIdFor(updated),
   };
-  await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
+  const reconciled = await reconcileManifest({
+    manifest: updated,
+    bucketPrefix,
+    hub,
+    runtime,
+    apply: async ({ manifest: targetManifest, assertLease }) => {
+      updated = targetManifest;
+      if (bucketChanged) {
+        await assertLease();
+        if (current.gatewayLocation === "local") {
+          await handoffAndStopLocalGateway({
+            manifest: current,
+            hub,
+            runtime,
+            bucketPrefix,
+            targetRuntimeId: current.localRuntimeId,
+          });
+        } else {
+          await disableAndPauseSpaceGateway({
+            manifest: current,
+            hub,
+            runtime,
+            bucketPrefix,
+            targetRuntimeId: spaceRuntimeId(current.agent),
+          });
+        }
+      }
 
-  if (updated.gatewayLocation === "local") {
-    if (bucketChanged) {
-      await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
-    } else {
-      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
-    }
-  } else {
-    await setDeploymentVariables(hub, updated.space, {
-      OPENCLAW_HF_STATE_BUCKET: bucket,
-      MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
-      OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-      MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
-      MLCLAW_GATEWAY_LOCATION: "space",
-      MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
-    });
-    await ensureSpaceStateVolume(hub, updated.space, bucket);
-    if (
-      canDeleteBroadTokenSecrets({
-        model: updated.model,
-        routerTokenPresent: hasBrokerOrRouterTokenSecretRecord(secrets),
-      })
-    ) {
-      await deleteStaleSpaceTokenSecrets(hub, updated.space);
-    }
-    await clearSpaceGatewayDisabled(hub, updated.space);
-    if (bucketChanged) {
-      await hub.restartSpace(updated.space, true);
-      runtime.stdout.log(`Space gateway restart requested: ${updated.space}`);
-    } else {
-      runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
-    }
-  }
+      await assertLease();
+      await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
+      if (updated.gatewayLocation === "local") {
+        if (bucketChanged) {
+          await assertLease();
+          await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+        } else {
+          runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+        }
+        return;
+      }
+
+      await assertLease();
+      await setDeploymentVariables(hub, updated.space, {
+        OPENCLAW_HF_STATE_BUCKET: bucket,
+        MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
+        OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
+        MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+        MLCLAW_GATEWAY_LOCATION: "space",
+        MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
+      });
+      await ensureSpaceStateVolume(hub, updated.space, bucket);
+      if (
+        canDeleteBroadTokenSecrets({
+          model: updated.model,
+          routerTokenPresent: hasBrokerOrRouterTokenSecretRecord(secrets),
+        })
+      ) {
+        await deleteStaleSpaceTokenSecrets(hub, updated.space);
+      }
+      await clearSpaceGatewayDisabled(hub, updated.space);
+      if (bucketChanged) {
+        await assertLease();
+        await hub.restartSpace(updated.space, true);
+        runtime.stdout.log(`Space gateway restart requested: ${updated.space}`);
+      } else {
+        runtime.stdout.log(`Deployment already uses bucket ${bucket}`);
+      }
+    },
+  });
+  updated = reconciled.manifest;
   runtime.stdout.log(`State bucket: ${bucket}`);
 }
 
@@ -1714,7 +1802,7 @@ async function deployLocalBootstrap(
   const previousManifest = await readManifest(runtime.configRoot, plan.agentName).catch(() => null);
   const previousSecrets = await readSecretEnv(runtime.configRoot, plan.agentName).catch(() => null);
   const previousContainer =
-    previousManifest?.gatewayLocation === "local"
+    previousManifest?.gatewayLocation === "local" && previousManifest.localGateway
       ? await localRunnerFor(previousManifest, runtime).inspect(
           containerNameFor(previousManifest.agent),
           localConnectionFor(previousManifest),
@@ -2030,69 +2118,85 @@ async function gatewayStart(agent: string, opts: GatewayCommandOptions, runtime:
     runtimeId: runtimeIdFor(manifest),
     takeover: Boolean(opts.takeover),
   });
-  if (manifest.gatewayLocation === "local") {
-    const previousSecrets = await readSecretEnv(runtime.configRoot, manifest.agent);
-    const accessSecrets = localAccessSecrets(
-      manifest.owner,
-      localGatewayPort(manifest),
-      previousSecrets,
-      manifest.networkAccess,
-    );
-    const accessSecretsChanged = Object.entries(accessSecrets).some(([key, value]) => previousSecrets[key] !== value);
-    const networkAccessChanged =
-      JSON.stringify(previousManifest.networkAccess) !== JSON.stringify(manifest.networkAccess);
-    const refresh = Boolean(opts.restart || localPortChanged || accessSecretsChanged || networkAccessChanged);
-    const previousContainer = refresh
-      ? await localRunnerFor(previousManifest, runtime).inspect(
-          containerNameFor(previousManifest.agent),
-          localConnectionFor(previousManifest),
-        )
-      : undefined;
-    const previousNetworkState =
-      networkAccessChanged && previousManifest.networkAccess?.provider === "tailscale-serve"
-        ? await runtime.tailscaleRunner.mappingState(networkAccessMapping(previousManifest.networkAccess))
-        : undefined;
-    try {
-      if (networkAccessChanged && previousNetworkState === "owned" && previousManifest.networkAccess) {
-        await removeOwnedNetworkAccess(previousManifest.networkAccess, runtime);
-      }
-      if (accessSecretsChanged) {
-        await writeSecretEnv(runtime.configRoot, manifest.agent, { ...previousSecrets, ...accessSecrets });
-      }
-      await startLocalGateway({
-        manifest,
-        runtime,
-        pull: shouldPull(opts),
-        refresh,
-        ...(refresh ? { existing: previousContainer ?? null } : {}),
-      });
-    } catch (error) {
-      if (accessSecretsChanged) {
-        await writeSecretEnv(runtime.configRoot, manifest.agent, previousSecrets);
-      }
-      try {
-        if (networkAccessChanged && manifest.networkAccess) {
-          await disableNetworkAccess(manifest, runtime);
+  const reconciled = await reconcileManifest({
+    manifest,
+    bucketPrefix,
+    hub,
+    runtime,
+    apply: async ({ manifest: targetManifest, assertLease }) => {
+      manifest = targetManifest;
+      if (manifest.gatewayLocation === "local") {
+        const previousSecrets = await readSecretEnv(runtime.configRoot, manifest.agent);
+        const accessSecrets = localAccessSecrets(
+          manifest.owner,
+          localGatewayPort(manifest),
+          previousSecrets,
+          manifest.networkAccess,
+        );
+        const accessSecretsChanged = Object.entries(accessSecrets).some(
+          ([key, value]) => previousSecrets[key] !== value,
+        );
+        const networkAccessChanged =
+          JSON.stringify(previousManifest.networkAccess) !== JSON.stringify(manifest.networkAccess);
+        const refresh = Boolean(opts.restart || localPortChanged || accessSecretsChanged || networkAccessChanged);
+        const previousContainer = refresh
+          ? await localRunnerFor(previousManifest, runtime).inspect(
+              containerNameFor(previousManifest.agent),
+              localConnectionFor(previousManifest),
+            )
+          : undefined;
+        const previousNetworkState =
+          networkAccessChanged && previousManifest.networkAccess?.provider === "tailscale-serve"
+            ? await runtime.tailscaleRunner.mappingState(networkAccessMapping(previousManifest.networkAccess))
+            : undefined;
+        try {
+          if (networkAccessChanged && previousNetworkState === "owned" && previousManifest.networkAccess) {
+            await assertLease();
+            await removeOwnedNetworkAccess(previousManifest.networkAccess, runtime);
+          }
+          if (accessSecretsChanged) {
+            await assertLease();
+            await writeSecretEnv(runtime.configRoot, manifest.agent, { ...previousSecrets, ...accessSecrets });
+          }
+          await assertLease();
+          await startLocalGateway({
+            manifest,
+            runtime,
+            pull: shouldPull(opts),
+            refresh,
+            ...(refresh ? { existing: previousContainer ?? null } : {}),
+          });
+        } catch (error) {
+          if (accessSecretsChanged) {
+            await writeSecretEnv(runtime.configRoot, manifest.agent, previousSecrets);
+          }
+          try {
+            if (networkAccessChanged && manifest.networkAccess) {
+              await disableNetworkAccess(manifest, runtime);
+            }
+            if (previousContainer?.running) {
+              await assertLease();
+              await startLocalGateway({ manifest: previousManifest, runtime, pull: false, refresh: true });
+              runtime.stdout.log(`Previous local gateway restored: ${containerNameFor(previousManifest.agent)}`);
+            } else if (previousNetworkState === "owned" && previousManifest.networkAccess) {
+              await runtime.tailscaleRunner.ensureMapping(networkAccessMapping(previousManifest.networkAccess));
+            }
+          } catch (rollbackError) {
+            throw new AggregateError([error, rollbackError], "local gateway update and rollback both failed");
+          }
+          throw error;
         }
-        if (previousContainer?.running) {
-          await startLocalGateway({ manifest: previousManifest, runtime, pull: false, refresh: true });
-          runtime.stdout.log(`Previous local gateway restored: ${containerNameFor(previousManifest.agent)}`);
-        } else if (previousNetworkState === "owned" && previousManifest.networkAccess) {
-          await runtime.tailscaleRunner.ensureMapping(networkAccessMapping(previousManifest.networkAccess));
-        }
-      } catch (rollbackError) {
-        throw new AggregateError([error, rollbackError], "local gateway update and rollback both failed");
+        await writeManifest(runtime.configRoot, manifest);
+      } else {
+        await assertLease();
+        await clearSpaceGatewayDisabled(hub, manifest.space);
+        await assertLease();
+        await hub.restartSpace(manifest.space, true);
+        runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
       }
-      throw error;
-    }
-    if (refresh) {
-      await writeManifest(runtime.configRoot, manifest);
-    }
-  } else {
-    await clearSpaceGatewayDisabled(hub, manifest.space);
-    await hub.restartSpace(manifest.space, true);
-    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
-  }
+    },
+  });
+  manifest = reconciled.manifest;
 }
 
 async function gatewayRestart(
@@ -2110,13 +2214,22 @@ async function gatewayRestart(
 async function gatewayStop(agent: string, runtime: Required<CliRuntime>): Promise<void> {
   const manifest = await readDeploymentManifest(runtime, agent);
   const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
-  if (manifest.gatewayLocation === "local") {
-    await stopLocalGateway(manifest, runtime);
-    return;
-  }
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
-  await disableAndPauseSpaceGateway({ manifest, hub, runtime, bucketPrefix });
+  await reconcileManifest({
+    manifest,
+    bucketPrefix,
+    hub,
+    runtime,
+    apply: async ({ manifest: targetManifest, assertLease }) => {
+      await assertLease();
+      if (targetManifest.gatewayLocation === "local") {
+        await stopLocalGateway(targetManifest, runtime);
+        return;
+      }
+      await disableAndPauseSpaceGateway({ manifest: targetManifest, hub, runtime, bucketPrefix });
+    },
+  });
 }
 
 async function gatewayStatus(agent: string, runtime: Required<CliRuntime>): Promise<void> {
@@ -2257,6 +2370,12 @@ async function gatewayMigrate(
       yes: Boolean(opts.yes),
       runtime,
     });
+    updated = {
+      ...updated,
+      spaceVisibility: opts.publicSpace ? "public" : (current.spaceVisibility ?? "private"),
+      ...(paidHardware.kind === "explicit" ? { spaceHardware: paidHardware.hardware } : {}),
+      ...(typeof paidHardware.sleepTime === "number" ? { spaceSleepTime: paidHardware.sleepTime } : {}),
+    };
     await assertNoLiveForeignLease({
       hub,
       bucket: current.bucket,
@@ -2264,29 +2383,43 @@ async function gatewayMigrate(
       runtimeId: current.localRuntimeId,
       takeover: Boolean(opts.takeover),
     });
-    await handoffAndStopLocalGateway({ manifest: current, hub, runtime, bucketPrefix });
     const me = await hub.whoami();
     const templateRuntimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
     const spaceExists = await hub.spaceExists(updated.space);
-    await deploySpaceGateway({
+    const reconciled = await reconcileManifest({
+      manifest: updated,
+      bucketPrefix,
       hub,
       runtime,
-      hfToken: token,
-      manifest: updated,
-      secrets: deploymentSecrets,
-      allowedUsers: me.name,
-      publicSpace: Boolean(opts.publicSpace),
-      spaceExists,
-      ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
-      ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
-      ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
+      apply: async ({ manifest: targetManifest, assertLease }) => {
+        updated = targetManifest;
+        await assertLease();
+        await handoffAndStopLocalGateway({ manifest: current, hub, runtime, bucketPrefix });
+        await assertLease();
+        await deploySpaceGateway({
+          hub,
+          runtime,
+          hfToken: token,
+          manifest: updated,
+          secrets: deploymentSecrets,
+          allowedUsers: me.name,
+          publicSpace: updated.spaceVisibility === "public",
+          spaceExists,
+          ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
+          ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
+          ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
+        });
+        await assertLease();
+        await writeSecretEnv(runtime.configRoot, agent, {
+          ...deploymentSecrets,
+          MLCLAW_GATEWAY_LOCATION: "space",
+          MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+          MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
+        });
+        await writeManifest(runtime.configRoot, updated);
+      },
     });
-    await writeSecretEnv(runtime.configRoot, agent, {
-      ...deploymentSecrets,
-      MLCLAW_GATEWAY_LOCATION: "space",
-      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-      MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
-    });
+    updated = reconciled.manifest;
   } else {
     const containerRuntime = requestedContainerRuntime ?? "auto";
     const reuseLocalBinding =
@@ -2308,26 +2441,40 @@ async function gatewayMigrate(
       allowedRuntimeIds: [spaceRuntimeId(current.agent)],
       takeover: Boolean(opts.takeover),
     });
-    await disableAndPauseSpaceGateway({ manifest: current, hub, runtime, bucketPrefix });
-    await assertNoLiveForeignLease({
-      hub,
-      bucket: current.bucket,
+    const reconciled = await reconcileManifest({
+      manifest: updated,
       bucketPrefix,
-      runtimeId: updated.localRuntimeId,
-      allowedRuntimeIds: [spaceRuntimeId(current.agent)],
-      takeover: Boolean(opts.takeover),
+      hub,
+      runtime,
+      apply: async ({ manifest: targetManifest, assertLease }) => {
+        updated = targetManifest;
+        await assertLease();
+        await disableAndPauseSpaceGateway({ manifest: current, hub, runtime, bucketPrefix });
+        await assertLease();
+        await assertNoLiveForeignLease({
+          hub,
+          bucket: current.bucket,
+          bucketPrefix,
+          runtimeId: updated.localRuntimeId,
+          allowedRuntimeIds: [spaceRuntimeId(current.agent)],
+          takeover: Boolean(opts.takeover),
+        });
+        await assertLease();
+        await writeSecretEnv(runtime.configRoot, agent, {
+          ...secrets,
+          ...(routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}),
+          MLCLAW_GATEWAY_LOCATION: "local",
+          MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
+          MLCLAW_RUNTIME_ID: updated.localRuntimeId,
+          ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess),
+        });
+        await assertLease();
+        await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+        await writeManifest(runtime.configRoot, updated);
+      },
     });
-    await writeSecretEnv(runtime.configRoot, agent, {
-      ...secrets,
-      ...(routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}),
-      MLCLAW_GATEWAY_LOCATION: "local",
-      MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-      MLCLAW_RUNTIME_ID: updated.localRuntimeId,
-      ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess),
-    });
-    await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
+    updated = reconciled.manifest;
   }
-  await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Gateway migrated to ${target}`);
 }
 
@@ -2370,38 +2517,49 @@ async function gatewayRebind(agent: string, opts: GatewayRebindOptions, runtime:
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
   const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
-  if (currentContext && (await runtime.dockerRunner.contextExists(currentContext))) {
-    try {
-      await handoffAndStopLocalGateway({
-        manifest: current,
-        hub,
-        runtime,
-        bucketPrefix,
-        targetRuntimeId: current.localRuntimeId,
-      });
-    } catch (err) {
-      if (!opts.takeover) {
-        throw err;
+  await reconcileManifest({
+    manifest: updated,
+    bucketPrefix,
+    hub,
+    runtime,
+    apply: async ({ manifest: targetManifest, assertLease }) => {
+      if (currentContext && (await runtime.dockerRunner.contextExists(currentContext))) {
+        try {
+          await assertLease();
+          await handoffAndStopLocalGateway({
+            manifest: current,
+            hub,
+            runtime,
+            bucketPrefix,
+            targetRuntimeId: current.localRuntimeId,
+          });
+        } catch (err) {
+          if (!opts.takeover) {
+            throw err;
+          }
+          await clearRuntimeHandoffRequest(hub, current.bucket, bucketPrefix).catch(() => undefined);
+          await assertLease();
+          await stopLocalGateway(current, runtime);
+          runtime.stdout.log(
+            `Old Docker context handoff failed; rebinding with --takeover: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } else if (!opts.takeover) {
+        const missing = currentContext
+          ? `Docker context ${currentContext} is not available`
+          : "Deployment has no pinned Docker context";
+        throw new Error(`${missing}. Run with --takeover to rebind without a final snapshot from the old context.`);
+      } else {
+        runtime.stdout.log(
+          "Old Docker context unavailable; rebinding with --takeover and using the latest bucket snapshot.",
+        );
       }
-      await clearRuntimeHandoffRequest(hub, current.bucket, bucketPrefix).catch(() => undefined);
-      await stopLocalGateway(current, runtime);
-      runtime.stdout.log(
-        `Old Docker context handoff failed; rebinding with --takeover: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  } else if (!opts.takeover) {
-    const missing = currentContext
-      ? `Docker context ${currentContext} is not available`
-      : "Deployment has no pinned Docker context";
-    throw new Error(`${missing}. Run with --takeover to rebind without a final snapshot from the old context.`);
-  } else {
-    runtime.stdout.log(
-      "Old Docker context unavailable; rebinding with --takeover and using the latest bucket snapshot.",
-    );
-  }
 
-  await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
-  await writeManifest(runtime.configRoot, updated);
+      await assertLease();
+      await startLocalGateway({ manifest: targetManifest, runtime, pull: shouldPull(opts), resetVolume: true });
+      await writeManifest(runtime.configRoot, targetManifest);
+    },
+  });
   runtime.stdout.log(`Local gateway rebound to Docker context ${targetBinding.dockerContext}`);
 }
 
@@ -3444,9 +3602,38 @@ async function settings(
       runtime,
     });
   }
-  const result = opts.hardware
-    ? await hub.requestSpaceHardware(repoId, opts.hardware, opts.sleepTime)
-    : await hub.setSpaceSleepTime(repoId, opts.sleepTime as number);
+  const matches = (await listManifests(runtime.configRoot)).filter((manifest) => manifest.space === repoId);
+  if (matches.length !== 1) {
+    throw new Error(
+      matches.length === 0
+        ? `no local deployment cache owns Space ${repoId}; run mlclaw bootstrap to recover it first`
+        : `multiple local deployments reference Space ${repoId}; repair the deployment caches before changing settings`,
+    );
+  }
+  const current = matches[0] as DeploymentManifest;
+  const bucketPrefix = await readDeploymentBucketPrefix(runtime, current.agent);
+  const target: DeploymentManifest = {
+    ...current,
+    ...(opts.hardware ? { spaceHardware: opts.hardware } : {}),
+    ...(typeof opts.sleepTime === "number" ? { spaceSleepTime: opts.sleepTime } : {}),
+    updatedAt: runtime.now().toISOString(),
+  };
+  let result: SpaceRuntime | undefined;
+  const reconciled = await reconcileManifest({
+    manifest: target,
+    bucketPrefix,
+    hub,
+    runtime,
+    apply: async ({ manifest, assertLease }) => {
+      await assertLease();
+      result = opts.hardware
+        ? await hub.requestSpaceHardware(repoId, opts.hardware, opts.sleepTime)
+        : await hub.setSpaceSleepTime(repoId, opts.sleepTime as number);
+      await writeManifest(runtime.configRoot, manifest);
+    },
+  });
+  await writeManifest(runtime.configRoot, reconciled.manifest);
+  if (!result) throw new Error("Space settings update returned no runtime state");
   runtime.stdout.log("Space settings updated");
   runtime.stdout.log(`Space: ${repoId}`);
   runtime.stdout.log(`Hardware: ${formatRuntimeValue(result.requested_hardware ?? result.hardware)}`);
