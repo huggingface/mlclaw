@@ -563,9 +563,15 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   if (deployedSpaceRuntime) {
     runtime.stdout.log(`Space runtime: ${deployedSpaceRuntime}`);
   }
-  runtime.prompt.outro(gatewayLocation === "space"
-    ? `Deployment requested. Your agent will soon be available at ${spacePageUrl(names.space)}.`
-    : "Local gateway start requested.");
+  if (gatewayLocation === "space") {
+    runtime.prompt.note(
+      `Your agent is deploying and will be available shortly.\n\n${spacePageUrl(names.space)}`,
+      "HERE IS YOUR ML CLAW",
+    );
+    runtime.prompt.outro("Bootstrap complete");
+  } else {
+    runtime.prompt.outro("Local gateway start requested");
+  }
 }
 
 function spacePageUrl(repoId: string): string {

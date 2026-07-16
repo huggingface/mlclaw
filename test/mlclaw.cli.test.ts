@@ -761,6 +761,10 @@ describe("mlclaw CLI", () => {
         title: "Bootstrap plan",
         message: expect.stringContaining("Space: alice/research (will be created as private)"),
       }),
+      {
+        title: "HERE IS YOUR ML CLAW",
+        message: "Your agent is deploying and will be available shortly.\n\nhttps://huggingface.co/spaces/alice/research",
+      },
     ]);
     expect(hub.calls).toContainEqual({ name: "createBucket", args: ["alice/research-data", true] });
     expect(hub.calls).toContainEqual({
@@ -862,7 +866,10 @@ describe("mlclaw CLI", () => {
     }));
     expect(output.join("\n")).toContain("Agent URL: https://huggingface.co/spaces/alice/research");
     expect(output.join("\n")).toContain("Space deployment triggered: alice/research");
-    expect(output.join("\n")).toContain("Your agent will soon be available at https://huggingface.co/spaces/alice/research.");
+    expect(notes).toContainEqual({
+      title: "HERE IS YOUR ML CLAW",
+      message: "Your agent is deploying and will be available shortly.\n\nhttps://huggingface.co/spaces/alice/research",
+    });
     expect(hub.calls).toContainEqual({
       name: "createDockerSpace",
       args: ["alice/research", { private: true }],
