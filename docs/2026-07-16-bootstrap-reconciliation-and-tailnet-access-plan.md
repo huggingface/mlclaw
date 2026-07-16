@@ -184,8 +184,8 @@ Use a reserved control prefix separate from snapshot state:
   "schemaVersion": 1,
   "deploymentId": "019f6b91-7a61-7ae0-b402-cc2b19fa2345",
   "agent": "mlclaw",
-  "owner": "dutifulbob",
-  "bucket": "dutifulbob/mlclaw-data",
+  "owner": "example-user",
+  "bucket": "example-user/mlclaw-data",
   "statePrefix": "openclaw-state",
   "createdAt": "2026-07-16T00:00:00.000Z"
 }
@@ -207,7 +207,7 @@ Use a reserved control prefix separate from snapshot state:
   "model": "huggingface/zai-org/GLM-5.2:fireworks-ai",
   "runtimeImage": "ghcr.io/osolmaz/mlclaw:0.3.8-openclaw-2026.7.1",
   "space": {
-    "repo": "dutifulbob/mlclaw",
+    "repo": "example-user/mlclaw",
     "visibility": "private"
   }
 }

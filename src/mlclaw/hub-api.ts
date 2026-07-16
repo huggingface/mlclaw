@@ -82,6 +82,21 @@ export class HubApi {
     }
   }
 
+  async listBuckets(): Promise<string[]> {
+    const buckets: string[] = [];
+    let url: string | null = `${this.hubUrl}/api/buckets/me`;
+    while (url) {
+      const response = await this.request(url);
+      const page = (await response.json()) as Array<{ id?: string; name?: string }>;
+      for (const bucket of page) {
+        const id = bucket.id ?? bucket.name;
+        if (typeof id === "string" && id.includes("/")) buckets.push(id);
+      }
+      url = nextLink(response.headers.get("link"));
+    }
+    return [...new Set(buckets)].sort();
+  }
+
   async createDockerSpace(
     repoId: string,
     options?: { private?: boolean; hardware?: string; sleepTimeSeconds?: number },
@@ -274,10 +289,14 @@ export class HubApi {
   }
 
   async fetchSpaceLogsTextFallback(repoId: string, kind: "run" | "build" = "run"): Promise<string> {
-    const response = await this.request(`/api/spaces/${repoId}/logs/${kind}`, {
-      headers: { Accept: "text/event-stream" },
-      signal: AbortSignal.timeout(5000),
-    }, true);
+    const response = await this.request(
+      `/api/spaces/${repoId}/logs/${kind}`,
+      {
+        headers: { Accept: "text/event-stream" },
+        signal: AbortSignal.timeout(5000),
+      },
+      true,
+    );
     return sseDataToText(await response.text());
   }
 
@@ -289,13 +308,16 @@ export class HubApi {
       .sort();
   }
 
-  async commitSpaceFiles(repoId: string, params: {
-    files: HubCommitFile[];
-    deletePaths?: string[];
-    title: string;
-    description?: string;
-    branch?: string;
-  }): Promise<void> {
+  async commitSpaceFiles(
+    repoId: string,
+    params: {
+      files: HubCommitFile[];
+      deletePaths?: string[];
+      title: string;
+      description?: string;
+      branch?: string;
+    },
+  ): Promise<void> {
     const body = [
       {
         key: "header",
@@ -392,4 +414,13 @@ function sseDataToText(raw: string): string {
     }
   }
   return lines.join("");
+}
+
+function nextLink(header: string | null): string | null {
+  if (!header) return null;
+  for (const part of header.split(",")) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="next"/);
+    if (match?.[1]) return match[1];
+  }
+  return null;
 }

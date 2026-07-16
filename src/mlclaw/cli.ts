@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import process from "node:process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Command, CommanderError, InvalidArgumentError, Option } from "commander";
@@ -37,6 +37,7 @@ import { DEFAULT_MODEL as DEFAULT_ROUTER_MODEL } from "../mlclaw-space-runtime/m
 import { deriveLocalAccessToken } from "../mlclaw-space-runtime/local-access.js";
 import {
   defaultConfigRoot,
+  listManifests,
   manifestPath,
   manifestExists,
   parseSecretEnv,
@@ -49,6 +50,20 @@ import {
   writeManifest,
   writeSecretEnv,
 } from "./local-config.js";
+import {
+  acquireControlLease,
+  assertControlLease,
+  deploymentDesiredState,
+  deploymentIdentity,
+  newOperation,
+  readDeploymentIdentity,
+  readDesiredState,
+  readResumableOperation,
+  releaseControlLease,
+  updateOperation,
+  withDeploymentLock,
+  writeCanonicalState,
+} from "./deployment-state.js";
 import { namesFor, slugifyAgentName } from "./naming.js";
 import {
   bundledSpaceRuntimeRef,
@@ -60,6 +75,7 @@ import { getTelegramBot, type TelegramBot } from "./telegram.js";
 import { createSystemHfCli, type HfCliRuntime } from "./hf-cli.js";
 import {
   CliTailscaleRunner,
+  TailscaleApprovalRequiredError,
   tailscaleAccessOrigin,
   type TailscaleRunner,
   type TailscaleServeMapping,
@@ -82,6 +98,7 @@ export const LOCAL_START_SETTLE_MS = 500;
 
 type ContainerRuntimePreference = "auto" | ContainerEngine;
 type HostedFallbackChoice = "local" | "pro" | "cancel";
+type TailscaleMode = "off" | "direct" | "serve";
 
 const STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 const SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
@@ -111,7 +128,7 @@ type BootstrapOptions = {
   dockerContext?: string;
   containerRuntime?: string;
   localPort?: number;
-  tailscale?: boolean;
+  tailscale?: TailscaleMode;
   tailscalePort?: number;
   allowLocalFallback?: boolean;
   pull?: boolean;
@@ -151,7 +168,7 @@ type GatewayCommandOptions = {
   dockerContext?: string;
   containerRuntime?: string;
   localPort?: number;
-  tailscale?: boolean;
+  tailscale?: TailscaleMode;
   tailscalePort?: number;
   pull?: boolean;
   takeover?: boolean;
@@ -206,6 +223,7 @@ type BootstrapResolvedPlan = {
   agentName: string;
   names: ReturnType<typeof namesFor>;
   hasExistingManifest: boolean;
+  previousManifest?: DeploymentManifest;
   gatewayLocation: GatewayLocation;
   bucketPrefix?: string;
   bucketPlan: BootstrapBucketPlan;
@@ -213,6 +231,7 @@ type BootstrapResolvedPlan = {
   spacePlan?: BootstrapSpacePlan;
   manifest: DeploymentManifest;
   secrets: Record<string, string>;
+  waitingForApprovalUrl?: string;
 };
 
 type CliRuntime = {
@@ -294,6 +313,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
 
   program
     .command("bootstrap", { isDefault: true })
+    .alias("configure")
     .description("Create or update a Hugging Face OpenClaw deployment")
     .option("--owner <owner>", "Hugging Face user or organization")
     .option("--name <name>", "Agent and runtime resource base name")
@@ -306,7 +326,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--telegram-proxy <url>", "Telegram proxy URL override")
     .option("--hardware <flavor>", "Hugging Face Space hardware flavor")
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
-    .option("--model <model>", "OpenClaw model identifier", DEFAULT_MODEL)
+    .option("--model <model>", "OpenClaw model identifier")
     .option("--runtime-image <image>", "ML Claw runtime image")
     .option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false)
     .option("--public-space", "Create the Hugging Face Space as public instead of private", false)
@@ -319,9 +339,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--docker-context <name>", "Docker context for local gateway mode")
     .option("--container-runtime <auto|docker|podman>", "Local container runtime", "auto")
     .option("--local-port <port>", "Loopback port for a local gateway", parseLocalPort)
-    .option("--tailscale", "Expose a local gateway privately with Tailscale Serve")
-    .option("--no-tailscale", "Disable Tailscale Serve access for this gateway")
-    .option("--tailscale-port <port>", "HTTPS port for Tailscale Serve", parseLocalPort)
+    .option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode)
+    .option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort)
     .option(
       "--allow-local-fallback",
       "Allow non-interactive Space bootstrap to fall back to a ready local runtime",
@@ -385,9 +404,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .argument("<agent>", "Agent name")
     .option("--docker-context <name>", "Set Docker context only when the deployment has no pinned context")
     .option("--local-port <port>", "Loopback port for the local gateway", parseLocalPort)
-    .option("--tailscale", "Enable the persisted Tailscale Serve mapping")
-    .option("--no-tailscale", "Disable Tailscale Serve access for this gateway")
-    .option("--tailscale-port <port>", "HTTPS port for Tailscale Serve", parseLocalPort)
+    .option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode)
+    .option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort)
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .action(async (agent: string, opts: GatewayCommandOptions) => {
@@ -406,9 +424,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .argument("<agent>", "Agent name")
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--local-port <port>", "Loopback port for the local gateway", parseLocalPort)
-    .option("--tailscale", "Enable the persisted Tailscale Serve mapping")
-    .option("--no-tailscale", "Disable Tailscale Serve access for this gateway")
-    .option("--tailscale-port <port>", "HTTPS port for Tailscale Serve", parseLocalPort)
+    .option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode)
+    .option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort)
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .action(async (agent: string, opts: GatewayCommandOptions) => {
       await gatewayRestart(agent, opts, runtime);
@@ -446,9 +463,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--docker-context <name>", "Docker context for local gateway startup when migrating to local")
     .option("--container-runtime <auto|docker|podman>", "Local container runtime", "auto")
     .option("--local-port <port>", "Loopback port for the local gateway", parseLocalPort)
-    .option("--tailscale", "Expose the local gateway privately with Tailscale Serve")
-    .option("--no-tailscale", "Disable Tailscale Serve access for the local gateway")
-    .option("--tailscale-port <port>", "HTTPS port for Tailscale Serve", parseLocalPort)
+    .option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode)
+    .option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort)
     .option("--no-pull", "Do not docker pull before starting a local gateway")
     .option("--takeover", "Start even if another live runtime lease is present", false)
     .option("--yes", "Confirm paid hardware prompts for automation", false)
@@ -498,6 +514,123 @@ export async function main(argv = process.argv.slice(2), runtimeOverrides: CliRu
   }
 }
 
+async function resolveBootstrapAgentName(params: {
+  requestedName?: string;
+  owner: string;
+  hub: HubApi;
+  runtime: Required<CliRuntime>;
+}): Promise<string> {
+  if (params.requestedName) return slugifyAgentName(params.requestedName);
+  const local = await listManifests(params.runtime.configRoot);
+  if (local.length === 1) {
+    const deployment = local[0] as DeploymentManifest;
+    params.runtime.stdout.log(`Existing deployment found: ${deployment.agent}`);
+    return deployment.agent;
+  }
+  if (local.length > 1) {
+    if (!params.runtime.prompt.isInteractive()) {
+      throw new Error("multiple deployments found; specify --name");
+    }
+    return slugifyAgentName(
+      await promptSelect(
+        "Which deployment should ML Claw configure?",
+        local.map((manifest) => ({ value: manifest.agent, label: manifest.agent, hint: manifest.bucket })),
+        (local[0] as DeploymentManifest).agent,
+        params.runtime,
+      ),
+    );
+  }
+
+  const remote = await discoverRemoteDeployments(params.owner, params.hub);
+  if (remote.length === 1 && params.runtime.prompt.isInteractive()) {
+    const deployment = remote[0] as (typeof remote)[number];
+    const recovered = await promptConfirm(
+      `Recover deployment ${deployment.identity.agent} from ${deployment.identity.bucket}?`,
+      true,
+      params.runtime,
+    );
+    if (recovered) {
+      await cacheRecoveredDeployment(deployment, params.runtime);
+      return deployment.identity.agent;
+    }
+  } else if (remote.length > 1) {
+    if (!params.runtime.prompt.isInteractive()) throw new Error("multiple remote deployments found; specify --name");
+    const selected = await promptSelect(
+      "Which remote deployment should ML Claw recover?",
+      remote.map(({ identity }) => ({ value: identity.deploymentId, label: identity.agent, hint: identity.bucket })),
+      (remote[0] as (typeof remote)[number]).identity.deploymentId,
+      params.runtime,
+    );
+    const deployment = remote.find(({ identity }) => identity.deploymentId === selected);
+    if (!deployment) throw new Error("selected remote deployment disappeared");
+    await cacheRecoveredDeployment(deployment, params.runtime);
+    return deployment.identity.agent;
+  }
+  if (!params.runtime.prompt.isInteractive()) throw new Error("no deployment found; specify --name");
+  return slugifyAgentName(await promptAgentName(params.runtime));
+}
+
+async function discoverRemoteDeployments(
+  owner: string,
+  hub: HubApi,
+): Promise<
+  Array<{
+    identity: NonNullable<Awaited<ReturnType<typeof readDeploymentIdentity>>>;
+    desired: NonNullable<Awaited<ReturnType<typeof readDesiredState>>>;
+  }>
+> {
+  const buckets = (await hub.listBuckets()).filter((bucket) => bucket.startsWith(`${owner}/`));
+  const found: Array<{
+    identity: NonNullable<Awaited<ReturnType<typeof readDeploymentIdentity>>>;
+    desired: NonNullable<Awaited<ReturnType<typeof readDesiredState>>>;
+  }> = [];
+  for (let offset = 0; offset < buckets.length; offset += 4) {
+    const page = await Promise.all(
+      buckets.slice(offset, offset + 4).map(async (bucket) => {
+        try {
+          const client = hub.bucket(bucket);
+          const identity = await readDeploymentIdentity(client);
+          if (!identity || identity.owner !== owner || identity.bucket !== bucket) return null;
+          const desired = await readDesiredState(client);
+          if (!desired || desired.deploymentId !== identity.deploymentId) return null;
+          return { identity, desired };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    found.push(...page.filter((item): item is NonNullable<typeof item> => item !== null));
+  }
+  return found.sort((a, b) => a.identity.agent.localeCompare(b.identity.agent));
+}
+
+async function cacheRecoveredDeployment(
+  deployment: {
+    identity: NonNullable<Awaited<ReturnType<typeof readDeploymentIdentity>>>;
+    desired: NonNullable<Awaited<ReturnType<typeof readDesiredState>>>;
+  },
+  runtime: Required<CliRuntime>,
+): Promise<void> {
+  const { identity, desired } = deployment;
+  const now = runtime.now().toISOString();
+  await writeManifest(runtime.configRoot, {
+    version: 2,
+    deploymentId: identity.deploymentId,
+    desiredGeneration: desired.generation,
+    agent: identity.agent,
+    owner: identity.owner,
+    bucket: identity.bucket,
+    space: desired.space.repo,
+    localRuntimeId: newLocalRuntimeId(identity.agent),
+    gatewayLocation: desired.gateway.location,
+    model: desired.model,
+    runtimeImage: desired.runtimeImage,
+    localPort: desired.gateway.port,
+    createdAt: identity.createdAt,
+    updatedAt: now,
+  });
+}
+
 async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>): Promise<void> {
   runtime.prompt.intro("ML Claw bootstrap");
   const requestedGatewayLocation = opts.gateway ? parseGatewayLocation(opts.gateway) : undefined;
@@ -515,7 +648,13 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const owner = opts.owner ?? me.name;
   const telegramToken = await readOptionalTelegramToken(opts, runtime);
   const bot = telegramToken ? await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot) : undefined;
-  let agentName = slugifyAgentName(opts.name ?? bot?.username ?? (await promptAgentName(runtime)));
+  const requestedAgentName = opts.name ?? bot?.username;
+  let agentName = await resolveBootstrapAgentName({
+    ...(requestedAgentName ? { requestedName: requestedAgentName } : {}),
+    owner,
+    hub,
+    runtime,
+  });
   const telegramUserId = telegramToken
     ? (opts.telegramUserId ??
       runtime.env.TELEGRAM_ALLOWED_USERS ??
@@ -577,6 +716,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     });
     await confirmBootstrapPlan({
       manifest: activePlan.manifest,
+      ...(activePlan.previousManifest ? { previousManifest: activePlan.previousManifest } : {}),
       bucketPlan: activePlan.bucketPlan,
       spacePlan,
       hasExistingManifest: activePlan.hasExistingManifest,
@@ -629,21 +769,23 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
         runtimeId: spaceRuntimeId(agentName),
         takeover: Boolean(opts.takeover),
       });
-      const deployed = await deploySpaceGateway({
-        hub,
-        runtime,
-        hfToken,
-        manifest: activePlan.manifest,
-        secrets: activePlan.secrets,
-        allowedUsers: me.name,
-        spaceExists: spacePlan.exists,
-        spacePrepared: true,
-        ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
-        ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
-        ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
+      await reconcileDeployment(activePlan, hub, runtime, async () => {
+        const deployed = await deploySpaceGateway({
+          hub,
+          runtime,
+          hfToken,
+          manifest: activePlan.manifest,
+          secrets: activePlan.secrets,
+          allowedUsers: me.name,
+          spaceExists: spacePlan.exists,
+          spacePrepared: true,
+          ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
+          ...(typeof paidHardware.sleepTime === "number" ? { sleepTime: paidHardware.sleepTime } : {}),
+          ...(templateRuntimeImage ? { templateRuntimeImage } : {}),
+        });
+        deployedSpaceRuntime = deployed.runtimeImage;
+        await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
       });
-      deployedSpaceRuntime = deployed.runtimeImage;
-      await writeLocalDeployment(runtime.configRoot, activePlan.manifest, activePlan.secrets);
     }
   }
   if (activePlan.gatewayLocation === "local") {
@@ -651,6 +793,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     if (plan.gatewayLocation === "local") {
       await confirmBootstrapPlan({
         manifest: activePlan.manifest,
+        ...(activePlan.previousManifest ? { previousManifest: activePlan.previousManifest } : {}),
         bucketPlan: activePlan.bucketPlan,
         hasExistingManifest: activePlan.hasExistingManifest,
         hardware: localGatewayLabel(requiredLocalGateway(activePlan.manifest)),
@@ -666,7 +809,12 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       runtimeId: activePlan.manifest.localRuntimeId,
       takeover: Boolean(opts.takeover),
     });
-    await deployLocalBootstrap(activePlan, opts, runtime);
+    await reconcileDeployment(
+      activePlan,
+      hub,
+      runtime,
+      async (changed) => await deployLocalBootstrap(activePlan, opts, runtime, changed),
+    );
   }
 
   runtime.stdout.log("");
@@ -695,12 +843,86 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
     );
     runtime.prompt.outro("Bootstrap complete");
   } else {
-    runtime.prompt.note(
-      localGatewayAccessSummary(activePlan.manifest, activePlan.secrets),
-      "HERE IS YOUR ML CLAW",
+    runtime.prompt.note(localGatewayAccessSummary(activePlan.manifest, activePlan.secrets), "HERE IS YOUR ML CLAW");
+    runtime.prompt.outro(
+      activePlan.waitingForApprovalUrl
+        ? "Local gateway ready; run mlclaw bootstrap again after approving Tailscale Serve"
+        : "Bootstrap complete",
     );
-    runtime.prompt.outro("Bootstrap complete");
   }
+}
+
+async function reconcileDeployment(
+  plan: BootstrapResolvedPlan,
+  hub: HubApi,
+  runtime: Required<CliRuntime>,
+  apply: (changed: boolean) => Promise<{ waitingForApproval?: string } | void>,
+): Promise<void> {
+  const client = hub.bucket(plan.bucket);
+  const currentIdentity = await readDeploymentIdentity(client);
+  if (currentIdentity && currentIdentity.deploymentId !== plan.manifest.deploymentId) {
+    throw new Error(`bucket ${plan.bucket} belongs to deployment ${currentIdentity.deploymentId}`);
+  }
+  const currentDesired = await readDesiredState(client);
+  if (currentDesired && currentDesired.deploymentId !== plan.manifest.deploymentId) {
+    throw new Error(`bucket ${plan.bucket} desired state belongs to another deployment`);
+  }
+  const candidate = deploymentDesiredState(plan.manifest, plan.spacePlan?.visibility ?? "private");
+  const sameDesired =
+    currentDesired &&
+    JSON.stringify({ ...currentDesired, generation: 0, updatedAt: "" }) ===
+      JSON.stringify({ ...candidate, generation: 0, updatedAt: "" });
+  const generation = sameDesired
+    ? currentDesired.generation
+    : Math.max(currentDesired?.generation ?? 0, plan.manifest.desiredGeneration) + 1;
+  plan.manifest = { ...plan.manifest, desiredGeneration: generation, updatedAt: runtime.now().toISOString() };
+
+  await withDeploymentLock(runtime.configRoot, plan.manifest.deploymentId, async () => {
+    let operation =
+      (await readResumableOperation(runtime.configRoot, plan.manifest.deploymentId, plan.manifest.desiredGeneration)) ??
+      newOperation(plan.manifest, runtime.now());
+    const lease = await acquireControlLease(client, plan.manifest, operation, runtime.now());
+    try {
+      await writeOperationState("planned");
+      await writeCanonicalState(
+        client,
+        currentIdentity ?? deploymentIdentity(plan.manifest, plan.bucketPrefix),
+        deploymentDesiredState(plan.manifest, plan.spacePlan?.visibility ?? "private"),
+      );
+      await assertControlLease(client, lease, runtime.now());
+      await writeOperationState("applying");
+      const outcome = await apply(!sameDesired);
+      if (outcome?.waitingForApproval) {
+        await writeOperationState("waiting_for_approval", "Tailscale Serve administrator approval is required");
+        runtime.prompt.note(outcome.waitingForApproval, "TAILSCALE SERVE APPROVAL REQUIRED");
+        return;
+      }
+      await writeOperationState("verifying");
+      const verified = await readDesiredState(client);
+      if (verified?.deploymentId !== plan.manifest.deploymentId || verified.generation !== generation) {
+        throw new Error("canonical deployment state could not be verified after reconciliation");
+      }
+      await writeOperationState("completed");
+    } catch (error) {
+      await writeOperationState("failed", "Reconciliation failed; inspect local CLI diagnostics").catch(
+        () => undefined,
+      );
+      throw error;
+    } finally {
+      await releaseControlLease(client, lease);
+    }
+
+    async function writeOperationState(state: Parameters<typeof updateOperation>[3], detail?: string): Promise<void> {
+      operation = await updateOperation(
+        runtime.configRoot,
+        client,
+        operation,
+        state,
+        runtime.now(),
+        ...(detail ? [detail] : []),
+      );
+    }
+  });
 }
 
 function spacePageUrl(repoId: string): string {
@@ -783,16 +1005,20 @@ async function resolveBootstrapPlan(params: {
         }
       : undefined;
 
+  const effectiveModel = opts.model ?? existingManifest?.model ?? model;
+  const effectiveRuntimeImage = opts.runtimeImage ? runtimeImage : (existingManifest?.runtimeImage ?? runtimeImage);
   const manifest: DeploymentManifest = {
-    version: 1,
+    version: 2,
+    deploymentId: existingManifest?.deploymentId ?? randomUUID(),
+    desiredGeneration: existingManifest?.desiredGeneration ?? 0,
     agent: agentName,
     owner,
     bucket,
     space: names.space,
     localRuntimeId,
     gatewayLocation,
-    model,
-    runtimeImage,
+    model: effectiveModel,
+    runtimeImage: effectiveRuntimeImage,
     ...(gatewayLocation === "local"
       ? { localPort }
       : existingManifest?.localPort
@@ -813,9 +1039,9 @@ async function resolveBootstrapPlan(params: {
     credentialKey,
     owner,
     bucket,
-    model,
+    model: effectiveModel,
     agentName,
-    runtimeImage,
+    runtimeImage: effectiveRuntimeImage,
     gatewayLocation,
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
@@ -828,6 +1054,7 @@ async function resolveBootstrapPlan(params: {
     agentName,
     names,
     hasExistingManifest: Boolean(existingManifest),
+    ...(existingManifest ? { previousManifest: existingManifest } : {}),
     gatewayLocation,
     ...(bucketPrefix ? { bucketPrefix } : {}),
     bucketPlan,
@@ -845,46 +1072,60 @@ async function resolveBootstrapNetworkAccess(
 ): Promise<BootstrapResolvedPlan> {
   if (plan.gatewayLocation !== "local") {
     if (opts.tailscale !== undefined || opts.tailscalePort !== undefined) {
-      throw new Error("Tailscale Serve access only applies to a local gateway");
+      throw new Error("Tailscale access only applies to a local gateway");
     }
     return plan;
   }
   const existing = plan.manifest.networkAccess;
-  if (opts.tailscale === false) {
-    if (opts.tailscalePort !== undefined) {
-      throw new Error("--tailscale-port cannot be used with --no-tailscale");
-    }
-    const networkAccess = existing ? { ...existing, enabled: false } : undefined;
-    return withBootstrapNetworkAccess(plan, networkAccess);
-  }
-
-  let enable = opts.tailscale === true || existing?.enabled === true;
-  let discovery = enable ? await runtime.tailscaleRunner.discover() : undefined;
-  if (!enable && opts.tailscale === undefined && !opts.yes && runtime.prompt.isInteractive()) {
+  let mode: TailscaleMode | undefined = opts.tailscale ?? networkAccessMode(existing);
+  let discovery = mode && mode !== "off" ? await runtime.tailscaleRunner.discover() : undefined;
+  if (!mode && !opts.yes && runtime.prompt.isInteractive()) {
     discovery = await runtime.tailscaleRunner.discover();
-    if (discovery.ready) {
-      enable = await promptConfirm("Also expose this gateway privately through Tailscale?", false, runtime);
+    if (discovery.ready && (await promptConfirm("Make this gateway available on your tailnet?", false, runtime))) {
+      mode = parseTailscaleMode(
+        await promptSelect(
+          "How should tailnet access work?",
+          [
+            { value: "direct", label: "Direct private link", hint: "No additional setup" },
+            { value: "serve", label: "HTTPS with Tailscale Serve", hint: "May require administrator approval" },
+          ],
+          "direct",
+          runtime,
+        ),
+      );
+    } else {
+      mode = "off";
     }
   }
-  if (!enable) {
-    if (opts.tailscalePort !== undefined) {
-      throw new Error("--tailscale-port requires --tailscale or an existing Tailscale mapping");
-    }
-    return withBootstrapNetworkAccess(plan, existing);
+  mode ??= "off";
+  if (mode === "off") {
+    if (opts.tailscalePort !== undefined) throw new Error("--tailscale-port cannot be used with --tailscale=off");
+    return withBootstrapNetworkAccess(plan, undefined);
   }
   assertLocalNetworkAccessHost(plan.manifest);
   if (!discovery?.ready) {
     throw new Error(discovery?.reason ?? "Tailscale is unavailable");
   }
-  const httpsPort = opts.tailscalePort ?? existing?.httpsPort ?? localGatewayPort(plan.manifest);
+  const port = opts.tailscalePort ?? networkAccessPort(existing) ?? localGatewayPort(plan.manifest);
+  if (mode === "direct") {
+    return withBootstrapNetworkAccess(plan, {
+      provider: "tailscale-direct",
+      enabled: true,
+      ipv4: discovery.ipv4,
+      ...(discovery.dnsName ? { dnsName: discovery.dnsName } : {}),
+      port,
+      accessOrigin: `http://${discovery.ipv4}:${port}`,
+    });
+  }
+  if (!discovery.dnsName) throw new Error("Tailscale MagicDNS is required for Serve mode");
   const mapping: TailscaleServeMapping = {
     dnsName: discovery.dnsName,
-    httpsPort,
+    httpsPort: port,
     target: localGatewayUrl(plan.manifest),
   };
   const state = await runtime.tailscaleRunner.mappingState(mapping);
   if (state === "conflict") {
-    throw new Error(`Tailscale Serve HTTPS port ${httpsPort} is already in use; choose --tailscale-port`);
+    throw new Error(`Tailscale Serve HTTPS port ${port} is already in use; choose --tailscale-port`);
   }
   return withBootstrapNetworkAccess(plan, {
     provider: "tailscale-serve",
@@ -898,10 +1139,8 @@ function withBootstrapNetworkAccess(
   plan: BootstrapResolvedPlan,
   networkAccess: NetworkAccessBinding | undefined,
 ): BootstrapResolvedPlan {
-  const manifest: DeploymentManifest = {
-    ...plan.manifest,
-    ...(networkAccess ? { networkAccess } : {}),
-  };
+  const { networkAccess: _previous, ...base } = plan.manifest;
+  const manifest: DeploymentManifest = { ...base, ...(networkAccess ? { networkAccess } : {}) };
   return {
     ...plan,
     manifest,
@@ -967,6 +1206,7 @@ async function promptAlternativeBootstrapName(params: {
 
 async function confirmBootstrapPlan(params: {
   manifest: DeploymentManifest;
+  previousManifest?: DeploymentManifest;
   bucketPlan: BootstrapBucketPlan;
   spacePlan?: BootstrapSpacePlan;
   hasExistingManifest: boolean;
@@ -975,6 +1215,27 @@ async function confirmBootstrapPlan(params: {
   yes: boolean;
   runtime: Required<CliRuntime>;
 }): Promise<void> {
+  if (params.previousManifest) {
+    const changes = deploymentChanges(params.previousManifest, params.manifest);
+    params.runtime.prompt.note(
+      [
+        `Existing deployment: ${params.manifest.agent}`,
+        ...(changes.length > 0 ? changes : ["No configuration changes; external state will be verified."]),
+      ].join("\n"),
+      "Bootstrap changes",
+    );
+    if (params.yes) return;
+    if (!params.runtime.prompt.isInteractive()) {
+      throw new Error("bootstrap confirmation required. Pass --yes to continue non-interactively.");
+    }
+    const confirmed = await promptConfirm(
+      changes.length > 0 ? "Apply these changes?" : "Verify this deployment?",
+      true,
+      params.runtime,
+    );
+    if (!confirmed) throw new Error("bootstrap was not confirmed");
+    return;
+  }
   const lines = [
     `Agent: ${params.manifest.agent}`,
     `Gateway: ${params.manifest.gatewayLocation}`,
@@ -1021,6 +1282,25 @@ async function confirmBootstrapPlan(params: {
   const ok = await promptConfirm("Continue with this bootstrap plan?", true, params.runtime);
   if (!ok) {
     throw new Error("bootstrap was not confirmed");
+  }
+}
+
+function deploymentChanges(previous: DeploymentManifest, next: DeploymentManifest): string[] {
+  const changes: string[] = [];
+  add("Gateway", previous.gatewayLocation, next.gatewayLocation);
+  add("Bucket", previous.bucket, next.bucket);
+  add("Model", previous.model, next.model);
+  add("Runtime image", previous.runtimeImage, next.runtimeImage);
+  add("Gateway port", String(localGatewayPort(previous)), String(localGatewayPort(next)));
+  add(
+    "Tailnet access",
+    networkAccessMode(previous.networkAccess) ?? "off",
+    networkAccessMode(next.networkAccess) ?? "off",
+  );
+  return changes;
+
+  function add(label: string, before: string, after: string): void {
+    if (before !== after) changes.push(`${label}: ${before} -> ${after}`);
   }
 }
 
@@ -1126,6 +1406,7 @@ async function resolveHostedBootstrapFallback(params: {
 
   await confirmBootstrapPlan({
     manifest: localPlan.manifest,
+    ...(localPlan.previousManifest ? { previousManifest: localPlan.previousManifest } : {}),
     bucketPlan: localPlan.bucketPlan,
     hasExistingManifest: localPlan.hasExistingManifest,
     hardware: localGatewayLabel(requiredLocalGateway(localPlan.manifest)),
@@ -1263,14 +1544,15 @@ async function inspectStateBucket(hub: HubApi, bucket: string, bucketPrefix?: st
   const prefix = normalizeBucketPrefix(bucketPrefix);
   const prefixWithSlash = `${prefix}/`;
   const manifestPath = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
-  const stateEntries = fileEntries.filter(
+  const payloadEntries = fileEntries.filter((entry) => !entry.path.startsWith(".mlclaw/"));
+  const stateEntries = payloadEntries.filter(
     (entry) =>
       entry.path === manifestPath ||
       entry.path.startsWith(`${prefixWithSlash}snapshots/`) ||
       entry.path.startsWith(`${prefixWithSlash}runtime/`),
   );
 
-  if (fileEntries.length > 0 && stateEntries.length === 0) {
+  if (payloadEntries.length > 0 && stateEntries.length === 0) {
     throw new Error(`bucket ${bucket} contains objects but no ML Claw state under ${prefix}`);
   }
 
@@ -1281,14 +1563,14 @@ async function inspectStateBucket(hub: HubApi, bucket: string, bucketPrefix?: st
       throw new Error(`bucket ${bucket} listed ${manifestPath}, but it could not be downloaded`);
     }
     const currentSnapshotPath = parseCurrentSnapshotPath(await blob.text(), bucket, manifestPath);
-    const filePaths = new Set(fileEntries.map((entry) => entry.path));
+    const filePaths = new Set(payloadEntries.map((entry) => entry.path));
     if (!filePaths.has(currentSnapshotPath)) {
       throw new Error(`bucket ${bucket} state manifest points to missing snapshot ${currentSnapshotPath}`);
     }
   }
 
   return {
-    objectCount: fileEntries.length,
+    objectCount: payloadEntries.length,
   };
 }
 
@@ -1394,7 +1676,7 @@ function localAccessSecrets(
     MLCLAW_PUBLIC_URL: localOrigin,
     MLCLAW_ACCESS_ORIGINS: [
       localOrigin,
-      ...(networkAccess?.enabled ? [networkAccess.accessOrigin] : []),
+      ...(networkAccess?.enabled && !networkAccessPendingApproval(networkAccess) ? [networkAccess.accessOrigin] : []),
     ].join(","),
     MLCLAW_LOCAL_ACCESS_USER: owner,
     MLCLAW_ALLOWED_USERS: appendCsvValue(existing.MLCLAW_ALLOWED_USERS, owner),
@@ -1427,7 +1709,8 @@ async function deployLocalBootstrap(
   plan: BootstrapResolvedPlan,
   opts: Pick<BootstrapOptions, "pull">,
   runtime: Required<CliRuntime>,
-): Promise<void> {
+  desiredChanged = true,
+): Promise<{ waitingForApproval?: string } | void> {
   const previousManifest = await readManifest(runtime.configRoot, plan.agentName).catch(() => null);
   const previousSecrets = await readSecretEnv(runtime.configRoot, plan.agentName).catch(() => null);
   const previousContainer =
@@ -1440,7 +1723,7 @@ async function deployLocalBootstrap(
   const networkAccessChanged =
     JSON.stringify(previousManifest?.networkAccess) !== JSON.stringify(plan.manifest.networkAccess);
   const previousNetworkState =
-    networkAccessChanged && previousManifest?.networkAccess
+    networkAccessChanged && previousManifest?.networkAccess?.provider === "tailscale-serve"
       ? await runtime.tailscaleRunner.mappingState(networkAccessMapping(previousManifest.networkAccess))
       : undefined;
 
@@ -1455,11 +1738,33 @@ async function deployLocalBootstrap(
       manifest: plan.manifest,
       runtime,
       pull: shouldPull(opts),
-      refresh: true,
+      refresh: desiredChanged || JSON.stringify(previousSecrets) !== JSON.stringify(plan.secrets),
       existing: previousContainer,
     });
     await writeManifest(runtime.configRoot, plan.manifest);
   } catch (error) {
+    if (
+      error instanceof TailscaleApprovalRequiredError &&
+      plan.manifest.networkAccess?.provider === "tailscale-serve"
+    ) {
+      plan.manifest = {
+        ...plan.manifest,
+        networkAccess: { ...plan.manifest.networkAccess, pendingApproval: true },
+      };
+      plan.secrets = {
+        ...plan.secrets,
+        ...localAccessSecrets(
+          plan.manifest.owner,
+          localGatewayPort(plan.manifest),
+          plan.secrets,
+          plan.manifest.networkAccess,
+        ),
+      };
+      plan.waitingForApprovalUrl = error.approvalUrl;
+      await writeSecretEnv(runtime.configRoot, plan.agentName, plan.secrets);
+      await writeManifest(runtime.configRoot, plan.manifest);
+      return { waitingForApproval: error.approvalUrl };
+    }
     try {
       if (networkAccessChanged && plan.manifest.networkAccess) {
         await disableNetworkAccess(plan.manifest, runtime);
@@ -1625,12 +1930,7 @@ async function startLocalGateway(params: {
     secrets = { ...secrets, MLCLAW_SESSION_SECRET: randomBytes(48).toString("base64url") };
     await writeSecretEnv(runtime.configRoot, manifest.agent, secrets);
   }
-  const accessSecrets = localAccessSecrets(
-    manifest.owner,
-    localGatewayPort(manifest),
-    secrets,
-    manifest.networkAccess,
-  );
+  const accessSecrets = localAccessSecrets(manifest.owner, localGatewayPort(manifest), secrets, manifest.networkAccess);
   if (Object.entries(accessSecrets).some(([key, value]) => secrets[key] !== value)) {
     secrets = { ...secrets, ...accessSecrets };
     await writeSecretEnv(runtime.configRoot, manifest.agent, secrets);
@@ -1672,9 +1972,7 @@ async function startLocalGateway(params: {
     volumeName,
     volumeMountPath: LOCAL_VOLUME_MOUNT_PATH,
     liveDir: LOCAL_LIVE_DIR,
-    hostAddress: "127.0.0.1",
-    hostPort: localGatewayPort(manifest),
-    containerPort: DEFAULT_LOCAL_PORT,
+    publishedPorts: publishedGatewayPorts(manifest),
     ...(connection ? { context: connection } : {}),
   });
   await runtime.sleep(LOCAL_START_SETTLE_MS);
@@ -1741,7 +2039,8 @@ async function gatewayStart(agent: string, opts: GatewayCommandOptions, runtime:
       manifest.networkAccess,
     );
     const accessSecretsChanged = Object.entries(accessSecrets).some(([key, value]) => previousSecrets[key] !== value);
-    const networkAccessChanged = JSON.stringify(previousManifest.networkAccess) !== JSON.stringify(manifest.networkAccess);
+    const networkAccessChanged =
+      JSON.stringify(previousManifest.networkAccess) !== JSON.stringify(manifest.networkAccess);
     const refresh = Boolean(opts.restart || localPortChanged || accessSecretsChanged || networkAccessChanged);
     const previousContainer = refresh
       ? await localRunnerFor(previousManifest, runtime).inspect(
@@ -1750,7 +2049,7 @@ async function gatewayStart(agent: string, opts: GatewayCommandOptions, runtime:
         )
       : undefined;
     const previousNetworkState =
-      networkAccessChanged && previousManifest.networkAccess
+      networkAccessChanged && previousManifest.networkAccess?.provider === "tailscale-serve"
         ? await runtime.tailscaleRunner.mappingState(networkAccessMapping(previousManifest.networkAccess))
         : undefined;
     try {
@@ -1839,12 +2138,18 @@ async function gatewayStatus(agent: string, runtime: Required<CliRuntime>): Prom
     runtime.stdout.log(`Gateway URL: ${localGatewayAccessUrl(manifest, secrets)}`);
     if (manifest.networkAccess?.enabled) {
       runtime.stdout.log(`Tailnet URL: ${networkAccessUrl(manifest.networkAccess, manifest.agent, secrets)}`);
-      try {
-        runtime.stdout.log(
-          `Tailscale Serve: ${await runtime.tailscaleRunner.mappingState(networkAccessMapping(manifest.networkAccess))}`,
-        );
-      } catch (error) {
-        runtime.stdout.log(`Tailscale Serve: unavailable (${error instanceof Error ? error.message : String(error)})`);
+      if (manifest.networkAccess.provider === "tailscale-direct") {
+        runtime.stdout.log(`Tailscale direct: ${manifest.networkAccess.ipv4}:${manifest.networkAccess.port}`);
+      } else {
+        try {
+          runtime.stdout.log(
+            `Tailscale Serve: ${await runtime.tailscaleRunner.mappingState(networkAccessMapping(manifest.networkAccess))}`,
+          );
+        } catch (error) {
+          runtime.stdout.log(
+            `Tailscale Serve: unavailable (${error instanceof Error ? error.message : String(error)})`,
+          );
+        }
       }
     }
     runtime.stdout.log(localGatewayRemoteAccess(manifest));
@@ -2241,6 +2546,40 @@ function localGatewayPort(manifest: DeploymentManifest): number {
   return manifest.localPort ?? DEFAULT_LOCAL_PORT;
 }
 
+function publishedGatewayPorts(manifest: DeploymentManifest): Array<{
+  hostAddress: string;
+  hostPort: number;
+  containerPort: number;
+}> {
+  const port = localGatewayPort(manifest);
+  return [
+    { hostAddress: "127.0.0.1", hostPort: port, containerPort: DEFAULT_LOCAL_PORT },
+    ...(manifest.networkAccess?.provider === "tailscale-direct" && manifest.networkAccess.enabled
+      ? [
+          {
+            hostAddress: manifest.networkAccess.ipv4,
+            hostPort: manifest.networkAccess.port,
+            containerPort: DEFAULT_LOCAL_PORT,
+          },
+        ]
+      : []),
+  ];
+}
+
+function networkAccessMode(binding: NetworkAccessBinding | undefined): TailscaleMode | undefined {
+  if (!binding?.enabled) return undefined;
+  return binding.provider === "tailscale-direct" ? "direct" : "serve";
+}
+
+function networkAccessPendingApproval(binding: NetworkAccessBinding): boolean {
+  return binding.provider === "tailscale-serve" && binding.pendingApproval === true;
+}
+
+function networkAccessPort(binding: NetworkAccessBinding | undefined): number | undefined {
+  if (!binding) return undefined;
+  return binding.provider === "tailscale-direct" ? binding.port : binding.httpsPort;
+}
+
 function localGatewayUrl(manifest: DeploymentManifest): string {
   return `http://127.0.0.1:${localGatewayPort(manifest)}`;
 }
@@ -2249,11 +2588,7 @@ function localGatewayAccessUrl(manifest: DeploymentManifest, secrets: Record<str
   return localAccessUrl(localGatewayUrl(manifest), manifest.agent, secrets);
 }
 
-function networkAccessUrl(
-  networkAccess: NetworkAccessBinding,
-  agent: string,
-  secrets: Record<string, string>,
-): string {
+function networkAccessUrl(networkAccess: NetworkAccessBinding, agent: string, secrets: Record<string, string>): string {
   return localAccessUrl(networkAccess.accessOrigin, agent, secrets);
 }
 
@@ -2272,14 +2607,14 @@ function logLocalGatewayUrls(
   runtime: Required<CliRuntime>,
 ): void {
   runtime.stdout.log(`Gateway URL: ${localGatewayAccessUrl(manifest, secrets)}`);
-  if (manifest.networkAccess?.enabled) {
+  if (manifest.networkAccess?.enabled && !networkAccessPendingApproval(manifest.networkAccess)) {
     runtime.stdout.log(`Tailnet URL: ${networkAccessUrl(manifest.networkAccess, manifest.agent, secrets)}`);
   }
 }
 
 function localGatewayAccessSummary(manifest: DeploymentManifest, secrets: Record<string, string>): string {
   const lines = ["Open the gateway on this machine:", "", localGatewayAccessUrl(manifest, secrets)];
-  if (manifest.networkAccess?.enabled) {
+  if (manifest.networkAccess?.enabled && !networkAccessPendingApproval(manifest.networkAccess)) {
     lines.push(
       "",
       "Open it from another device on your tailnet:",
@@ -2292,6 +2627,7 @@ function localGatewayAccessSummary(manifest: DeploymentManifest, secrets: Record
 }
 
 function networkAccessMapping(binding: NetworkAccessBinding): TailscaleServeMapping {
+  if (binding.provider !== "tailscale-serve") throw new Error("direct tailnet access has no Serve mapping");
   return {
     dnsName: binding.dnsName,
     httpsPort: binding.httpsPort,
@@ -2308,13 +2644,21 @@ async function syncNetworkAccess(manifest: DeploymentManifest, runtime: Required
     await disableNetworkAccess(manifest, runtime);
     return;
   }
+  if (binding.provider === "tailscale-direct") {
+    runtime.stdout.log(`Tailscale direct listener ready: ${binding.accessOrigin}`);
+    return;
+  }
   const result = await runtime.tailscaleRunner.ensureMapping(networkAccessMapping(binding));
+  if (binding.pendingApproval) {
+    delete binding.pendingApproval;
+    await writeManifest(runtime.configRoot, manifest);
+  }
   runtime.stdout.log(`Tailscale Serve ${result}: ${binding.accessOrigin}`);
 }
 
 async function disableNetworkAccess(manifest: DeploymentManifest, runtime: Required<CliRuntime>): Promise<void> {
   const binding = manifest.networkAccess;
-  if (!binding) {
+  if (!binding || binding.provider === "tailscale-direct") {
     return;
   }
   const result = await runtime.tailscaleRunner.removeMapping(networkAccessMapping(binding));
@@ -2327,15 +2671,11 @@ async function disableNetworkAccess(manifest: DeploymentManifest, runtime: Requi
   }
 }
 
-async function removeOwnedNetworkAccess(
-  binding: NetworkAccessBinding,
-  runtime: Required<CliRuntime>,
-): Promise<void> {
+async function removeOwnedNetworkAccess(binding: NetworkAccessBinding, runtime: Required<CliRuntime>): Promise<void> {
+  if (binding.provider === "tailscale-direct") return;
   const result = await runtime.tailscaleRunner.removeMapping(networkAccessMapping(binding));
   if (result !== "removed" && result !== "missing") {
-    throw new Error(
-      `Tailscale Serve mapping changed on HTTPS port ${binding.httpsPort}; preserving the live handler`,
-    );
+    throw new Error(`Tailscale Serve mapping changed on HTTPS port ${binding.httpsPort}; preserving the live handler`);
   }
 }
 
@@ -2348,32 +2688,41 @@ async function resolveGatewayNetworkAccess(
   if (opts.tailscale === undefined && opts.tailscalePort === undefined && !existing?.enabled) {
     return manifest;
   }
-  if (opts.tailscale === false) {
-    if (opts.tailscalePort !== undefined) {
-      throw new Error("--tailscale-port cannot be used with --no-tailscale");
-    }
-    return existing
-      ? { ...manifest, networkAccess: { ...existing, enabled: false }, updatedAt: runtime.now().toISOString() }
-      : manifest;
-  }
-  const enable = opts.tailscale === true || existing?.enabled === true;
-  if (!enable) {
-    throw new Error("--tailscale-port requires --tailscale or an existing Tailscale mapping");
+  const mode = opts.tailscale ?? networkAccessMode(existing) ?? "off";
+  if (mode === "off") {
+    if (opts.tailscalePort !== undefined) throw new Error("--tailscale-port cannot be used with --tailscale=off");
+    const { networkAccess: _removed, ...base } = manifest;
+    return { ...base, updatedAt: runtime.now().toISOString() };
   }
   assertLocalNetworkAccessHost(manifest);
   const discovery = await runtime.tailscaleRunner.discover();
   if (!discovery.ready) {
     throw new Error(discovery.reason);
   }
-  const httpsPort = opts.tailscalePort ?? existing?.httpsPort ?? localGatewayPort(manifest);
+  const port = opts.tailscalePort ?? networkAccessPort(existing) ?? localGatewayPort(manifest);
+  if (mode === "direct") {
+    return {
+      ...manifest,
+      networkAccess: {
+        provider: "tailscale-direct",
+        enabled: true,
+        ipv4: discovery.ipv4,
+        ...(discovery.dnsName ? { dnsName: discovery.dnsName } : {}),
+        port,
+        accessOrigin: `http://${discovery.ipv4}:${port}`,
+      },
+      updatedAt: runtime.now().toISOString(),
+    };
+  }
+  if (!discovery.dnsName) throw new Error("Tailscale MagicDNS is required for Serve mode");
   const mapping: TailscaleServeMapping = {
     dnsName: discovery.dnsName,
-    httpsPort,
+    httpsPort: port,
     target: localGatewayUrl(manifest),
   };
   const state = await runtime.tailscaleRunner.mappingState(mapping);
   if (state === "conflict") {
-    throw new Error(`Tailscale Serve HTTPS port ${httpsPort} is already in use; choose --tailscale-port`);
+    throw new Error(`Tailscale Serve HTTPS port ${port} is already in use; choose --tailscale-port`);
   }
   return {
     ...manifest,
@@ -2389,12 +2738,7 @@ async function resolveGatewayNetworkAccess(
 
 function assertLocalNetworkAccessHost(manifest: DeploymentManifest): void {
   const endpoint = manifest.localGateway ? localGatewayEndpoint(manifest.localGateway) : undefined;
-  if (
-    endpoint &&
-    !endpoint.startsWith("unix:") &&
-    !endpoint.startsWith("npipe:") &&
-    !endpointIsLoopback(endpoint)
-  ) {
+  if (endpoint && !endpoint.startsWith("unix:") && !endpoint.startsWith("npipe:") && !endpointIsLoopback(endpoint)) {
     throw new Error("Tailscale Serve access requires the container runtime to run on this machine");
   }
 }
@@ -3394,6 +3738,20 @@ async function promptConfirm(label: string, initialValue: boolean, runtime: Requ
   return Boolean(value);
 }
 
+async function promptSelect(
+  message: string,
+  options: Array<{ value: string; label: string; hint?: string }>,
+  initialValue: string,
+  runtime: Required<CliRuntime>,
+): Promise<string> {
+  const value = await runtime.prompt.select({ message, options, initialValue });
+  if (isCancel(value)) {
+    runtime.prompt.cancel("Cancelled");
+    throw new Error("cancelled");
+  }
+  return value;
+}
+
 function readPromptValue(value: string | symbol, label: string): string {
   if (isCancel(value)) {
     cancel("Cancelled");
@@ -3411,6 +3769,11 @@ function parseInteger(value: string): number {
     throw new InvalidArgumentError("expected an integer");
   }
   return Number.parseInt(value, 10);
+}
+
+function parseTailscaleMode(value: string): TailscaleMode {
+  if (value === "off" || value === "direct" || value === "serve") return value;
+  throw new InvalidArgumentError(`expected tailscale mode off, direct, or serve; got ${value}`);
 }
 
 function parseLocalPort(value: string): number {

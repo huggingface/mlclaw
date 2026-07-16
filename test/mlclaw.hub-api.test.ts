@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { HubApi } from "../src/mlclaw/hub-api.js";
 
 describe("HubApi Space commits", () => {
+  it("lists owned buckets across Hub pagination", async () => {
+    const requests: string[] = [];
+    const hub = new HubApi({
+      token: "hf_test_token",
+      fetch: async (url) => {
+        const value = String(url);
+        requests.push(value);
+        return value.endsWith("page=2")
+          ? new Response(JSON.stringify([{ id: "alice/second" }]), { status: 200 })
+          : new Response(JSON.stringify([{ id: "alice/first" }]), {
+              status: 200,
+              headers: { Link: '<https://huggingface.co/api/buckets/me?page=2>; rel="next"' },
+            });
+      },
+    });
+
+    await expect(hub.listBuckets()).resolves.toEqual(["alice/first", "alice/second"]);
+    expect(requests).toEqual(["https://huggingface.co/api/buckets/me", "https://huggingface.co/api/buckets/me?page=2"]);
+  });
+
   it("creates Docker Spaces as private by default", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const hub = new HubApi({
@@ -183,21 +203,24 @@ describe("HubApi Space commits", () => {
           });
         }
         if (textUrl.endsWith("/api/spaces/alice/research")) {
-          return new Response(JSON.stringify({
-            runtime: {
-              volumes: [
-                {
-                  type: "bucket",
-                  source: "alice/research-data",
-                  mountPath: "/data/mlclaw-state",
-                  readOnly: false,
-                },
-              ],
+          return new Response(
+            JSON.stringify({
+              runtime: {
+                volumes: [
+                  {
+                    type: "bucket",
+                    source: "alice/research-data",
+                    mountPath: "/data/mlclaw-state",
+                    readOnly: false,
+                  },
+                ],
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
             },
-          }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
+          );
         }
         return new Response("not found", { status: 404 });
       },
