@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/mlclaw/cli.js";
+import { newOperation, updateOperation } from "../src/mlclaw/deployment-state.js";
 import { DEFAULT_RUNTIME_IMAGE } from "../src/mlclaw/runtime-image.js";
 import {
   readManifest,
@@ -931,7 +932,11 @@ describe("mlclaw CLI", () => {
   it("keeps a healthy loopback gateway while Tailscale Serve approval is pending", async () => {
     const hub = createFakeHub();
     const { prompt, notes } = createPrompt([]);
-    const runtime = await createRuntime(hub, prompt);
+    const output: string[] = [];
+    const runtime = {
+      ...(await createRuntime(hub, prompt)),
+      stdout: { log: (message: unknown) => output.push(String(message)) },
+    };
     runtime.tailscaleRunner.discovery = {
       ready: true,
       ipv4: "100.100.100.100",
@@ -967,6 +972,7 @@ describe("mlclaw CLI", () => {
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_ACCESS_ORIGINS: "http://127.0.0.1:7860",
     });
+    expect(output.some((line) => line.startsWith("Tailnet URL:"))).toBe(false);
     expect(notes).toContainEqual(
       expect.objectContaining({
         title: "TAILSCALE SERVE APPROVAL REQUIRED",
@@ -1331,7 +1337,7 @@ describe("mlclaw CLI", () => {
     });
   });
 
-  it("requires confirmation before bootstrap changes a pinned bucket", async () => {
+  it("routes bootstrap bucket changes through state adoption", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
@@ -1372,7 +1378,8 @@ describe("mlclaw CLI", () => {
     );
 
     expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("bootstrap confirmation required. Pass --yes to continue non-interactively.");
+    expect(stderr.join("\n")).toContain("bootstrap cannot move state");
+    expect(stderr.join("\n")).toContain("mlclaw state adopt research --bucket alice/new-data");
     await expect(readManifest(runtime.configRoot, "research")).resolves.toEqual(original);
     expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(false);
   });
@@ -1410,6 +1417,39 @@ describe("mlclaw CLI", () => {
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_RUNTIME_ID: original.localRuntimeId,
     });
+  });
+
+  it("resumes an interrupted target generation without applying a new generation", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([]).prompt);
+    await expect(main(["bootstrap", "--gateway", "local", "--name", "research", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    const current = await readManifest(runtime.configRoot, "research");
+    const interrupted: DeploymentManifest = {
+      ...current,
+      desiredGeneration: current.desiredGeneration + 1,
+      model: "test-provider/interrupted-model",
+      updatedAt: "2026-07-16T00:01:00.000Z",
+    };
+    await writeManifest(runtime.configRoot, interrupted);
+    const operation = newOperation(interrupted, new Date("2026-07-16T00:01:00.000Z"));
+    await updateOperation(
+      runtime.configRoot,
+      hub.bucket(interrupted.bucket),
+      operation,
+      "applying",
+      new Date("2026-07-16T00:01:00.000Z"),
+    );
+
+    await expect(main(["bootstrap", "--name", "research", "--gateway", "local", "--no-pull"], runtime)).resolves.toBe(
+      0,
+    );
+    expect(JSON.parse(hub.bucketObjects.get(".mlclaw/desired-state.json") ?? "null")).toMatchObject({
+      generation: interrupted.desiredGeneration,
+      model: "test-provider/interrupted-model",
+    });
+    expect([...hub.bucketObjects.keys()].filter((key) => key.startsWith(".mlclaw/operations/"))).toHaveLength(2);
   });
 
   it("fails closed when canonical desired state is newer than the local cache", async () => {
@@ -2147,6 +2187,24 @@ describe("mlclaw CLI", () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it("restarts a paused Space during an unchanged bootstrap", async () => {
+    const hub = createFakeHub({
+      spaceRuntime: {
+        stage: "PAUSED",
+        hardware: "cpu-basic",
+        requested_hardware: "cpu-basic",
+        volumes: [],
+      },
+    });
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    hub.calls.length = 0;
+
+    await expect(main(["bootstrap", "--yes"], runtime)).resolves.toBe(0);
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(hub.calls.some((call) => call.name === "addSpaceVariable" || call.name === "addSpaceSecret")).toBe(false);
   });
 
   it("allowlists the authenticated user for org-owned browser Spaces", async () => {

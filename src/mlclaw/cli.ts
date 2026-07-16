@@ -802,8 +802,22 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       });
       await reconcileDeployment(activePlan, hub, runtime, async (changed, assertLease) => {
         if (!changed) {
-          await hub.getSpaceRuntime(activePlan.manifest.space);
-          runtime.stdout.log(`Space deployment already matches desired state: ${activePlan.manifest.space}`);
+          const [spaceRuntime, variables] = await Promise.all([
+            hub.getSpaceRuntime(activePlan.manifest.space),
+            hub.getSpaceVariables(activePlan.manifest.space),
+          ]);
+          const stage = typeof spaceRuntime.stage === "string" ? spaceRuntime.stage.toUpperCase() : "";
+          const disabled = variables.has("MLCLAW_GATEWAY_DISABLED");
+          const stopped = disabled || stage === "PAUSED" || stage === "STOPPED" || stage === "SLEEPING";
+          if (stopped) {
+            await assertLease();
+            if (disabled) await clearSpaceGatewayDisabled(hub, activePlan.manifest.space);
+            await assertLease();
+            await hub.restartSpace(activePlan.manifest.space, true);
+            runtime.stdout.log(`Space gateway restart requested: ${activePlan.manifest.space}`);
+          } else {
+            runtime.stdout.log(`Space deployment already matches desired state: ${activePlan.manifest.space}`);
+          }
           return;
         }
         await assertLease();
@@ -909,7 +923,7 @@ async function reconcileDeployment(
       return await apply(changed, assertLease);
     },
   });
-  plan.manifest = result.manifest;
+  if (!result.waitingForApproval) plan.manifest = result.manifest;
 }
 
 type ReconcileManifestContext = {
@@ -982,9 +996,18 @@ async function reconcileManifest(params: {
         `canonical desired state generation ${currentDesired.generation} is newer than local generation ${requestedManifest.desiredGeneration}; recover the deployment before applying changes`,
       );
     }
+    const interruptedOperation =
+      !sameDesired && requestedManifest.desiredGeneration > (currentDesired?.generation ?? -1)
+        ? await readResumableOperation(
+            runtime.configRoot,
+            requestedManifest.deploymentId,
+            requestedManifest.desiredGeneration,
+          )
+        : null;
     const generation = sameDesired
       ? currentDesired.generation
-      : Math.max(currentDesired?.generation ?? 0, requestedManifest.desiredGeneration) + 1;
+      : (interruptedOperation?.targetGeneration ??
+        Math.max(currentDesired?.generation ?? 0, requestedManifest.desiredGeneration) + 1);
     const manifest: DeploymentManifest = {
       ...requestedManifest,
       spaceVisibility: visibility,
@@ -992,6 +1015,7 @@ async function reconcileManifest(params: {
       updatedAt: runtime.now().toISOString(),
     };
     let operation =
+      interruptedOperation ??
       (await readResumableOperation(runtime.configRoot, manifest.deploymentId, manifest.desiredGeneration)) ??
       newOperation(manifest, runtime.now());
     let lease = await acquireControlLease(control, manifest, operation, runtime.now());
@@ -1139,6 +1163,11 @@ async function resolveBootstrapPlan(params: {
     hub,
   });
   const bucket = bucketPlan.bucket;
+  if (existingManifest && bucket !== existingManifest.bucket) {
+    throw new Error(
+      `bootstrap cannot move state from ${existingManifest.bucket} to ${bucket}; use mlclaw state adopt ${agentName} --bucket ${bucket}`,
+    );
+  }
   const routerToken = await resolveRouterToken({
     opts,
     runtime,
