@@ -2678,6 +2678,60 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("rejects a remote rebind before touching a Tailscale-enabled gateway", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([]);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    runtime.dockerRunner.contexts.set("remote", "ssh://deploy@example.com");
+    runtime.dockerRunner.inspectValue = {
+      exists: true,
+      running: true,
+      status: "running",
+      image: DEFAULT_RUNTIME_IMAGE,
+    };
+    runtime.tailscaleRunner.state = "owned";
+    await writeManifest(runtime.configRoot, {
+      version: 1,
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      space: "alice/research",
+      localRuntimeId: "local-research-existing",
+      gatewayLocation: "local",
+      model: "test-model",
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      localGateway: {
+        engine: "docker",
+        dockerContext: "desktop-linux",
+        dockerEndpoint: "unix:///docker-desktop.sock",
+      },
+      networkAccess: {
+        provider: "tailscale-serve",
+        enabled: true,
+        dnsName: "isengard.example.ts.net",
+        httpsPort: 17860,
+        target: "http://127.0.0.1:7860",
+        accessOrigin: "https://isengard.example.ts.net:17860",
+      },
+      createdAt: "2026-06-16T00:00:00.000Z",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    await expect(
+      main(["gateway", "rebind", "research", "--docker-context", "remote", "--no-pull"], runtime),
+    ).resolves.toBe(1);
+
+    expect(stderr.join("\n")).toContain("requires the container runtime to run on this machine");
+    expect(runtime.dockerRunner.calls).toEqual([]);
+    expect(runtime.tailscaleRunner.calls).toEqual([]);
+    expect(hub.calls).toEqual([]);
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      localGateway: { dockerContext: "desktop-linux" },
+      networkAccess: { enabled: true },
+    });
+  });
+
   it("rebinds with takeover when the previous Docker context is unavailable", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([]);

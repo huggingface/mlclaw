@@ -16874,6 +16874,9 @@ async function deploySpaceGateway(params) {
 }
 async function startLocalGateway(params) {
   const { manifest, runtime } = params;
+  if (manifest.networkAccess?.enabled) {
+    assertLocalNetworkAccessHost(manifest);
+  }
   let secrets = await ensureDeploymentCredentialKey(runtime, manifest.agent);
   if (!secrets.MLCLAW_SESSION_SECRET) {
     secrets = { ...secrets, MLCLAW_SESSION_SECRET: randomBytes(48).toString("base64url") };
@@ -17276,6 +17279,14 @@ async function gatewayRebind(agent, opts, runtime) {
     runtime.stdout.log(`Local gateway already uses Docker context ${targetBinding.dockerContext}`);
     return;
   }
+  const updated = {
+    ...current,
+    localGateway: targetBinding,
+    updatedAt: runtime.now().toISOString()
+  };
+  if (updated.networkAccess?.enabled) {
+    assertLocalNetworkAccessHost(updated);
+  }
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
   const bucketPrefix = await readDeploymentBucketPrefix(runtime, agent);
@@ -17306,11 +17317,6 @@ async function gatewayRebind(agent, opts, runtime) {
       "Old Docker context unavailable; rebinding with --takeover and using the latest bucket snapshot."
     );
   }
-  const updated = {
-    ...current,
-    localGateway: targetBinding,
-    updatedAt: runtime.now().toISOString()
-  };
   await startLocalGateway({ manifest: updated, runtime, pull: shouldPull(opts), resetVolume: true });
   await writeManifest(runtime.configRoot, updated);
   runtime.stdout.log(`Local gateway rebound to Docker context ${targetBinding.dockerContext}`);
