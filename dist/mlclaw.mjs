@@ -15375,8 +15375,8 @@ import fs12 from "node:fs";
 import path13 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var DEFAULT_OPENCLAW_VERSION = "2026.7.1";
-var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.2.1";
-var DEFAULT_BROKERKIT_VERSION = "hf-broker/v0.2.0";
+var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.3.0";
+var DEFAULT_BROKERKIT_VERSION = "hf-broker/v0.3.1";
 var DEFAULT_RUNTIME_IMAGE_REPOSITORY = "ghcr.io/osolmaz/mlclaw";
 var PACKAGE_METADATA = readPackageMetadata();
 var PACKAGE_VERSION = packageString("version", "unknown");
@@ -20355,7 +20355,6 @@ var hf_broker_credential_requirements_default = {
     "repo.access.read",
     "repo.content.read",
     "repo.write",
-    "resourceGroup.write",
     "sql-console.embed.write",
     "user.billing.read",
     "user.mcp.read",

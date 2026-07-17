@@ -17,6 +17,7 @@ describe("HF Broker credential policy", () => {
     expect(url.searchParams.get("tokenType")).toBe("fineGrained");
     expect(url.searchParams.get("canReadGatedRepos")).toBe("true");
     expect(url.searchParams.getAll("ownUserPermissions")).toEqual(BROKER_PERSONAL_PERMISSIONS);
+    expect(url.searchParams.getAll("ownUserPermissions")).not.toContain("resourceGroup.write");
     expect(url.searchParams.getAll("globalPermissions")).toEqual(BROKER_GLOBAL_PERMISSIONS);
     expect(url.searchParams.getAll("orgs")).toEqual([]);
     expect(url.toString()).not.toContain("hf_");
@@ -27,6 +28,7 @@ describe("HF Broker credential policy", () => {
 
     expect(url.searchParams.getAll("orgs")).toEqual(["research-org"]);
     expect(url.searchParams.getAll("orgPermissions")).toEqual(BROKER_ORGANIZATION_PERMISSIONS);
+    expect(url.searchParams.getAll("orgPermissions")).toContain("resourceGroup.write");
     expect(url.searchParams.getAll("ownUserPermissions")).toEqual(BROKER_PERSONAL_PERMISSIONS);
   });
 
