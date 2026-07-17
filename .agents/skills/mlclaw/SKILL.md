@@ -59,8 +59,9 @@ Collect or confirm:
 
 - Hugging Face token access: `HF_TOKEN`, `HF_TOKEN_PATH`, `$HF_HOME/token`, or
   `hf auth login`.
-- The active Hugging Face token is installed as the broker-owned
-  `MLCLAW_BROKER_HF_TOKEN`; legacy dedicated Router tokens remain supported.
+- A separate fine-grained Hugging Face token is installed as the broker-owned
+  `MLCLAW_BROKER_HF_TOKEN`; the active CLI login is used only to provision
+  resources. Legacy dedicated Router tokens remain supported for inference.
 - Agent name, unless a Telegram bot token is supplied and the user wants the
   name derived from the bot username.
 - Gateway mode:
