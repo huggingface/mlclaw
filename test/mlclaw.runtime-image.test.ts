@@ -102,7 +102,8 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('"$HF_BROKER_STATE_DIR/plans"');
     expect(entrypoint).toContain('rm -f -- \\\n    "$HF_BROKER_STATE_DIR/grants.json"');
     expect(entrypoint).toContain('"$HF_BROKER_STATE_DIR/operations.json"');
-    expect(entrypoint).toContain("HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-${MLCLAW_ROUTER_TOKEN:-");
+    expect(entrypoint).toContain('local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"');
+    expect(entrypoint).not.toContain("HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-${MLCLAW_ROUTER_TOKEN:-");
     expect(entrypoint).toContain('export MLCLAW_TRUSTED_HF_TOKEN_FILE="$token_file"');
     expect(entrypoint).toContain('chown "$OPENCLAW_IDENTITY" "$agent_secret_file"');
     expect(entrypoint).toContain('install -d -m 0711 -o root -g hf-broker "$HF_BROKER_RUN_DIR"');

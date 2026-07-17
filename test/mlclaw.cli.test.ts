@@ -2310,6 +2310,11 @@ describe("mlclaw CLI", () => {
     ).resolves.toBe(0);
 
     expect(runtime.dockerRunner.calls.some((call) => call.name === "run")).toBe(true);
+    expect(replacementHub.calls).toContainEqual({
+      name: "deploymentControlStore",
+      args: ["alice", expect.any(String)],
+    });
+    expect(replacementHub.calls.filter((call) => call.name === "control.compareAndSwap")).toHaveLength(2);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_BROKER_HF_TOKEN: "hf_broker_replacement",
     });
@@ -2372,6 +2377,11 @@ describe("mlclaw CLI", () => {
       { name: "addSpaceSecret", args: ["alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_broker_replacement"] },
       { name: "addSpaceSecret", args: ["alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_broker_test"] },
     ]);
+    expect(hub.calls).toContainEqual({
+      name: "deploymentControlStore",
+      args: ["alice", expect.any(String)],
+    });
+    expect(hub.calls.filter((call) => call.name === "control.compareAndSwap")).toHaveLength(2);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       MLCLAW_BROKER_HF_TOKEN: "hf_broker_test",
     });
@@ -3101,6 +3111,7 @@ describe("mlclaw CLI", () => {
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
     await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", DEFAULT_MODEL);
     await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_legacy_broad");
+    await hub.addSpaceSecret("alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_legacy_broad");
     hub.calls.length = 0;
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
@@ -3126,6 +3137,29 @@ describe("mlclaw CLI", () => {
       args: ["alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_broker_test"],
     });
     expect(hub.calls.some((call) => call.name === "restartSpace")).toBe(false);
+  });
+
+  it("fails update credential preflight before mutating a Space", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_MODEL", "openai/gpt-4.1-mini");
+    const stderr: string[] = [];
+    let pushed = false;
+    const runtime = {
+      ...(await createRuntime(hub, createPrompt([], false).prompt, stderr)),
+      pushTemplateToSpace: async () => {
+        pushed = true;
+        return { templateRev: "test-template" };
+      },
+    };
+    hub.calls.length = 0;
+
+    await expect(main(["update", "alice/research"], runtime)).resolves.toBe(1);
+
+    expect(stderr.join("\n")).toContain("cannot verify the dedicated HF Broker credential");
+    expect(pushed).toBe(false);
+    expect(hub.calls.some((call) => call.name === "addSpaceSecret")).toBe(false);
+    expect(hub.calls.some((call) => call.name === "addSpaceVariable")).toBe(false);
   });
 
   it("replaces an existing Router token when update receives an explicit override", async () => {
