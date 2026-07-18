@@ -2,7 +2,8 @@
 
 Landing page for [ML Claw](https://github.com/osolmaz/mlclaw), built with
 [Astro](https://astro.build) as a static site. It is served with GitHub Pages
-at <https://osolmaz.github.io/mlclaw/>.
+at <https://mlclaw.dev/> (custom domain configured in the repository's Pages
+settings).
 
 ## Develop
 
@@ -32,6 +33,7 @@ the workflow manually:
 gh workflow run deploy-website.yml
 ```
 
-The site is served under the `/mlclaw` base path, so asset URLs in pages must
-be prefixed with `import.meta.env.BASE_URL`. If the site moves to a custom
-domain later, update `site` and remove `base` in `astro.config.mjs`.
+Asset URLs in pages are prefixed with `import.meta.env.BASE_URL` so the site
+keeps working if it ever moves back under a base path (for example, serving
+from `osolmaz.github.io/mlclaw` without the custom domain would need
+`base: "/mlclaw"` in `astro.config.mjs`).
