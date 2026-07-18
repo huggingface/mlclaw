@@ -8,6 +8,10 @@ ML Claw deploys an OpenClaw agent on Hugging Face with durable state in a
 private Storage Bucket. The default deployment is a private Hugging Face Space
 with a browser gateway protected by Hugging Face OAuth.
 
+[ml-intern](https://github.com/huggingface/ml-intern) is Hugging Face's
+open-source ML engineer for reading papers, training models, and shipping
+models.
+
 The browser never receives an OpenClaw gateway token. ML Claw authenticates the
 signed-in Hugging Face user, then proxies HTTP and WebSocket traffic to
 OpenClaw on loopback using OpenClaw trusted-proxy auth.
@@ -385,12 +389,6 @@ broad token, and operator credentials are never included in snapshots.
 Local gateways pass the broad credential only to the trusted state-sync
 supervisor for bucket I/O and to the trusted MCP integration proxy through a
 protected token file. Neither path passes it to OpenClaw.
-
-## Related
-
-[ml-intern](https://github.com/huggingface/ml-intern) is Hugging Face's
-open-source ML engineer for reading papers, training models, and shipping
-models.
 
 ## Costs
 
