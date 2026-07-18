@@ -6,6 +6,7 @@ interface Props {
 
 const { title, description } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const repoUrl = "https://github.com/osolmaz/mlclaw";
 ---
 
 <!doctype html>
@@ -21,7 +22,28 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     <meta property="og:type" content="website" />
   </head>
   <body>
+    <header class="site-header">
+      <nav>
+        <a class="brand" href={`${base}/`}>
+          <img src={`${base}/mlclaw.svg`} alt="" width="28" height="25" />
+          <span>ML Claw</span>
+        </a>
+        <div class="links">
+          <a href={`${base}/getting-started/`}>Getting started</a>
+          <a href={`${base}/how-it-works/`}>How it works</a>
+          <a href={`${base}/costs/`}>Costs</a>
+          <a href={repoUrl}>GitHub</a>
+        </div>
+      </nav>
+    </header>
     <slot />
+    <footer class="site-footer">
+      <p>
+        <a href={repoUrl}>GitHub</a> ·
+        <a href={`${repoUrl}/blob/main/LICENSE`}>MIT License</a> · Built on
+        OpenClaw and Hugging Face.
+      </p>
+    </footer>
   </body>
 </html>
 
@@ -58,5 +80,57 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .site-header {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .site-header nav {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .site-header .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .site-header .links {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  .site-header .links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+
+  .site-header .links a:hover {
+    color: var(--text);
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--border);
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .site-footer a {
+    color: inherit;
   }
 </style>

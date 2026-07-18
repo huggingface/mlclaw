@@ -1,0 +1,66 @@
+---
+import Layout from "./Layout.astro";
+
+const { frontmatter } = Astro.props;
+---
+
+<Layout
+  title={`${frontmatter.title} · ML Claw`}
+  description={frontmatter.description}
+>
+  <main class="doc">
+    <article>
+      <h1>{frontmatter.title}</h1>
+      <slot />
+    </article>
+  </main>
+</Layout>
+
+<style is:global>
+  .doc {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+
+  .doc h1 {
+    font-size: 2.25rem;
+    letter-spacing: -0.02em;
+    margin: 0 0 1rem;
+  }
+
+  .doc h2 {
+    font-size: 1.4rem;
+    margin: 2.25rem 0 0.75rem;
+  }
+
+  .doc p,
+  .doc li {
+    color: var(--text);
+  }
+
+  .doc a {
+    color: var(--text);
+    text-decoration-color: var(--orange);
+    text-decoration-thickness: 2px;
+  }
+
+  .doc a:hover {
+    color: var(--orange);
+  }
+
+  .doc pre {
+    border-radius: 0.6rem;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .doc :not(pre) > code {
+    background: #f3efe2;
+    border-radius: 0.3rem;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.9em;
+  }
+</style>
