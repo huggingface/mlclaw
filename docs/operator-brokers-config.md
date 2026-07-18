@@ -113,7 +113,9 @@ UI path and serves the immutable packaged assets from its trusted HTTP boundary.
 An authenticated administrator can inspect and decide requests directly in the
 Gateway popover. The iframe has an opaque CSP-sandboxed origin and a short-lived
 delegated decision session. It renews that session using its current delegated
-session token and never sends ML Claw cookies to the delegated API. The
+session token. Delegated requests include browser credentials so a private
+hosting edge can receive its own access cookie, but ML Claw never treats that
+cookie as delegated authorization. The
 OpenClaw process cannot read broker credentials or delegated decision tokens.
 Decisions are enabled in the popover by default. Set
 `MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` to make the popover read-only.
@@ -129,7 +131,7 @@ does not accept it from `Authorization`, cookies, URLs, or request bodies. This
 keeps standard authorization available to an identity-aware hosting edge and
 avoids collisions with host credentials. Delegated requests require the opaque
 `Origin: null`, permit only `brokerkit-session` and `content-type` during CORS
-preflight, and do not enable credentialed CORS.
+preflight, and enable credentialed CORS for the private hosting edge.
 
 The delegated browser API returns a complete
 `brokerkit.io/operator-ui/v1` snapshot with an opaque revision cursor. Request

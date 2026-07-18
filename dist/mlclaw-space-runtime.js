@@ -10348,6 +10348,7 @@ function safeErrorClass(error) {
 }
 function delegatedHeaders(c) {
   c.header("access-control-allow-origin", "null");
+  c.header("access-control-allow-credentials", "true");
   c.header("cache-control", "no-store");
   c.header("vary", "origin");
   c.header("x-content-type-options", "nosniff");
