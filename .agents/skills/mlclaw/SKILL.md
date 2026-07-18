@@ -25,7 +25,7 @@ An ML Claw deployment has:
 - no explicit Space hardware request by default; Hugging Face assigns the
   default free CPU hardware unless `--hardware` or a feature requiring paid
   hardware is used;
-- a prebuilt `ghcr.io/osolmaz/mlclaw` runtime image by default;
+- a prebuilt `ghcr.io/huggingface/mlclaw` runtime image by default;
 - Hugging Face OAuth enabled on the Space;
 - automatic Hugging Face MCP and Research Agent integrations authorized by an
   admin-only OAuth step after ordinary Hugging Face sign-in;
@@ -126,7 +126,7 @@ Hugging Face account. The Space server proxies authenticated browser traffic to
 OpenClaw on loopback using trusted-proxy auth. Do not ask the user for an
 OpenClaw gateway token for the browser Space path.
 
-Generated Spaces use the prebuilt `ghcr.io/osolmaz/mlclaw:<package>-openclaw-<version>`
+Generated Spaces use the prebuilt `ghcr.io/huggingface/mlclaw:<package>-openclaw-<version>`
 image by default. Use `--bundled-runtime` only for development or emergency
 fallbacks where the Space must build all runtime files directly from the
 uploaded Space repository.
