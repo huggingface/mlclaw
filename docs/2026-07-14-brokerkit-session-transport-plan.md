@@ -141,8 +141,9 @@ Delegated requests originate from the scripts-only sandbox and therefore send
 - allows only `GET`, `POST`, and `OPTIONS`;
 - returns `Cache-Control: no-store`, `Vary: Origin`, and
   `X-Content-Type-Options: nosniff`;
-- removes `Access-Control-Allow-Credentials: true`; and
-- never requires or reads the MLClaw session cookie on delegated routes.
+- returns `Access-Control-Allow-Credentials: true` so a private hosting edge
+  can receive its own access cookie; and
+- never treats the MLClaw session cookie as delegated authorization.
 
 The protected HTML request still requires an authenticated MLClaw admin and
 may rely on Hugging Face OAuth, the Space's signed-link access, and the MLClaw
@@ -240,8 +241,8 @@ Extend `test/mlclaw.space-runtime.test.ts` to cover the complete HTTP boundary:
 - missing, duplicated/combined, malformed, expired, wrong-audience, and
   wrong-access values fail safely;
 - preflight allows only the new field and content type;
-- delegated responses do not allow credentials;
-- cookies are neither required nor sufficient on delegated endpoints;
+- delegated responses allow hosting-edge credentials;
+- cookies remain insufficient at MLClaw's delegated authorization boundary;
 - summary routes still require the MLClaw administrator session;
 - no token appears in response errors, captured logs, redirects, or URLs; and
 - CSP, frame ancestry, sandbox, immutable assets, and top-level navigation
@@ -334,10 +335,12 @@ and must fail the build or deployment verification.
 
 - The exact signed-link reproduction no longer displays `0 sources` or
   `Approvals are unavailable` while a healthy source exists.
-- Every delegated browser route accepts only `BrokerKit-Session`.
+- Every delegated browser route authorizes only with `BrokerKit-Session`.
 - MLClaw never reads a delegated credential from standard `Authorization`.
 - Hugging Face remains free to own standard authorization at the Space edge.
-- The opaque iframe sends no cookies and receives no credentialed-CORS grant.
+- The opaque iframe can forward a private hosting-edge cookie and receives the
+  matching credentialed-CORS grant, while MLClaw still requires
+  `BrokerKit-Session` for every delegated route.
 - The popover receives decision access by default, while an explicit
   `MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` opt-out remains read-only.
 - Broker operator credentials remain server-only and never enter browser
