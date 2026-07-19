@@ -70,6 +70,7 @@ jobs:
           echo "runtime_image=${runtime_image}" >> "$GITHUB_OUTPUT"
           echo "runtime_tag=${version}-openclaw-${openclaw_version}" >> "$GITHUB_OUTPUT"
       - run: npm ci
+      - run: npm run release:check
       - name: Build pinned HF Broker
         run: |
           git init "$RUNNER_TEMP/brokerkit"

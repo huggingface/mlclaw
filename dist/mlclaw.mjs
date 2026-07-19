@@ -1202,8 +1202,8 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path17 = __require("node:path");
-    var fs17 = __require("node:fs");
+    var path16 = __require("node:path");
+    var fs16 = __require("node:fs");
     var process5 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
     var { CommanderError: CommanderError2 } = require_error();
@@ -2197,7 +2197,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} subcommandName
        */
       _checkForMissingExecutable(executableFile, executableDir, subcommandName) {
-        if (fs17.existsSync(executableFile)) return;
+        if (fs16.existsSync(executableFile)) return;
         const executableDirMessage = executableDir ? `searched for local subcommand relative to directory '${executableDir}'` : "no directory for search for local subcommand, use .executableDir() to supply a custom directory";
         const executableMissing = `'${executableFile}' does not exist
  - if '${subcommandName}' is not meant to be an executable command, remove description parameter from '.command()' and use '.description()' instead
@@ -2215,11 +2215,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path17.resolve(baseDir, baseName);
-          if (fs17.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path17.extname(baseName))) return void 0;
+          const localBin = path16.resolve(baseDir, baseName);
+          if (fs16.existsSync(localBin)) return localBin;
+          if (sourceExt.includes(path16.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
-            (ext) => fs17.existsSync(`${localBin}${ext}`)
+            (ext) => fs16.existsSync(`${localBin}${ext}`)
           );
           if (foundExt) return `${localBin}${foundExt}`;
           return void 0;
@@ -2231,21 +2231,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._scriptPath) {
           let resolvedScriptPath;
           try {
-            resolvedScriptPath = fs17.realpathSync(this._scriptPath);
+            resolvedScriptPath = fs16.realpathSync(this._scriptPath);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path17.resolve(
-            path17.dirname(resolvedScriptPath),
+          executableDir = path16.resolve(
+            path16.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path17.basename(
+            const legacyName = path16.basename(
               this._scriptPath,
-              path17.extname(this._scriptPath)
+              path16.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2256,7 +2256,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path17.extname(executableFile));
+        launchWithNode = sourceExt.includes(path16.extname(executableFile));
         let proc;
         if (process5.platform !== "win32") {
           if (launchWithNode) {
@@ -3171,7 +3171,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path17.basename(filename, path17.extname(filename));
+        this._name = path16.basename(filename, path16.extname(filename));
         return this;
       }
       /**
@@ -3185,9 +3185,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path18) {
-        if (path18 === void 0) return this._executableDir;
-        this._executableDir = path18;
+      executableDir(path17) {
+        if (path17 === void 0) return this._executableDir;
+        this._executableDir = path17;
         return this;
       }
       /**
@@ -8952,7 +8952,7 @@ var init_cli = __esm({
 });
 
 // src/mlclaw/cli.ts
-import fs16 from "node:fs/promises";
+import fs15 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os8 from "node:os";
 import process4 from "node:process";
@@ -10124,10 +10124,10 @@ function parseGatewayLocation(value) {
 
 // src/mlclaw/git.ts
 import { execFile as execFile2 } from "node:child_process";
-import fs13 from "node:fs/promises";
+import fs12 from "node:fs/promises";
 import os5 from "node:os";
-import path14 from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import path13 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 import { promisify as promisify2 } from "node:util";
 
 // src/vendor/hfjs-xet/error.ts
@@ -13950,10 +13950,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path17, processedBytes]) => ({
-        path: path17,
-        progress: processedBytes / this.fileSize[path17],
-        lastSentProgress: ((this.fileUploadedBytes[path17] ?? 0) + (processedBytes - (this.fileUploadedBytes[path17] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path17]
+      files: Object.entries(this.fileProcessedBytes).map(([path16, processedBytes]) => ({
+        path: path16,
+        progress: processedBytes / this.fileSize[path16],
+        lastSentProgress: ((this.fileUploadedBytes[path16] ?? 0) + (processedBytes - (this.fileUploadedBytes[path16] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path16]
       }))
     };
   }
@@ -14826,7 +14826,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path17) => ({ type: "deleteFile", path: path17 })));
+    await this.batch(paths.map((path16) => ({ type: "deleteFile", path: path16 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -14842,8 +14842,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path17) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path17)}`;
+  async downloadFile(path16) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path16)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -14945,19 +14945,19 @@ var HubApi = class {
   async deploymentControlStore(owner, deploymentId) {
     const repoId = `${owner}/mlclaw-control-${deploymentId.replaceAll("-", "")}`;
     await this.ensurePrivateModelRepo(repoId);
-    const path17 = "control-lease.json";
+    const path16 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path17),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path16),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
     };
   }
   async deploymentClaimStore(owner) {
     const repoId = `${owner}/mlclaw-control-claims`;
     await this.ensurePrivateModelRepo(repoId);
-    const path17 = "control-lease.json";
+    const path16 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path17),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path16),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
     };
   }
   async createDockerSpace(repoId, options) {
@@ -15185,9 +15185,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path17) => ({
+      ...(params.deletePaths ?? []).map((path16) => ({
         key: "deletedFile",
-        value: { path: path17 }
+        value: { path: path16 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -15217,10 +15217,10 @@ var HubApi = class {
     if (info.sha) return;
     await this.commitModelDocument(repoId, "README.md", "", "# ML Claw deployment control\n");
   }
-  async readModelDocument(repoId, path17) {
+  async readModelDocument(repoId, path16) {
     const info = await this.requestJson(`/api/models/${repoId}`);
     if (!info.sha) throw new Error(`control repository ${repoId} has no revision`);
-    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path17.split("/").map(encodeURIComponent).join("/")}`;
+    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path16.split("/").map(encodeURIComponent).join("/")}`;
     const response = await this.fetchImpl(url, {
       headers: { Authorization: `Bearer ${this.token}` }
     });
@@ -15228,16 +15228,16 @@ var HubApi = class {
     if (!response.ok) throw new HubApiError2(response.status, url, await response.text());
     return { value: JSON.parse(await response.text()), revision: info.sha };
   }
-  async commitModelDocument(repoId, path17, parentCommit, value) {
+  async commitModelDocument(repoId, path16, parentCommit, value) {
     const header = {
       summary: value === null ? "Release deployment control" : "Update deployment control",
       description: "ML Claw deployment reconciliation state"
     };
     if (parentCommit) header.parentCommit = parentCommit;
-    const operation = value === null ? { key: "deletedFile", value: { path: path17 } } : {
+    const operation = value === null ? { key: "deletedFile", value: { path: path16 } } : {
       key: "file",
       value: {
-        path: path17,
+        path: path16,
         content: Buffer.from(typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}
 `).toString(
           "base64"
@@ -15381,21 +15381,22 @@ function nextLink(header) {
   return null;
 }
 
+// src/mlclaw/release-config.generated.ts
+var RELEASE_CONFIG = {
+  "packageVersion": "0.4.8",
+  "openclawVersion": "2026.7.1",
+  "brokerkitVersion": "hf-broker/v0.4.0",
+  "brokerkitPluginVersion": "0.3.4",
+  "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
+};
+
 // src/mlclaw/runtime-image.ts
-import fs12 from "node:fs";
-import path13 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-var DEFAULT_OPENCLAW_VERSION = "2026.7.1";
-var DEFAULT_BROKERKIT_PLUGIN_VERSION = "0.3.3";
-var DEFAULT_BROKERKIT_VERSION = "hf-broker/v0.4.0";
-var DEFAULT_RUNTIME_IMAGE_REPOSITORY = "ghcr.io/huggingface/mlclaw";
-var PACKAGE_METADATA = readPackageMetadata();
-var PACKAGE_VERSION = packageString("version", "unknown");
-var OPENCLAW_VERSION = packageConfigString("openclawVersion", DEFAULT_OPENCLAW_VERSION);
+var PACKAGE_VERSION = RELEASE_CONFIG.packageVersion;
+var OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
-var BROKERKIT_PLUGIN_VERSION = packageConfigString("brokerkitPluginVersion", DEFAULT_BROKERKIT_PLUGIN_VERSION);
-var BROKERKIT_VERSION = packageConfigString("brokerkitVersion", DEFAULT_BROKERKIT_VERSION);
-var RUNTIME_IMAGE_REPOSITORY = packageConfigString("runtimeImageRepository", DEFAULT_RUNTIME_IMAGE_REPOSITORY);
+var BROKERKIT_PLUGIN_VERSION = RELEASE_CONFIG.brokerkitPluginVersion;
+var BROKERKIT_VERSION = RELEASE_CONFIG.brokerkitVersion;
+var RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
 function resolveRuntimeImage(value, env = process.env) {
@@ -15413,45 +15414,16 @@ function resolveSpaceRuntimeImage(opts, env = process.env) {
 function bundledSpaceRuntimeRef(templateRev) {
   return `bundled:${templateRev}`;
 }
-function packageString(key, fallback) {
-  const value = PACKAGE_METADATA[key];
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-function packageConfigString(key, fallback) {
-  const value = PACKAGE_METADATA.config?.[key];
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-function readPackageMetadata() {
-  let dir = path13.dirname(fileURLToPath2(import.meta.url));
-  while (true) {
-    const candidate = path13.join(dir, "package.json");
-    try {
-      return JSON.parse(fs12.readFileSync(candidate, "utf8"));
-    } catch (err) {
-      if (!isMissingFileError(err)) {
-        throw err;
-      }
-    }
-    const parent = path13.dirname(dir);
-    if (parent === dir) {
-      throw new Error("could not find package.json while resolving default runtime image");
-    }
-    dir = parent;
-  }
-}
-function isMissingFileError(err) {
-  return err instanceof Error && "code" in err && err.code === "ENOENT";
-}
 
 // src/mlclaw/git.ts
 var execFileAsync2 = promisify2(execFile2);
 async function pushTemplateToSpace(params) {
-  const tempRoot = await fs13.mkdtemp(path14.join(os5.tmpdir(), "mlclaw-space-"));
+  const tempRoot = await fs12.mkdtemp(path13.join(os5.tmpdir(), "mlclaw-space-"));
   try {
     const sourceDir = params.sourceDir ?? process.env.MLCLAW_SOURCE_DIR ?? await findPackagedSourceRoot();
     const templateRev = await currentTemplateRev(sourceDir);
-    const outDir = path14.join(tempRoot, "space");
-    await fs13.mkdir(outDir, { recursive: true });
+    const outDir = path13.join(tempRoot, "space");
+    await fs12.mkdir(outDir, { recursive: true });
     await generateSpaceRepo(sourceDir, outDir, {
       ...params.runtimeImage ? { runtimeImage: params.runtimeImage } : {}
     });
@@ -15469,7 +15441,7 @@ async function pushTemplateToSpace(params) {
     });
     return { templateRev };
   } finally {
-    await fs13.rm(tempRoot, { recursive: true, force: true });
+    await fs12.rm(tempRoot, { recursive: true, force: true });
   }
 }
 async function currentTemplateRev(sourceDir) {
@@ -15482,7 +15454,7 @@ async function currentTemplateRev(sourceDir) {
     }
   } catch {
   }
-  const pkg = JSON.parse(await fs13.readFile(path14.join(sourceDir, "package.json"), "utf8"));
+  const pkg = JSON.parse(await fs12.readFile(path13.join(sourceDir, "package.json"), "utf8"));
   return `npm:${pkg.name ?? "mlclaw"}@${pkg.version ?? "unknown"}`;
 }
 async function generateSpaceRepo(sourceDir, outDir, options = {}) {
@@ -15508,13 +15480,13 @@ async function generateSpaceRepo(sourceDir, outDir, options = {}) {
     );
   }
   for (const [from, to] of copies) {
-    await copyExisting(path14.join(sourceDir, from), path14.join(outDir, to));
+    await copyExisting(path13.join(sourceDir, from), path13.join(outDir, to));
   }
-  const hfLogoPng = await fs13.readFile(path14.join(sourceDir, "assets/hf-logo.png"));
-  await fs13.writeFile(path14.join(outDir, "assets/hf-logo.png.base64"), `${hfLogoPng.toString("base64")}
+  const hfLogoPng = await fs12.readFile(path13.join(sourceDir, "assets/hf-logo.png"));
+  await fs12.writeFile(path13.join(outDir, "assets/hf-logo.png.base64"), `${hfLogoPng.toString("base64")}
 `, "utf8");
-  await fs13.writeFile(
-    path14.join(outDir, "Dockerfile"),
+  await fs12.writeFile(
+    path13.join(outDir, "Dockerfile"),
     options.runtimeImage ? imageDockerfile(options.runtimeImage) : bundledDockerfile(),
     "utf8"
   );
@@ -15602,13 +15574,13 @@ CMD ["/app/entrypoint.sh"]
 `;
 }
 async function findPackagedSourceRoot() {
-  const start = path14.dirname(fileURLToPath3(import.meta.url));
+  const start = path13.dirname(fileURLToPath2(import.meta.url));
   let dir = start;
   while (true) {
     if (await hasPackagedSourceFiles(dir)) {
       return dir;
     }
-    const parent = path14.dirname(dir);
+    const parent = path13.dirname(dir);
     if (parent === dir) {
       throw new Error("Could not find packaged ML Claw source files. Reinstall the mlclaw npm package.");
     }
@@ -15625,20 +15597,20 @@ async function hasPackagedSourceFiles(dir) {
     "src/hf-bucket-client/client.ts"
   ];
   try {
-    await Promise.all(required.map((file) => fs13.access(path14.join(dir, file))));
+    await Promise.all(required.map((file) => fs12.access(path13.join(dir, file))));
     return true;
   } catch {
     return false;
   }
 }
 async function copyExisting(from, to) {
-  const stat = await fs13.stat(from);
-  await fs13.mkdir(path14.dirname(to), { recursive: true });
+  const stat = await fs12.stat(from);
+  await fs12.mkdir(path13.dirname(to), { recursive: true });
   if (stat.isDirectory()) {
-    await fs13.cp(from, to, { recursive: true });
+    await fs12.cp(from, to, { recursive: true });
   } else {
-    await fs13.copyFile(from, to);
-    await fs13.chmod(to, stat.mode);
+    await fs12.copyFile(from, to);
+    await fs12.chmod(to, stat.mode);
   }
 }
 async function readFilesForCommit(root) {
@@ -15646,24 +15618,24 @@ async function readFilesForCommit(root) {
   for (const relativePath of await listFiles(root)) {
     files.push({
       path: relativePath,
-      content: await fs13.readFile(path14.join(root, relativePath))
+      content: await fs12.readFile(path13.join(root, relativePath))
     });
   }
   return files;
 }
 async function listFiles(root, dir = "") {
-  const absoluteDir = path14.join(root, dir);
-  const entries = await fs13.readdir(absoluteDir, { withFileTypes: true });
+  const absoluteDir = path13.join(root, dir);
+  const entries = await fs12.readdir(absoluteDir, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    const relativePath = path14.posix.join(dir.split(path14.sep).join(path14.posix.sep), entry.name);
-    const absolutePath = path14.join(root, relativePath);
+    const relativePath = path13.posix.join(dir.split(path13.sep).join(path13.posix.sep), entry.name);
+    const absolutePath = path13.join(root, relativePath);
     if (entry.isDirectory()) {
       files.push(...await listFiles(root, relativePath));
     } else if (entry.isFile()) {
       files.push(relativePath);
     } else {
-      const stat = await fs13.stat(absolutePath);
+      const stat = await fs12.stat(absolutePath);
       if (stat.isFile()) {
         files.push(relativePath);
       }
@@ -15742,9 +15714,9 @@ function deriveLocalAccessToken(sessionSecret) {
 }
 
 // src/mlclaw/local-config.ts
-import fs14 from "node:fs/promises";
+import fs13 from "node:fs/promises";
 import os6 from "node:os";
-import path15 from "node:path";
+import path14 from "node:path";
 import { createHash as createHash2 } from "node:crypto";
 
 // node_modules/zod/v3/external.js
@@ -16225,8 +16197,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path17, errorMaps, issueData } = params;
-  const fullPath = [...path17, ...issueData.path || []];
+  const { data, path: path16, errorMaps, issueData } = params;
+  const fullPath = [...path16, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -16342,11 +16314,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path17, key) {
+  constructor(parent, value, path16, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path17;
+    this._path = path16;
     this._key = key;
   }
   get path() {
@@ -19884,24 +19856,24 @@ function defaultConfigRoot(env = process.env) {
   }
   const xdg = env.XDG_CONFIG_HOME?.trim();
   if (xdg) {
-    return path15.join(xdg, "mlclaw");
+    return path14.join(xdg, "mlclaw");
   }
-  return path15.join(os6.homedir(), ".config", "mlclaw");
+  return path14.join(os6.homedir(), ".config", "mlclaw");
 }
 function localConfigPaths(root) {
   return {
     root,
-    deploymentsDir: path15.join(root, "deployments"),
-    secretsDir: path15.join(root, "secrets"),
-    operationsDir: path15.join(root, "operations"),
-    locksDir: path15.join(root, "locks")
+    deploymentsDir: path14.join(root, "deployments"),
+    secretsDir: path14.join(root, "secrets"),
+    operationsDir: path14.join(root, "operations"),
+    locksDir: path14.join(root, "locks")
   };
 }
 function manifestPath(root, agent) {
-  return path15.join(localConfigPaths(root).deploymentsDir, `${assertAgentName(agent)}.json`);
+  return path14.join(localConfigPaths(root).deploymentsDir, `${assertAgentName(agent)}.json`);
 }
 function secretEnvPath(root, agent) {
-  return path15.join(localConfigPaths(root).secretsDir, `${assertAgentName(agent)}.env`);
+  return path14.join(localConfigPaths(root).secretsDir, `${assertAgentName(agent)}.env`);
 }
 async function writeManifest(root, input) {
   const manifest = input.version === 1 ? importLegacyManifest(legacyManifestSchema.parse(input)) : manifestSchema.parse(input);
@@ -19911,7 +19883,7 @@ async function writeManifest(root, input) {
 }
 async function readManifest(root, agent) {
   const file = manifestPath(root, agent);
-  const raw = JSON.parse(await fs14.readFile(file, "utf8"));
+  const raw = JSON.parse(await fs13.readFile(file, "utf8"));
   const version = raw && typeof raw === "object" && "version" in raw ? raw.version : void 0;
   const parsed = version === 1 ? legacyManifestSchema.parse(raw) : manifestSchema.parse(raw);
   if (parsed.version === 1) {
@@ -19924,7 +19896,7 @@ async function readManifest(root, agent) {
 }
 async function listManifests(root) {
   const dir = localConfigPaths(root).deploymentsDir;
-  const entries = await fs14.readdir(dir, { withFileTypes: true }).catch((error) => {
+  const entries = await fs13.readdir(dir, { withFileTypes: true }).catch((error) => {
     if (error.code === "ENOENT") return [];
     throw error;
   });
@@ -19935,7 +19907,7 @@ async function listManifests(root) {
 }
 async function manifestExists(root, agent) {
   try {
-    await fs14.access(manifestPath(root, agent));
+    await fs13.access(manifestPath(root, agent));
     return true;
   } catch {
     return false;
@@ -19950,7 +19922,7 @@ async function writeSecretEnv(root, agent, values) {
   await writePrivateFile(file, renderSecretEnv(values));
 }
 async function readSecretEnv(root, agent) {
-  return parseSecretEnv(await fs14.readFile(secretEnvPath(root, agent), "utf8"));
+  return parseSecretEnv(await fs13.readFile(secretEnvPath(root, agent), "utf8"));
 }
 function parseSecretEnv(raw) {
   const out = {};
@@ -19982,17 +19954,17 @@ function importLegacyManifest(manifest) {
   return { ...manifest, version: 2, deploymentId, desiredGeneration: 0 };
 }
 async function writePrivateFile(file, content) {
-  await fs14.mkdir(path15.dirname(file), { recursive: true, mode: 448 });
+  await fs13.mkdir(path14.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs14.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-  await fs14.rename(temporary, file);
-  await fs14.chmod(file, 384);
+  await fs13.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+  await fs13.rename(temporary, file);
+  await fs13.chmod(file, 384);
 }
 
 // src/mlclaw/deployment-state.ts
-import fs15 from "node:fs/promises";
+import fs14 from "node:fs/promises";
 import os7 from "node:os";
-import path16 from "node:path";
+import path15 from "node:path";
 import { randomUUID } from "node:crypto";
 var DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 var DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
@@ -20139,7 +20111,7 @@ function newOperation(manifest, now) {
 }
 async function writeOperation(root, client, operation) {
   const parsed = operationSchema.parse(operation);
-  const local = path16.join(localConfigPaths(root).operationsDir, `${parsed.operationId}.json`);
+  const local = path15.join(localConfigPaths(root).operationsDir, `${parsed.operationId}.json`);
   await atomicPrivateWrite(local, stringify(parsed));
   await client.uploadFiles([jsonBlob(`.mlclaw/operations/${parsed.operationId}.json`, parsed)]);
 }
@@ -20155,13 +20127,13 @@ async function updateOperation(root, client, operation, state, now, detail) {
 }
 async function readResumableOperation(root, deploymentId, targetGeneration) {
   const directory = localConfigPaths(root).operationsDir;
-  const entries = await fs15.readdir(directory, { withFileTypes: true }).catch((error) => {
+  const entries = await fs14.readdir(directory, { withFileTypes: true }).catch((error) => {
     if (error.code === "ENOENT") return [];
     throw error;
   });
   const operations = await Promise.all(
     entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map(async (entry) => {
-      const raw = await fs15.readFile(path16.join(directory, entry.name), "utf8");
+      const raw = await fs14.readFile(path15.join(directory, entry.name), "utf8");
       return operationSchema.parse(JSON.parse(raw));
     })
   );
@@ -20170,12 +20142,12 @@ async function readResumableOperation(root, deploymentId, targetGeneration) {
   ).sort((a, b2) => b2.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
 }
 async function withDeploymentLock(root, deploymentId, task) {
-  const file = path16.join(localConfigPaths(root).locksDir, `${deploymentId}.lock`);
-  await fs15.mkdir(path16.dirname(file), { recursive: true, mode: 448 });
+  const file = path15.join(localConfigPaths(root).locksDir, `${deploymentId}.lock`);
+  await fs14.mkdir(path15.dirname(file), { recursive: true, mode: 448 });
   const token = randomUUID();
   const lock = stringify({ pid: process.pid, host: os7.hostname(), token, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
   try {
-    await fs15.writeFile(file, lock, { flag: "wx", mode: 384 });
+    await fs14.writeFile(file, lock, { flag: "wx", mode: 384 });
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
     if (!await replaceStaleLocalLock(file, lock)) {
@@ -20198,38 +20170,38 @@ async function withDeploymentLock(root, deploymentId, task) {
 async function replaceStaleLocalLock(file, replacement) {
   const guard = `${file}.reclaim`;
   try {
-    await fs15.mkdir(guard);
+    await fs14.mkdir(guard);
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
   }
   try {
-    const [raw, stat] = await Promise.all([fs15.readFile(file, "utf8"), fs15.stat(file)]);
+    const [raw, stat] = await Promise.all([fs14.readFile(file, "utf8"), fs14.stat(file)]);
     const value = JSON.parse(raw);
     if (value.host !== os7.hostname() || typeof value.pid !== "number") return false;
     const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : Number.NaN;
     const lastRefresh = Number.isFinite(createdAt) ? Math.max(createdAt, stat.mtimeMs) : stat.mtimeMs;
     if (processIsAlive(value.pid) && Date.now() - lastRefresh <= LOCAL_LOCK_STALE_MS) return false;
-    await fs15.rm(file);
-    await fs15.writeFile(file, replacement, { flag: "wx", mode: 384 });
+    await fs14.rm(file);
+    await fs14.writeFile(file, replacement, { flag: "wx", mode: 384 });
     return true;
   } catch {
     return false;
   } finally {
-    await fs15.rm(guard, { recursive: true, force: true });
+    await fs14.rm(guard, { recursive: true, force: true });
   }
 }
 async function refreshOwnedLocalLock(file, token) {
   if (!await localLockHasToken(file, token)) return;
   const now = /* @__PURE__ */ new Date();
-  await fs15.utimes(file, now, now);
+  await fs14.utimes(file, now, now);
 }
 async function removeOwnedLocalLock(file, token) {
-  if (await localLockHasToken(file, token)) await fs15.rm(file, { force: true });
+  if (await localLockHasToken(file, token)) await fs14.rm(file, { force: true });
 }
 async function localLockHasToken(file, token) {
   try {
-    const value = JSON.parse(await fs15.readFile(file, "utf8"));
+    const value = JSON.parse(await fs14.readFile(file, "utf8"));
     return value.token === token;
   } catch {
     return false;
@@ -20295,19 +20267,19 @@ async function readDocument(client, file, schema) {
   if (blob.size > MAX_CONTROL_BYTES) throw new Error(`${file} exceeds ${MAX_CONTROL_BYTES} bytes`);
   return schema.parse(JSON.parse(await blob.text()));
 }
-function jsonBlob(path17, value) {
-  return { path: path17, content: new Blob([stringify(value)], { type: "application/json" }) };
+function jsonBlob(path16, value) {
+  return { path: path16, content: new Blob([stringify(value)], { type: "application/json" }) };
 }
 function stringify(value) {
   return `${JSON.stringify(value, null, 2)}
 `;
 }
 async function atomicPrivateWrite(file, content) {
-  await fs15.mkdir(path16.dirname(file), { recursive: true, mode: 448 });
+  await fs14.mkdir(path15.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.tmp`;
-  await fs15.writeFile(temporary, content, { mode: 384, flag: "wx" });
-  await fs15.rename(temporary, file);
-  await fs15.chmod(file, 384);
+  await fs14.writeFile(temporary, content, { mode: 384, flag: "wx" });
+  await fs14.rename(temporary, file);
+  await fs14.chmod(file, 384);
 }
 
 // src/mlclaw/telegram.ts
@@ -22236,7 +22208,7 @@ async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true, 
         await writeSecretEnv(runtime.configRoot, plan.agentName, previousSecrets);
       } else {
         await assertLease();
-        await fs16.rm(secretEnvPath(runtime.configRoot, plan.agentName), { force: true });
+        await fs15.rm(secretEnvPath(runtime.configRoot, plan.agentName), { force: true });
       }
       if (previousContainer?.running && previousManifest) {
         await startLocalGateway({ manifest: previousManifest, runtime, pull: false, refresh: true, assertLease });
@@ -22265,7 +22237,7 @@ async function deployLocalBootstrap(plan, opts, runtime, desiredChanged = true, 
       }
       if (!previousManifest) {
         await assertLease();
-        await fs16.rm(manifestPath(runtime.configRoot, plan.agentName), { force: true });
+        await fs15.rm(manifestPath(runtime.configRoot, plan.agentName), { force: true });
       }
     } catch (rollbackError) {
       throw new AggregateError([error, rollbackError], "local bootstrap and rollback both failed");
@@ -24015,7 +23987,7 @@ async function readOptionalTelegramToken(opts, runtime) {
     return direct;
   }
   if (opts.telegramTokenFile) {
-    const raw = await fs16.readFile(opts.telegramTokenFile, "utf8");
+    const raw = await fs15.readFile(opts.telegramTokenFile, "utf8");
     const match = raw.match(/(?:^|\n)\s*TELEGRAM_BOT_TOKEN\s*=\s*['"]?([^'"\n]+)['"]?/);
     return (match?.[1] ?? raw.trim()).trim();
   }
@@ -24037,7 +24009,7 @@ async function readOptionalRouterTokenFile(file) {
   if (!file) {
     return void 0;
   }
-  const raw = await fs16.readFile(file, "utf8");
+  const raw = await fs15.readFile(file, "utf8");
   const parsed = parseSecretEnv(raw);
   return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
 }
@@ -24329,7 +24301,7 @@ async function verifyBrokerHfToken(token, owner, expectedAccount, runtime) {
 }
 async function readOptionalBrokerHfTokenFile(file) {
   if (!file) return void 0;
-  const raw = await fs16.readFile(file, "utf8");
+  const raw = await fs15.readFile(file, "utf8");
   const parsed = parseSecretEnv(raw);
   const token = nonEmpty(parsed.MLCLAW_BROKER_HF_TOKEN) ?? nonEmpty(raw);
   if (!token) throw new Error("HF Broker token file is empty");

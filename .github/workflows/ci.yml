@@ -20,6 +20,7 @@ jobs:
           go-version: "1.26.5"
           cache: false
       - run: npm ci
+      - run: npm run release:check
       - name: Build pinned HF Broker
         run: |
           brokerkit_version="$(node -p 'require("./package.json").config.brokerkitVersion')"
