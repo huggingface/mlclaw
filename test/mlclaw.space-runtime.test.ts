@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-brokerkit/operator-v1";
 import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
@@ -20,6 +21,14 @@ import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 import { deriveLocalAccessToken } from "../src/mlclaw-space-runtime/local-access.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
+
+function operatorDiscovery() {
+  return {
+    api_version: "brokerkit.io/operator/v1",
+    contract_digest: OPERATOR_V1_SCHEMA_SHA256,
+    build_id: "test",
+  };
+}
 
 function brokerApproval(
   id: string,
@@ -209,7 +218,7 @@ describe("ML Claw Space runtime", () => {
       res.setHeader("content-type", "application/json");
       if (req.url === "/.well-known/brokerkit-operator") {
         res.writeHead(200);
-        res.end(JSON.stringify({ api_version: "brokerkit.io/operator/v1" }));
+        res.end(JSON.stringify(operatorDiscovery()));
       } else if (req.method === "POST") {
         postAttempts += 1;
         if (postAttempts === 1) {

@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-brokerkit/operator-v1";
 import { DelegatedBrokerKit } from "../src/mlclaw-space-runtime/delegated-brokerkit.js";
 import { OperatorBrokerRegistry } from "../src/mlclaw-space-runtime/operator-brokers.js";
 
@@ -27,6 +28,14 @@ function request(id: string, revision = 1, status = "pending") {
     },
     allowed_actions: status === "pending" ? ["approve", "deny"] : ["revoke"],
     approval_bounds: { max_duration_seconds: 300, max_uses: 1 },
+  };
+}
+
+function operatorDiscovery() {
+  return {
+    api_version: "brokerkit.io/operator/v1",
+    contract_digest: OPERATOR_V1_SCHEMA_SHA256,
+    build_id: "test",
   };
 }
 
@@ -87,7 +96,7 @@ describe("DelegatedBrokerKit", () => {
         );
       }
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       return Response.json({ requests: [request("shared-id")] });
@@ -112,7 +121,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.pathname.endsWith("/request-1")) return Response.json(request("request-1"));
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
@@ -148,7 +157,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "pending") {
         markPendingStarted();
@@ -179,7 +188,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       return Response.json({ requests: visible ? [request("request-1")] : [] });
@@ -211,7 +220,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.pathname.endsWith("/approve")) {
         decisionBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -271,7 +280,7 @@ describe("DelegatedBrokerKit", () => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
         round += 1;
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.pathname.startsWith("/api/operator/v1/requests/request-")) {
         return Response.json(requests.get(url.pathname.split("/").at(-1) ?? ""));
@@ -314,7 +323,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       const page = Number(url.searchParams.get("cursor") ?? "0");
@@ -336,7 +345,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       const status = url.searchParams.get("status") ?? "pending";
       const page = Number(url.searchParams.get("cursor") ?? "0");
@@ -361,7 +370,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       const page = Number(url.searchParams.get("cursor") ?? "0");
       const status = url.searchParams.get("status") ?? "pending";
@@ -397,7 +406,7 @@ describe("DelegatedBrokerKit", () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
       if (url.pathname === "/.well-known/brokerkit-operator") {
-        return Response.json({ api_version: "brokerkit.io/operator/v1" });
+        return Response.json(operatorDiscovery());
       }
       return Response.json({
         requests: [
