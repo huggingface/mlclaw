@@ -6,6 +6,7 @@ import {
   parseRequest,
   parseRequestPage,
   type BrokerRequest,
+  type Discovery,
   type RequestPage,
 } from "openclaw-brokerkit/operator-v1";
 
@@ -81,7 +82,7 @@ export class BrokerOperatorClient {
     return { id: this.options.id, label: this.options.label };
   }
 
-  discover(signal?: AbortSignal): Promise<{ api_version: "brokerkit.io/operator/v1" }> {
+  discover(signal?: AbortSignal): Promise<Discovery> {
     return this.request(
       "/.well-known/brokerkit-operator",
       signal ? { signal } : undefined,

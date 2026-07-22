@@ -15383,10 +15383,10 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.4.9",
+  "packageVersion": "0.4.10",
   "openclawVersion": "2026.7.1",
-  "brokerkitVersion": "hf-broker/v0.4.2",
-  "brokerkitPluginVersion": "0.3.4",
+  "brokerkitVersion": "hf-broker/v0.5.2",
+  "brokerkitPluginVersion": "0.4.1",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 

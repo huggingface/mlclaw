@@ -140,6 +140,8 @@ async function startAgentBackend(): Promise<{
       response.writeHead(200).end(
         JSON.stringify({
           api_version: "brokerkit.io/agent/v1",
+          contract_digest: "sha256:dedfef7e6b34e5058302c1c2eb379130b45905cdd9f220298d46ccabd248e876",
+          build_id: "test",
           operations: ["repo.create", "space.secret.set", "space.variable.set"],
           credential: {
             ready: true,

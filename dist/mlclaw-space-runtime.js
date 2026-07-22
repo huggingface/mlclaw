@@ -947,6 +947,8 @@ var formats = import_formats.default.fullFormats;
 var equal = import_equal.default.default ?? import_equal.default;
 var ucs2length = import_ucs2length.default.default ?? import_ucs2length.default;
 var validateDescriptor = validate20;
+var pattern4 = new RegExp("^sha256:[0-9a-f]{64}$", "u");
+var func1 = ucs2length;
 function validate20(data, { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {}) {
   ;
   let vErrors = null;
@@ -962,13 +964,13 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
   if (errors === _errs0) {
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
-      if (data.api_version === void 0 && (missing0 = "api_version")) {
+      if (data.api_version === void 0 && (missing0 = "api_version") || data.contract_digest === void 0 && (missing0 = "contract_digest") || data.build_id === void 0 && (missing0 = "build_id")) {
         validate20.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
-          if (!(key0 === "api_version")) {
+          if (!(key0 === "api_version" || key0 === "contract_digest" || key0 === "build_id")) {
             validate20.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
@@ -977,6 +979,7 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
         if (_errs2 === errors) {
           if (data.api_version !== void 0) {
             let data0 = data.api_version;
+            const _errs3 = errors;
             if (typeof data0 !== "string") {
               validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
               return false;
@@ -984,6 +987,54 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
             if ("brokerkit.io/operator/v1" !== data0) {
               validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/const", keyword: "const", params: { allowedValue: "brokerkit.io/operator/v1" }, message: "must be equal to constant" }];
               return false;
+            }
+            var valid1 = _errs3 === errors;
+          } else {
+            var valid1 = true;
+          }
+          if (valid1) {
+            if (data.contract_digest !== void 0) {
+              let data1 = data.contract_digest;
+              const _errs5 = errors;
+              if (errors === _errs5) {
+                if (typeof data1 === "string") {
+                  if (!pattern4.test(data1)) {
+                    validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
+                    return false;
+                  }
+                } else {
+                  validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  return false;
+                }
+              }
+              var valid1 = _errs5 === errors;
+            } else {
+              var valid1 = true;
+            }
+            if (valid1) {
+              if (data.build_id !== void 0) {
+                let data2 = data.build_id;
+                const _errs7 = errors;
+                if (errors === _errs7) {
+                  if (typeof data2 === "string") {
+                    if (func1(data2) > 128) {
+                      validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                      return false;
+                    } else {
+                      if (func1(data2) < 1) {
+                        validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                        return false;
+                      }
+                    }
+                  } else {
+                    validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                    return false;
+                  }
+                }
+                var valid1 = _errs7 === errors;
+              } else {
+                var valid1 = true;
+              }
             }
           }
         }
@@ -997,7 +1048,6 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
   return errors === 0;
 }
 validate20.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
-var func1 = ucs2length;
 function validate22(data, { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {}) {
   ;
   let vErrors = null;
@@ -1013,13 +1063,13 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
   if (errors === _errs0) {
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
-      if (data.status === void 0 && (missing0 = "status")) {
+      if (data.status === void 0 && (missing0 = "status") || data.contract_digest === void 0 && (missing0 = "contract_digest") || data.build_id === void 0 && (missing0 = "build_id")) {
         validate22.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
-          if (!(key0 === "status")) {
+          if (!(key0 === "status" || key0 === "contract_digest" || key0 === "build_id")) {
             validate22.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
@@ -1045,6 +1095,54 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
                 return false;
               }
             }
+            var valid1 = _errs3 === errors;
+          } else {
+            var valid1 = true;
+          }
+          if (valid1) {
+            if (data.contract_digest !== void 0) {
+              let data1 = data.contract_digest;
+              const _errs5 = errors;
+              if (errors === _errs5) {
+                if (typeof data1 === "string") {
+                  if (!pattern4.test(data1)) {
+                    validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
+                    return false;
+                  }
+                } else {
+                  validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  return false;
+                }
+              }
+              var valid1 = _errs5 === errors;
+            } else {
+              var valid1 = true;
+            }
+            if (valid1) {
+              if (data.build_id !== void 0) {
+                let data2 = data.build_id;
+                const _errs7 = errors;
+                if (errors === _errs7) {
+                  if (typeof data2 === "string") {
+                    if (func1(data2) > 128) {
+                      validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                      return false;
+                    } else {
+                      if (func1(data2) < 1) {
+                        validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                        return false;
+                      }
+                    }
+                  } else {
+                    validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                    return false;
+                  }
+                }
+                var valid1 = _errs7 === errors;
+              } else {
+                var valid1 = true;
+              }
+            }
           }
         }
       }
@@ -1062,7 +1160,7 @@ var schema37 = { "type": "object", "additionalProperties": false, "required": ["
 var schema38 = { "type": "string", "enum": ["pending", "active", "denied", "canceled", "expired", "consumed", "revoked"] };
 var schema44 = { "type": "string", "enum": ["approve", "deny", "revoke"] };
 var schema45 = { "type": "object", "additionalProperties": false, "required": ["max_duration_seconds", "max_uses"], "properties": { "max_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 } } };
-var func3 = Object.prototype.hasOwnProperty;
+var func7 = Object.prototype.hasOwnProperty;
 var func0 = equal;
 var formats0 = formats["date-time"];
 var schema40 = { "type": "string", "enum": ["unknown", "low", "medium", "high", "critical"] };
@@ -1441,7 +1539,7 @@ function validate24(data, { instancePath = "", parentData, parentDataProperty, r
       } else {
         const _errs1 = errors;
         for (const key0 in data) {
-          if (!func3.call(schema37.properties, key0)) {
+          if (!func7.call(schema37.properties, key0)) {
             validate24.errors = [{ instancePath, schemaPath: "#/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
@@ -2022,7 +2120,7 @@ function validate32(data, { instancePath = "", parentData, parentDataProperty, r
       } else {
         const _errs1 = errors;
         for (const key0 in data) {
-          if (!func3.call(schema37.properties, key0)) {
+          if (!func7.call(schema37.properties, key0)) {
             validate32.errors = [{ instancePath, schemaPath: "#/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
@@ -3083,7 +3181,7 @@ function validate39(data, { instancePath = "", parentData, parentDataProperty, r
   return errors === 0;
 }
 validate39.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
-var pattern4 = new RegExp("^[A-Za-z0-9_-]+$", "u");
+var pattern6 = new RegExp("^[A-Za-z0-9_-]+$", "u");
 function validate47(data, { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {}) {
   let vErrors = null;
   let errors = 0;
@@ -3171,7 +3269,7 @@ function validate47(data, { instancePath = "", parentData, parentDataProperty, r
                         validate47.errors = [{ instancePath: instancePath + "/handle", schemaPath: "#/properties/handle/minLength", keyword: "minLength", params: { limit: 22 }, message: "must NOT have fewer than 22 characters" }];
                         return false;
                       } else {
-                        if (!pattern4.test(data2)) {
+                        if (!pattern6.test(data2)) {
                           validate47.errors = [{ instancePath: instancePath + "/handle", schemaPath: "#/properties/handle/pattern", keyword: "pattern", params: { pattern: "^[A-Za-z0-9_-]+$" }, message: 'must match pattern "^[A-Za-z0-9_-]+$"' }];
                           return false;
                         }
@@ -3841,7 +3939,7 @@ function validate54(data, { instancePath = "", parentData, parentDataProperty, r
                         validate54.errors = [{ instancePath: instancePath + "/handle", schemaPath: "#/properties/handle/minLength", keyword: "minLength", params: { limit: 22 }, message: "must NOT have fewer than 22 characters" }];
                         return false;
                       } else {
-                        if (!pattern4.test(data2)) {
+                        if (!pattern6.test(data2)) {
                           validate54.errors = [{ instancePath: instancePath + "/handle", schemaPath: "#/properties/handle/pattern", keyword: "pattern", params: { pattern: "^[A-Za-z0-9_-]+$" }, message: 'must match pattern "^[A-Za-z0-9_-]+$"' }];
                           return false;
                         }
