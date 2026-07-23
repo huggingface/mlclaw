@@ -35,7 +35,7 @@
       {
         "name": "hf-broker",
         "source": "https://github.com/osolmaz/brokerkit",
-        "revision": "hf-broker/v0.6.0"
+        "revision": "hf-broker/v0.6.1"
       }
     ],
     "installed": [
