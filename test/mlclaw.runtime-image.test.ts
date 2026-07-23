@@ -116,11 +116,18 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"');
     expect(entrypoint).not.toContain("HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-${MLCLAW_ROUTER_TOKEN:-");
     expect(entrypoint).toContain('export MLCLAW_TRUSTED_HF_TOKEN_FILE="$token_file"');
+    expect(entrypoint).toContain('export HF_BROKER_AGENT_ENDPOINT="tcp://127.0.0.1:7863"');
+    expect(entrypoint).toContain('export HF_BROKER_SHARED_SECRET_FILE="$agent_secret_file"');
     expect(entrypoint).toContain('chown "$OPENCLAW_IDENTITY" "$agent_secret_file"');
     expect(entrypoint).toContain('install -d -m 0711 -o root -g hf-broker "$HF_BROKER_RUN_DIR"');
     expect(entrypoint).toContain('export MLCLAW_PROTECTED_STATE_DIR="$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain("HF_BROKER_AGENT_ENDPOINT=tcp://127.0.0.1:7863");
     expect(entrypoint).toContain("HF_BROKER_OPERATOR_ENDPOINT=tcp://127.0.0.1:7864");
+    expect(entrypoint).toContain('HF_BROKER_SCOPE_FILE="$HF_BROKER_SCOPE_FILE"');
+    expect(entrypoint).toContain("HF_BROKER_XET_PYTHON=/usr/bin/python3");
+    expect(entrypoint).toContain('protected_target=(--protect-bucket "$state_bucket")');
+    expect(entrypoint).toContain("/usr/local/bin/hf-broker policy render");
+    expect(entrypoint).toContain("/usr/local/bin/hf-broker doctor policy");
     expect(entrypoint).not.toContain("HF_BROKER_BIND_ADDR=");
     expect(entrypoint).not.toContain("HF_BROKER_OPERATOR_BIND_ADDR=");
     expect(entrypoint).toContain('env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" timeout');
@@ -133,6 +140,9 @@ describe("runtime image Dockerfile", () => {
       entrypoint.lastIndexOf("\nstart_hf_broker\n"),
     );
     expect(entrypoint.indexOf("\nrestore_protected_state\n")).toBeLessThan(
+      entrypoint.lastIndexOf("\nrender_hf_broker_policy\n"),
+    );
+    expect(entrypoint.lastIndexOf("\nrender_hf_broker_policy\n")).toBeLessThan(
       entrypoint.lastIndexOf("\nstart_hf_broker\n"),
     );
     expect(entrypoint).toContain('if [ -z "${MLCLAW_OPERATOR_BROKERS_FILE:-}" ]; then');

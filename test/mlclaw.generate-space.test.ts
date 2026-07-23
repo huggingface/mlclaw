@@ -29,6 +29,7 @@ describe("generated Space repository", () => {
       "assets/mlclaw.svg",
       "assets/mlclaw-control-ui/index.html",
       "assets/hf-tooling/manifest.json",
+      "assets/hf-tooling/skills/hf-broker/SKILL.md",
       "assets/hf-tooling/skills/hf-cli/SKILL.md",
     ];
 
@@ -72,6 +73,7 @@ describe("generated Space repository", () => {
       "assets/mlclaw.svg",
       "assets/mlclaw-control-ui/index.html",
       "assets/hf-tooling/manifest.json",
+      "assets/hf-tooling/skills/hf-broker/SKILL.md",
       "assets/hf-tooling/skills/hf-cli/SKILL.md",
       "runtime/entrypoint.sh",
       "runtime/hf-state-sync.js",

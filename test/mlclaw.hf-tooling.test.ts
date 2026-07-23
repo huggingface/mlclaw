@@ -8,6 +8,7 @@ import {
 } from "../src/hf-tooling/seed.js";
 
 const BASELINE_SKILLS = [
+  "hf-broker",
   "hf-cli",
   "huggingface-spaces",
   "huggingface-datasets",
@@ -41,10 +42,15 @@ const OPTIONAL_ONLY_SKILLS = [
 describe("Hugging Face tooling baseline", () => {
   it("vendors the expected baseline skills and excludes optional pack skills", async () => {
     const manifest = JSON.parse(await fs.readFile("assets/hf-tooling/manifest.json", "utf8")) as {
-      skills: { installed: string[] };
+      skills: { installed: string[]; managed: Array<{ name: string; revision: string }> };
     };
 
     expect(manifest.skills.installed).toEqual(BASELINE_SKILLS);
+    expect(manifest.skills.managed).toContainEqual({
+      name: "hf-broker",
+      source: "https://github.com/osolmaz/brokerkit",
+      revision: "hf-broker/v0.6.0",
+    });
     for (const skill of BASELINE_SKILLS) {
       await expect(fs.access(path.join("assets/hf-tooling/skills", skill, "SKILL.md"))).resolves.toBeUndefined();
     }
@@ -86,7 +92,10 @@ describe("Hugging Face tooling baseline", () => {
     await expect(fs.access(path.join(workspaceDir, ".env.example"))).resolves.toBeUndefined();
     const agentsMd = await fs.readFile(path.join(workspaceDir, "AGENTS.md"), "utf8");
     expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
+    expect(agentsMd).toContain("`hf-broker`");
     expect(agentsMd).toContain("`hf-cli`");
+    expect(agentsMd).toContain("`hf_grant_request`");
+    expect(agentsMd).toContain("deployment state bucket");
     expect(agentsMd).toContain("`.agents/skills`");
     expect(agentsMd).toContain("`skills`");
 
