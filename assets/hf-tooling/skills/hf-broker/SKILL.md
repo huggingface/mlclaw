@@ -33,7 +33,7 @@ For one bucket key prefix:
 hf-broker client grant request bucket.object.write OWNER/BUCKET \
   --key 'artifacts/**' \
   --minutes 10080 \
-  --max-uses unlimited \
+  --max-uses 25 \
   --reason "Write the requested artifacts for one week" \
   --request-id STABLE-GRANT-REQUEST-ID
 ```
@@ -45,7 +45,7 @@ hf-broker client grant request repo.commit.create OWNER/REPO \
   --type dataset \
   --path 'data/**' \
   --minutes 1440 \
-  --max-uses unlimited \
+  --max-uses 25 \
   --reason "Update the requested dataset path for one day" \
   --request-id STABLE-GRANT-REQUEST-ID
 ```
