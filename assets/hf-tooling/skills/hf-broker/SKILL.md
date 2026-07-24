@@ -26,6 +26,8 @@ grant instead of submitting another mutation.
 
 Request a temporary grant only when repeated writes are needed. Keep the scope
 as narrow as possible. A day is 1,440 minutes and a week is 10,080 minutes.
+These repeated-write examples explicitly request the deployment policy's
+25-use ceiling; the operator may approve a smaller use budget.
 
 For one bucket key prefix:
 
