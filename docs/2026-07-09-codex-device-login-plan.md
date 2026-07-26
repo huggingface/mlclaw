@@ -2,13 +2,14 @@
 
 Date: 2026-07-09
 
-Status: planned, not implemented
+Status: implemented for CLI-managed deployment credentials and runtime restore; browser UI device-login routes remain future work
 
 ## Goal
 
-ML Claw should let a Space admin connect an OpenAI/ChatGPT account using
-Codex device login, then run OpenClaw inside the Space with the resulting Codex
-account credentials. The user should not paste an OpenAI API key for this flow.
+ML Claw should let an admin connect an OpenAI/ChatGPT account using Codex
+device login, then run OpenClaw inside the selected deployment with the
+resulting Codex account credentials. The user should not paste an OpenAI API
+key for this flow.
 
 This is separate from the existing OpenAI API-key credential page. API keys can
 remain as an advanced fallback, but the primary account flow should use Codex's
@@ -80,9 +81,15 @@ If a future deployment needs a specific OpenAI workspace, ML Claw may also
 write Codex's forced workspace setting from an explicit Space variable. Do not
 guess a workspace.
 
-OpenClaw and any Codex-backed tools must be launched with this `CODEX_HOME`.
-The live Codex home is runtime state, not part of the OpenClaw workspace
-snapshot.
+The trusted ML Claw wrapper owns this `CODEX_HOME`. The untrusted OpenClaw
+process must not receive the raw Codex home or direct read access to
+`auth.json`. Codex-backed agent access goes through the managed `codex` MCP
+server. That helper is intentionally text-only: it invokes Codex with local
+shell, browser, user-config, project-rule, and workspace access disabled, runs
+from an empty temporary working directory, and enforces a timeout plus a single
+active execution. Any future richer Codex broker must keep both Codex auth and
+other wrapper secrets outside model/tool-readable filesystem paths. The live
+Codex home is runtime state, not part of the OpenClaw workspace snapshot.
 
 ## Credential Persistence
 
@@ -100,10 +107,10 @@ Do not store raw `auth.json` in:
 
 ML Claw should persist Codex auth like this:
 
-1. Bootstrap/update creates a Space secret:
+1. Bootstrap/update creates and preserves the deployment credential key:
 
    ```text
-   MLCLAW_CODEX_AUTH_ENCRYPTION_KEY
+   MLCLAW_CREDENTIAL_KEY
    ```
 
 2. On boot, if the private bucket contains an encrypted Codex auth bundle,
@@ -126,8 +133,8 @@ ML Claw should persist Codex auth like this:
    check. Use authenticated encryption, not ad-hoc obfuscation.
 
 Use the private bucket for encrypted persistence because Codex may refresh
-tokens over time. Space secrets are appropriate for the stable encryption key,
-not for frequently changing Codex auth JSON.
+tokens over time. The stable deployment credential key stays in local/Space
+secrets; frequently changing Codex auth JSON does not.
 
 ## Space API
 
@@ -175,8 +182,8 @@ later adds per-user agent runtimes.
 New deployments:
 
 - include Codex in the runtime image;
-- set `CODEX_HOME`;
-- create `MLCLAW_CODEX_AUTH_ENCRYPTION_KEY` as a Space secret;
+- set the trusted wrapper-owned `CODEX_HOME`;
+- keep `MLCLAW_CREDENTIAL_KEY` available as the Codex auth encryption root;
 - exclude Codex auth files from OpenClaw state snapshots;
 - expose the control UI account section.
 
@@ -193,7 +200,7 @@ Existing deployments:
 - Never log tokens, refresh tokens, access tokens, or raw `auth.json`.
 - Never return token material to the browser.
 - Store the encrypted auth bundle only in the deployment's private bucket.
-- Store the encryption key only as a Hugging Face Space secret.
+- Store the encryption root only as the deployment credential key, never in the bucket object.
 - Use constant-time comparison for auth/session signatures where applicable.
 - Keep Codex auth outside the OpenClaw workspace and state-sync inputs.
 - Make logout destructive for Codex auth persistence: local file plus encrypted

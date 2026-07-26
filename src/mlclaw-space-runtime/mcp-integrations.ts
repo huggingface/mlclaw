@@ -1,10 +1,37 @@
+import { spawn } from "node:child_process";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
+import type { CodexAuthManager } from "./codex-auth.js";
 import type { McpCredentialStore } from "./mcp-credentials.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+const MAX_CODEX_PROMPT_CHARS = 20_000;
+const MAX_CODEX_OUTPUT_CHARS = 200_000;
+const MAX_CODEX_CONCURRENCY = 1;
+const CODEX_EXEC_TIMEOUT_MS = 180_000;
+const CODEX_PROCESS_KILL_GRACE_MS = 5_000;
+const CODEX_DISABLED_FEATURES = [
+  "apps",
+  "enable_mcp_apps",
+  "plugins",
+  "remote_plugin",
+  "plugin_sharing",
+  "skill_mcp_dependency_install",
+  "tool_call_mcp_elicitation",
+  "auth_elicitation",
+  "unified_exec",
+  "computer_use",
+  "shell_tool",
+  "browser_use",
+  "browser_use_external",
+  "browser_use_full_cdp_access",
+  "image_generation",
+] as const;
 const UPSTREAM_TIMEOUT_MS = 120_000;
 const INTERNAL_HEADER = "x-mlclaw-mcp-key";
 
@@ -25,10 +52,12 @@ export class McpIntegrationServer {
   private server: http.Server | undefined;
   private readonly internalToken: string;
   private readonly activeRequests = new Set<AbortController>();
+  private activeCodexExecutions = 0;
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
     private readonly credentials: McpCredentialStore,
+    private readonly codexAuth?: CodexAuthManager,
   ) {
     this.internalToken = deriveInternalToken(config.sessionSecret);
   }
@@ -47,22 +76,24 @@ export class McpIntegrationServer {
       this.activeRequests.add(controller);
       req.once("aborted", abort);
       res.once("close", abort);
-      this.handle(req, res, controller.signal).catch((err) => {
-        if (controller.signal.aborted) {
-          res.destroy();
-          return;
-        }
-        process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}\n`);
-        if (!res.headersSent) {
-          writeJson(res, 502, mcpError(null, -32603, "MCP integration request failed"));
-        } else {
-          res.end();
-        }
-      }).finally(() => {
-        req.off("aborted", abort);
-        res.off("close", abort);
-        this.activeRequests.delete(controller);
-      });
+      this.handle(req, res, controller.signal)
+        .catch((err) => {
+          if (controller.signal.aborted) {
+            res.destroy();
+            return;
+          }
+          process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}\n`);
+          if (!res.headersSent) {
+            writeJson(res, 502, mcpError(null, -32603, "MCP integration request failed"));
+          } else {
+            res.end();
+          }
+        })
+        .finally(() => {
+          req.off("aborted", abort);
+          res.off("close", abort);
+          this.activeRequests.delete(controller);
+        });
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
@@ -95,6 +126,11 @@ export class McpIntegrationServer {
       return;
     }
     const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+    const body = await readBody(req, MAX_REQUEST_BYTES);
+    if (pathname === "/mcp/codex") {
+      await this.handleCodexMcp(res, body, signal);
+      return;
+    }
     if (pathname !== "/mcp/huggingface" && pathname !== "/mcp/research") {
       writeJson(res, 404, mcpError(null, -32601, "Not found"));
       return;
@@ -106,7 +142,6 @@ export class McpIntegrationServer {
       writeJson(res, 503, mcpError(null, -32002, safeError(err)));
       return;
     }
-    const body = await readBody(req, MAX_REQUEST_BYTES);
     if (pathname === "/mcp/research" && req.method === "POST") {
       const parsed = parseJsonRpc(body);
       if (parsed?.method === "tools/call" && toolName(parsed) === "research") {
@@ -122,6 +157,76 @@ export class McpIntegrationServer {
       accessToken,
       signal,
     });
+  }
+
+  private async handleCodexMcp(res: http.ServerResponse, body: Uint8Array, signal: AbortSignal): Promise<void> {
+    const request = parseJsonRpc(body);
+    if (!request) {
+      writeJson(res, 400, mcpError(null, -32700, "Invalid JSON-RPC request"));
+      return;
+    }
+    if (request.method === "initialize") {
+      writeJson(res, 200, {
+        jsonrpc: "2.0",
+        id: request.id ?? null,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "mlclaw-codex", version: "1.0.0" },
+        },
+      });
+      return;
+    }
+    if (request.method === "notifications/initialized") {
+      res.writeHead(202).end();
+      return;
+    }
+    if (request.method === "tools/list") {
+      writeJson(res, 200, codexToolsListResponse(request.id ?? null));
+      return;
+    }
+    if (request.method === "tools/call" && toolName(request) === "codex_prompt") {
+      await this.handleCodexPrompt(res, request, signal);
+      return;
+    }
+    writeJson(res, 200, mcpError(request.id ?? null, -32601, "Unknown Codex MCP method"));
+  }
+
+  private async handleCodexPrompt(
+    res: http.ServerResponse,
+    request: JsonRpcRequest,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const prompt = codexPromptArgument(request);
+    if (!prompt) {
+      writeJson(res, 200, mcpError(request.id ?? null, -32602, "codex_prompt requires a prompt string"));
+      return;
+    }
+    if (!this.codexAuth || !(await this.codexAuth.hasRestoredAuth())) {
+      writeJson(
+        res,
+        200,
+        mcpToolText(request.id ?? null, "Codex account credentials are not configured for this deployment.", true),
+      );
+      return;
+    }
+    if (this.activeCodexExecutions >= MAX_CODEX_CONCURRENCY) {
+      writeJson(res, 200, mcpToolText(request.id ?? null, "A Codex request is already running.", true));
+      return;
+    }
+    this.activeCodexExecutions += 1;
+    try {
+      const answer = await runTrustedCodexPrompt({
+        prompt,
+        codexHome: this.config.codexHome,
+        signal,
+      });
+      writeJson(res, 200, mcpToolText(request.id ?? null, answer, false));
+    } catch (err) {
+      writeJson(res, 200, mcpToolText(request.id ?? null, `Codex request failed: ${safeError(err)}`, true));
+    } finally {
+      this.activeCodexExecutions -= 1;
+    }
   }
 
   private async handleResearchCall(
@@ -204,12 +309,14 @@ export class McpIntegrationServer {
             jsonrpc: "2.0",
             id: request.id ?? null,
             result: {
-              content: [{
-                type: "text",
-                text: error
-                  ? `Research failed: ${error}`
-                  : resultText ?? `Research completed. Job: ${prefab.jobId}`,
-              }],
+              content: [
+                {
+                  type: "text",
+                  text: error
+                    ? `Research failed: ${error}`
+                    : (resultText ?? `Research completed. Job: ${prefab.jobId}`),
+                },
+              ],
               structuredContent: redactResearchStatus(status),
               isError: Boolean(error),
             },
@@ -254,12 +361,14 @@ export class McpIntegrationServer {
         "mcp-session-id": params.sessionId,
         ...(params.protocolVersion ? { "mcp-protocol-version": params.protocolVersion } : {}),
       },
-      body: Buffer.from(JSON.stringify({
-        jsonrpc: "2.0",
-        id: params.id,
-        method: "tools/call",
-        params: { name: params.tool, arguments: params.arguments },
-      })),
+      body: Buffer.from(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: params.id,
+          method: "tools/call",
+          params: { name: params.tool, arguments: params.arguments },
+        }),
+      ),
       url: this.config.researchMcpUrl,
       accessToken: params.accessToken,
       ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
@@ -299,7 +408,10 @@ export class McpIntegrationServer {
 }
 
 class ResearchRpcError extends Error {
-  constructor(readonly code: number, message: string) {
+  constructor(
+    readonly code: number,
+    message: string,
+  ) {
     super(message);
     this.name = "ResearchRpcError";
   }
@@ -328,7 +440,170 @@ export function managedMcpServerConfig(config: SpaceRuntimeConfig): Record<strin
       connectTimeout: 10,
       supportsParallelToolCalls: false,
     },
+    codex: {
+      url: `http://127.0.0.1:${config.mcpPort}/mcp/codex`,
+      transport: "streamable-http",
+      headers,
+      timeout: Math.ceil(CODEX_EXEC_TIMEOUT_MS / 1000) + 15,
+      connectTimeout: 10,
+      supportsParallelToolCalls: false,
+    },
   };
+}
+
+function codexToolsListResponse(id: unknown): Record<string, unknown> {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: {
+      tools: [
+        {
+          name: "codex_prompt",
+          description:
+            "Ask the deployment's connected OpenAI Codex account for text-only assistance. The managed wrapper disables local shell, browser, project rule, and user-config tools before invoking Codex.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              prompt: { type: "string", minLength: 1, maxLength: MAX_CODEX_PROMPT_CHARS },
+            },
+            required: ["prompt"],
+            additionalProperties: false,
+          },
+        },
+      ],
+    },
+  };
+}
+
+function codexPromptArgument(request: JsonRpcRequest): string | undefined {
+  const args = toolArguments(request);
+  const prompt = args?.prompt;
+  return typeof prompt === "string" && prompt.trim() && prompt.length <= MAX_CODEX_PROMPT_CHARS ? prompt : undefined;
+}
+
+function toolArguments(request: JsonRpcRequest): Record<string, unknown> | undefined {
+  if (!request.params || typeof request.params !== "object" || Array.isArray(request.params)) return undefined;
+  const params = request.params as Record<string, unknown>;
+  const args = params.arguments;
+  return args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : undefined;
+}
+
+function mcpToolText(id: unknown, text: string, isError: boolean): Record<string, unknown> {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: {
+      content: [{ type: "text", text }],
+      isError,
+    },
+  };
+}
+
+async function runTrustedCodexPrompt(params: {
+  prompt: string;
+  codexHome: string;
+  signal: AbortSignal;
+}): Promise<string> {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-mcp-"));
+  const outputFile = path.join(temporaryDirectory, "answer.txt");
+  const workDir = path.join(temporaryDirectory, "work");
+  const timed = timedAbortSignal(params.signal, CODEX_EXEC_TIMEOUT_MS);
+  try {
+    await fs.mkdir(workDir, { mode: 0o700 });
+    const prompt = [
+      "You are a text-only Codex account helper for ML Claw.",
+      "Local shell, file, browser, user configuration, project rules, and workspace tools are disabled.",
+      "Answer only from the user's prompt and your model knowledge; do not claim to inspect local files.",
+      "",
+      params.prompt,
+    ].join("\n");
+    const result = await runCodexExec({
+      prompt,
+      codexHome: params.codexHome,
+      cwd: workDir,
+      outputFile,
+      signal: timed.signal,
+    });
+    const answer = await fs.readFile(outputFile, "utf8").catch(() => result.stdout.trim());
+    return truncateCodexOutput(answer.trim() || result.stdout.trim() || "Codex completed without a final message.");
+  } finally {
+    timed.dispose();
+    await fs.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
+async function runCodexExec(params: {
+  prompt: string;
+  codexHome: string;
+  cwd: string;
+  outputFile: string;
+  signal: AbortSignal;
+}): Promise<{ stdout: string }> {
+  const args = [
+    "--ask-for-approval",
+    "never",
+    ...CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]),
+    "exec",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--sandbox",
+    "read-only",
+    "-c",
+    'shell_environment_policy.include_only=["PATH"]',
+    "-o",
+    params.outputFile,
+    "-",
+  ];
+  const childEnv: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME ?? os.homedir(),
+    CODEX_HOME: params.codexHome,
+    TERM: process.env.TERM,
+  };
+  return await new Promise((resolve, reject) => {
+    const child = spawn("codex", args, { cwd: params.cwd, env: childEnv, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let killTimer: NodeJS.Timeout | undefined;
+    const abort = () => {
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), CODEX_PROCESS_KILL_GRACE_MS);
+    };
+    params.signal.addEventListener("abort", abort, { once: true });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout = truncateCodexOutput(stdout + chunk);
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr = truncateCodexOutput(stderr + chunk);
+    });
+    child.once("error", (err) => {
+      if (killTimer) clearTimeout(killTimer);
+      params.signal.removeEventListener("abort", abort);
+      reject(err);
+    });
+    child.once("close", (code, signal) => {
+      if (killTimer) clearTimeout(killTimer);
+      params.signal.removeEventListener("abort", abort);
+      if (code === 0) {
+        resolve({ stdout });
+        return;
+      }
+      reject(
+        new Error(
+          `codex exited ${signal ? `after signal ${signal}` : `with status ${code ?? "unknown"}`}: ${stderr.trim()}`,
+        ),
+      );
+    });
+    child.stdin.end(params.prompt);
+  });
+}
+
+function truncateCodexOutput(value: string): string {
+  return value.length > MAX_CODEX_OUTPUT_CHARS ? `${value.slice(0, MAX_CODEX_OUTPUT_CHARS)}\n[truncated]` : value;
 }
 
 async function forwardStreaming(params: {
@@ -406,7 +681,14 @@ function upstreamHeaders(headers: http.IncomingHttpHeaders, accessToken: string)
 
 function responseHeaders(headers: Headers): http.OutgoingHttpHeaders {
   const out: http.OutgoingHttpHeaders = {};
-  for (const name of ["content-type", "cache-control", "mcp-session-id", "mcp-protocol-version", "www-authenticate", "retry-after"]) {
+  for (const name of [
+    "content-type",
+    "cache-control",
+    "mcp-session-id",
+    "mcp-protocol-version",
+    "www-authenticate",
+    "retry-after",
+  ]) {
     const value = headers.get(name);
     if (value) {
       out[name] = value;
@@ -439,7 +721,7 @@ async function readBody(req: http.IncomingMessage, limit: number): Promise<Uint8
 function parseJsonRpc(body: Uint8Array): JsonRpcRequest | undefined {
   try {
     const value = JSON.parse(Buffer.from(body).toString("utf8"));
-    return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRpcRequest : undefined;
+    return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRpcRequest) : undefined;
   } catch {
     return undefined;
   }
@@ -452,7 +734,10 @@ function parseMcpResponse(body: Uint8Array): Record<string, unknown> | undefined
   }
   const candidates = text.startsWith("{")
     ? [text]
-    : text.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+    : text
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim());
   for (const candidate of candidates.reverse()) {
     try {
       const value = JSON.parse(candidate);
@@ -466,11 +751,13 @@ function parseMcpResponse(body: Uint8Array): Record<string, unknown> | undefined
   return undefined;
 }
 
-function prefabJob(message: Record<string, unknown> | undefined): {
-  jobId: string;
-  startTool: string;
-  statusTool: string;
-} | undefined {
+function prefabJob(message: Record<string, unknown> | undefined):
+  | {
+      jobId: string;
+      startTool: string;
+      statusTool: string;
+    }
+  | undefined {
   const result = objectValue(message?.result);
   const structured = objectValue(result?.structuredContent);
   const prefab = objectValue(structured?.$prefab);
@@ -552,12 +839,11 @@ function mcpToolError(message: Record<string, unknown>): string | undefined {
 }
 
 function redactResearchStatus(status: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(status).filter(([key]) => ![
-    "auth",
-    "token",
-    "access_token",
-    "refresh_token",
-  ].includes(key.toLowerCase())));
+  return Object.fromEntries(
+    Object.entries(status).filter(
+      ([key]) => !["auth", "token", "access_token", "refresh_token"].includes(key.toLowerCase()),
+    ),
+  );
 }
 
 function mcpError(id: unknown, code: number, message: string): Record<string, unknown> {
@@ -589,9 +875,7 @@ function requestHeader(headers: http.IncomingHttpHeaders, name: string): string 
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -623,7 +907,10 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function timedAbortSignal(parent: AbortSignal, timeoutMs: number): {
+function timedAbortSignal(
+  parent: AbortSignal,
+  timeoutMs: number,
+): {
   signal: AbortSignal;
   dispose(): void;
 } {

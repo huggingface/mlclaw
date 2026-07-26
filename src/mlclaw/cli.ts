@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import process from "node:process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -40,6 +42,13 @@ import {
   type RuntimeHandoffAck,
 } from "./lease.js";
 import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
+import {
+  codexAuthContext,
+  codexAuthObjectPath,
+  decryptCodexAuthDocument,
+  encodeCodexAuthDocument,
+  encryptCodexAuthDocument,
+} from "./codex-auth.js";
 import { DEFAULT_MODEL as DEFAULT_ROUTER_MODEL } from "../mlclaw-space-runtime/model-default.js";
 import { deriveLocalAccessToken } from "../mlclaw-space-runtime/local-access.js";
 import {
@@ -123,6 +132,7 @@ type HostedSpaceVisibility = Exclude<SpaceVisibility, "private">;
 const STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 const SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 const DEFAULT_CANONICAL_TEMPLATE_SPACE = "osolmaz/mlclaw";
+const CODEX_CLI_INSTALL_COMMAND = "npm install --global @openai/codex@0.145.0";
 const PAID_HARDWARE_COST_NOTE =
   "Paid Hugging Face Space hardware costs money while allocated. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 
@@ -172,6 +182,10 @@ type DoctorOptions = {
 
 type CredentialRepairOptions = {
   brokerHfTokenFile?: string;
+};
+
+type CodexCredentialOptions = {
+  authJsonFile?: string;
 };
 
 type SettingsOptions = {
@@ -272,6 +286,7 @@ type CliRuntime = {
   dockerRunner?: ContainerRunner;
   podmanRunner?: ContainerRunner;
   tailscaleRunner?: TailscaleRunner;
+  codexDeviceLogin?: (codexHome: string) => Promise<void>;
   configRoot?: string;
   now?: () => Date;
   sleep?: (milliseconds: number) => Promise<unknown>;
@@ -319,6 +334,7 @@ function createRuntime(overrides: CliRuntime = {}): Required<CliRuntime> {
     dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
     podmanRunner: overrides.podmanRunner ?? new CliPodmanRunner(),
     tailscaleRunner: overrides.tailscaleRunner ?? new CliTailscaleRunner(),
+    codexDeviceLogin: overrides.codexDeviceLogin ?? (async (codexHome) => await runCodexDeviceLogin(codexHome)),
     configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process.env),
     now: overrides.now ?? (() => new Date()),
     sleep: overrides.sleep ?? delay,
@@ -441,6 +457,35 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--broker-hf-token-file <path>", "File containing MLCLAW_BROKER_HF_TOKEN=... or a raw token")
     .action(async (agent: string | undefined, opts: CredentialRepairOptions) => {
       await credentialsRepair(agent, opts, runtime);
+    });
+
+  const codexCredentials = credentials
+    .command("codex")
+    .description("Manage deployment-scoped OpenAI Codex account credentials");
+
+  codexCredentials
+    .command("login")
+    .description("Connect a Codex ChatGPT account to one ML Claw deployment")
+    .argument("[agent]", "Agent name; inferred when exactly one deployment exists")
+    .option("--auth-json-file <path>", "Advanced: import a Codex auth.json file for this deployment")
+    .action(async (agent: string | undefined, opts: CodexCredentialOptions) => {
+      await codexCredentialsLogin(agent, opts, runtime);
+    });
+
+  codexCredentials
+    .command("status")
+    .description("Show the Codex credential status for one ML Claw deployment")
+    .argument("[agent]", "Agent name; inferred when exactly one deployment exists")
+    .action(async (agent?: string) => {
+      await codexCredentialsStatus(agent, runtime);
+    });
+
+  codexCredentials
+    .command("logout")
+    .description("Remove Codex account credentials from one ML Claw deployment")
+    .argument("[agent]", "Agent name; inferred when exactly one deployment exists")
+    .action(async (agent?: string) => {
+      await codexCredentialsLogout(agent, runtime);
     });
 
   const gateway = program.command("gateway").description("Operate a ML Claw gateway");
@@ -1475,6 +1520,7 @@ async function resolveBootstrapPlan(params: {
     gatewayLocation,
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
+    deploymentId: manifest.deploymentId,
     ...(bucketPrefix ? { bucketPrefix } : {}),
     ...(effectiveTelegramProxy ? { telegramProxy: effectiveTelegramProxy } : {}),
     ...(effectiveTelegramApiRoot ? { telegramApiRoot: effectiveTelegramApiRoot } : {}),
@@ -1927,6 +1973,7 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
     MLCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
     MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
     MLCLAW_RUNTIME_ID: runtimeIdFor(updated),
+    MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
   };
   const reconciled = await reconcileManifest({
     manifest: updated,
@@ -1986,6 +2033,7 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
           MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
         },
         assertLease,
       );
@@ -2034,7 +2082,9 @@ async function inspectStateBucket(hub: HubApi, bucket: string, bucketPrefix?: st
   const prefix = normalizeBucketPrefix(bucketPrefix);
   const prefixWithSlash = `${prefix}/`;
   const manifestPath = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
-  const payloadEntries = fileEntries.filter((entry) => !entry.path.startsWith(".mlclaw/"));
+  const payloadEntries = fileEntries.filter(
+    (entry) => !entry.path.startsWith(".mlclaw/") && !entry.path.startsWith(`${prefixWithSlash}.mlclaw/`),
+  );
   const stateEntries = payloadEntries.filter(
     (entry) =>
       entry.path === manifestPath ||
@@ -2129,6 +2179,7 @@ function deploymentSecrets(params: {
   gatewayLocation: GatewayLocation;
   localPort: number;
   runtimeId: string;
+  deploymentId: string;
   bucketPrefix?: string;
   telegramProxy?: string;
   telegramApiRoot?: string;
@@ -2142,6 +2193,7 @@ function deploymentSecrets(params: {
     MLCLAW_GATEWAY_LOCATION: params.gatewayLocation,
     MLCLAW_RUNTIME_IMAGE: params.runtimeImage,
     MLCLAW_RUNTIME_ID: params.runtimeId,
+    MLCLAW_DEPLOYMENT_ID: params.deploymentId,
     MLCLAW_SESSION_SECRET: params.sessionSecret,
     MLCLAW_CREDENTIAL_KEY: params.credentialKey,
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
@@ -2346,6 +2398,7 @@ function spaceGatewayNeedsRepair(
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
     MLCLAW_ALLOWED_USERS: allowedUsers,
     MLCLAW_ADMINS: allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -2425,6 +2478,7 @@ async function deploySpaceGateway(params: {
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_IMAGE: spaceRuntimeRef,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+      MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
       MLCLAW_ALLOWED_USERS: params.allowedUsers,
       MLCLAW_ADMINS: params.allowedUsers,
       MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -2904,6 +2958,7 @@ async function gatewayMigrate(
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
         });
         await writeManifest(runtime.configRoot, updated);
       },
@@ -2955,6 +3010,7 @@ async function gatewayMigrate(
           MLCLAW_GATEWAY_LOCATION: "local",
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: updated.localRuntimeId,
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
           ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess),
         });
         await assertLease();
@@ -3818,6 +3874,9 @@ async function update(
   }
   await hub.addSpaceVariable(repoId, "MLCLAW_GATEWAY_LOCATION", "space");
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
+  if (localManifest) {
+    await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_ID", localManifest.deploymentId);
+  }
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value;
@@ -3860,6 +3919,7 @@ async function reconcileUpdatedDeployment(
         MLCLAW_GATEWAY_LOCATION: "space",
         MLCLAW_RUNTIME_IMAGE: runtimeImage,
         MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+        MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
       });
     },
   });
@@ -4466,6 +4526,116 @@ async function readOptionalRouterTokenFile(file: string | undefined): Promise<st
   return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
 }
 
+async function codexCredentialsLogin(
+  requestedAgent: string | undefined,
+  opts: CodexCredentialOptions,
+  runtime: Required<CliRuntime>,
+): Promise<void> {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
+    const current = await readManifest(runtime.configRoot, manifest.agent);
+    const secrets = await readSecretEnv(runtime.configRoot, current.agent);
+    const credentialKey = await verifiedDeploymentCredentialKey(current, secrets, runtime);
+    const statePrefix = persistedBucketPrefix(secrets);
+    const authJson = opts.authJsonFile
+      ? await readCodexAuthJsonFile(opts.authJsonFile)
+      : await runTemporaryCodexDeviceLogin(current, runtime);
+    const document = encodeCodexAuthDocument({ authJson, now: runtime.now() });
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const control = await hub.deploymentControlStore(current.owner, current.deploymentId);
+    const operation = newOperation(current, runtime.now());
+    let lease = await acquireControlLease(control, current, operation, runtime.now());
+    let renewalError: unknown;
+    let renewal = Promise.resolve();
+    const renewalTimer = setInterval(() => {
+      renewal = renewal.then(async () => {
+        if (renewalError) return;
+        try {
+          lease = await renewControlLease(control, lease, runtime.now());
+        } catch (error) {
+          renewalError = error;
+        }
+      });
+    }, 45_000);
+    const assertLease = async (): Promise<void> => {
+      await renewal;
+      if (renewalError) throw renewalError;
+      await assertControlLease(control, lease, runtime.now());
+      if (renewalError) throw renewalError;
+    };
+    try {
+      await assertLease();
+      await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
+      await assertLease();
+      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
+      await assertLease();
+      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
+    } finally {
+      clearInterval(renewalTimer);
+      await renewal;
+      await releaseControlLease(control, lease);
+    }
+    runtime.stdout.log(`Codex credentials connected: ${current.agent}`);
+  });
+}
+
+async function codexCredentialsStatus(
+  requestedAgent: string | undefined,
+  runtime: Required<CliRuntime>,
+): Promise<void> {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  const secrets = await readSecretEnv(runtime.configRoot, manifest.agent);
+  const credentialKey = await verifiedDeploymentCredentialKey(manifest, secrets, runtime);
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  const statePrefix = persistedBucketPrefix(secrets);
+  const encrypted = await readCodexCredentialBundle({ hub, manifest, statePrefix });
+  if (!encrypted) {
+    runtime.stdout.log(`Agent: ${manifest.agent}`);
+    runtime.stdout.log("Codex account: not configured");
+    return;
+  }
+  const document = decryptCodexAuthDocument({
+    encrypted,
+    secret: credentialKey,
+    expectedContext: codexContextForManifest(manifest, statePrefix),
+  });
+  runtime.stdout.log(`Agent: ${manifest.agent}`);
+  runtime.stdout.log("Codex account: configured");
+  runtime.stdout.log(`Updated: ${document.updatedAt}`);
+  runtime.stdout.log(`Credential object: ${codexAuthObjectPath(statePrefix)}`);
+}
+
+async function codexCredentialsLogout(
+  requestedAgent: string | undefined,
+  runtime: Required<CliRuntime>,
+): Promise<void> {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
+    const current = await readManifest(runtime.configRoot, manifest.agent);
+    const secrets = await readSecretEnv(runtime.configRoot, current.agent);
+    await verifiedDeploymentCredentialKey(current, secrets, runtime);
+    const statePrefix = persistedBucketPrefix(secrets);
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const control = await hub.deploymentControlStore(current.owner, current.deploymentId);
+    const operation = newOperation(current, runtime.now());
+    const lease = await acquireControlLease(control, current, operation, runtime.now());
+    try {
+      await assertControlLease(control, lease, runtime.now());
+      await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
+      await assertControlLease(control, lease, runtime.now());
+      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
+        await assertControlLease(control, lease, runtime.now());
+      });
+    } finally {
+      await releaseControlLease(control, lease);
+    }
+    runtime.stdout.log(`Codex credentials removed: ${current.agent}`);
+  });
+}
+
 async function credentialsStatus(requestedAgent: string | undefined, runtime: Required<CliRuntime>): Promise<void> {
   const manifest = await credentialManifest(requestedAgent, runtime);
   await verifiedStoredBrokerCredential(manifest, runtime);
@@ -4581,6 +4751,148 @@ async function credentialsRepair(
     }
     runtime.stdout.log(`HF Broker credential repaired: ${manifest.agent}`);
   });
+}
+
+async function verifiedDeploymentCredentialKey(
+  manifest: DeploymentManifest,
+  secrets: Record<string, string>,
+  runtime: Required<CliRuntime>,
+): Promise<string> {
+  if (manifest.recoveredWithoutCredentialKey) {
+    throw new Error(
+      `deployment ${manifest.agent} was recovered without its credential key; run bootstrap or repair from a machine that has the original key`,
+    );
+  }
+  const credentialKey = nonEmpty(secrets.MLCLAW_CREDENTIAL_KEY);
+  if (!credentialKey) {
+    throw new Error(`deployment ${manifest.agent} has no MLCLAW_CREDENTIAL_KEY`);
+  }
+  const fingerprint = createHash("sha256").update(credentialKey).digest("hex");
+  if (manifest.credentialKeySha256 && manifest.credentialKeySha256 !== fingerprint) {
+    throw new Error("local credential key fingerprint does not match the deployment manifest");
+  }
+  const token = await runtime.readToken(runtime.env);
+  const identity = await readDeploymentIdentity(runtime.hubFactory(token).bucket(manifest.bucket));
+  if (!identity) {
+    throw new Error(`bucket ${manifest.bucket} has no canonical deployment identity`);
+  }
+  if (identity.deploymentId !== manifest.deploymentId || identity.bucket !== manifest.bucket) {
+    throw new Error(`bucket ${manifest.bucket} belongs to another deployment`);
+  }
+  if (identity.credentialKeySha256 !== fingerprint) {
+    throw new Error("local credential key fingerprint does not match canonical deployment identity");
+  }
+  return credentialKey;
+}
+
+async function readCodexAuthJsonFile(file: string): Promise<Record<string, unknown>> {
+  const parsed = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Codex auth JSON file must contain an object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+async function runTemporaryCodexDeviceLogin(
+  manifest: DeploymentManifest,
+  runtime: Required<CliRuntime>,
+): Promise<Record<string, unknown>> {
+  if (!runtime.prompt.isInteractive()) {
+    throw new Error("Codex device login requires an interactive terminal or --auth-json-file");
+  }
+  await assertCodexCliAvailable();
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), `mlclaw-codex-${manifest.agent}-`));
+  try {
+    await fs.writeFile(
+      path.join(parent, "config.toml"),
+      'cli_auth_credentials_store = "file"\nforced_login_method = "chatgpt"\n',
+      { encoding: "utf8", mode: 0o600 },
+    );
+    runtime.prompt.note(
+      `ML Claw will start Codex device login for deployment ${manifest.agent}. Complete the OpenAI login shown by Codex; the resulting auth file is encrypted into this deployment only.`,
+      "Codex login",
+    );
+    await runtime.codexDeviceLogin(parent);
+    return await readCodexAuthJsonFile(path.join(parent, "auth.json"));
+  } finally {
+    await fs.rm(parent, { recursive: true, force: true });
+  }
+}
+
+function codexContextForManifest(manifest: DeploymentManifest, statePrefix: string | undefined) {
+  return codexAuthContext({
+    deploymentId: manifest.deploymentId,
+    bucket: manifest.bucket,
+    ...(statePrefix ? { statePrefix } : {}),
+  });
+}
+
+async function writeCodexCredentialBundle(params: {
+  manifest: DeploymentManifest;
+  statePrefix: string | undefined;
+  credentialKey: string;
+  document: ReturnType<typeof encodeCodexAuthDocument>;
+  hub: HubApi;
+}): Promise<void> {
+  const encrypted = encryptCodexAuthDocument({
+    document: params.document,
+    secret: params.credentialKey,
+    context: codexContextForManifest(params.manifest, params.statePrefix),
+  });
+  await params.hub
+    .bucket(params.manifest.bucket)
+    .uploadFiles([{ path: codexAuthObjectPath(params.statePrefix), content: new Blob([encrypted]) }]);
+}
+
+async function readCodexCredentialBundle(params: {
+  hub: HubApi;
+  manifest: DeploymentManifest;
+  statePrefix: string | undefined;
+}): Promise<string | undefined> {
+  const blob = await params.hub.bucket(params.manifest.bucket).downloadFile(codexAuthObjectPath(params.statePrefix));
+  return blob ? await blob.text() : undefined;
+}
+
+async function ensureRuntimeDeploymentId(
+  manifest: DeploymentManifest,
+  secrets: Record<string, string>,
+  hub: HubApi,
+  runtime: Required<CliRuntime>,
+  assertLease: () => Promise<void>,
+): Promise<void> {
+  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    return;
+  }
+  await assertLease();
+  await writeSecretEnv(runtime.configRoot, manifest.agent, {
+    ...secrets,
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+  });
+}
+
+async function restartDeploymentForCredentialChange(
+  manifest: DeploymentManifest,
+  runtime: Required<CliRuntime>,
+  hub: HubApi,
+  assertLease: () => Promise<void>,
+): Promise<void> {
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.restartSpace(manifest.space, true);
+    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
+    return;
+  }
+  const runner = localRunnerFor(manifest, runtime);
+  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
+  if (!existing?.running) {
+    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
+    return;
+  }
+  await assertLease();
+  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 
 async function credentialManifest(
@@ -4973,6 +5285,59 @@ function parseInteger(value: string): number {
 function parseTailscaleMode(value: string): TailscaleMode {
   if (value === "off" || value === "direct" || value === "serve") return value;
   throw new InvalidArgumentError(`expected tailscale mode off, direct, or serve; got ${value}`);
+}
+
+async function assertCodexCliAvailable(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("codex", ["--version"], { stdio: "ignore", env: codexLoginEnvironment(os.tmpdir()) });
+    child.once("error", () => {
+      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
+    });
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
+    });
+  });
+}
+
+async function runCodexDeviceLogin(codexHome: string): Promise<void> {
+  await assertCodexCliAvailable();
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("codex", ["login", "--device-auth"], {
+      stdio: "inherit",
+      env: codexLoginEnvironment(codexHome),
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(`codex login failed${signal ? ` with signal ${signal}` : ` with exit code ${code ?? "unknown"}`}`),
+      );
+    });
+  });
+}
+
+function codexLoginEnvironment(codexHome: string): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME ?? os.homedir(),
+    USER: process.env.USER,
+    LOGNAME: process.env.LOGNAME,
+    TERM: process.env.TERM,
+    COLORTERM: process.env.COLORTERM,
+    LANG: process.env.LANG,
+    LC_ALL: process.env.LC_ALL,
+    SSL_CERT_FILE: process.env.SSL_CERT_FILE,
+    SSL_CERT_DIR: process.env.SSL_CERT_DIR,
+    NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS,
+    CODEX_HOME: codexHome,
+  };
 }
 
 function parseLocalPort(value: string): number {

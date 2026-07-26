@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/mlclaw/cli.js";
+import { codexAuthObjectPath, decryptCodexAuthDocument } from "../src/mlclaw/codex-auth.js";
 import { newOperation, updateOperation } from "../src/mlclaw/deployment-state.js";
 import { DEFAULT_RUNTIME_IMAGE } from "../src/mlclaw/runtime-image.js";
 import {
@@ -1412,6 +1413,36 @@ describe("mlclaw CLI", () => {
     });
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       OPENCLAW_HF_STATE_BUCKET: "alice/research-archive-data",
+    });
+  });
+
+  it("accepts a bucket that only contains the deployment Codex credential object", async () => {
+    const hub = createFakeHub({ existingBuckets: ["alice/research-data"] });
+    hub.bucketObjects.set(codexAuthObjectPath(), "encrypted-codex-auth");
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main(
+      [
+        "bootstrap",
+        "--gateway",
+        "local",
+        "--name",
+        "research",
+        "--gateway-token",
+        "gateway-token",
+        "--no-pull",
+        "--yes",
+      ],
+      runtime,
+    );
+
+    expect(stderr).toEqual([]);
+    expect(code).toBe(0);
+    expect(hub.calls).toContainEqual({ name: "bucket.listFiles", args: [""] });
+    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
+      bucket: "alice/research-data",
     });
   });
 
@@ -4652,7 +4683,108 @@ describe("mlclaw CLI", () => {
     ).toBe(false);
     expect(hub.calls.some((call) => call.name === "pauseSpace")).toBe(false);
   });
+
+  it("stores Codex account credentials in the target deployment bucket", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stdout: string[] = [];
+    const runtime = {
+      ...(await createRuntime(hub, prompt)),
+      stdout: { log: (message: unknown) => stdout.push(String(message)) },
+    };
+    const credentialKey = await seedCodexCredentialDeployment(runtime.configRoot, hub);
+    const authFile = path.join(runtime.configRoot, "codex-auth.json");
+    const authJson = { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } };
+    await fs.writeFile(authFile, JSON.stringify(authJson), "utf8");
+
+    await expect(
+      main(["credentials", "codex", "login", "research", "--auth-json-file", authFile], runtime),
+    ).resolves.toBe(0);
+
+    const encrypted = hub.bucketObjects.get(codexAuthObjectPath());
+    expect(encrypted).toBeDefined();
+    expect(encrypted).not.toContain("opaque-refresh");
+    expect(
+      decryptCodexAuthDocument({
+        encrypted: encrypted ?? "",
+        secret: credentialKey,
+        expectedContext: {
+          deploymentId: "22222222-2222-4222-8222-222222222222",
+          bucket: "alice/research-data",
+          statePrefix: "openclaw-state",
+        },
+      }).authJson,
+    ).toEqual(authJson);
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "MLCLAW_DEPLOYMENT_ID", "22222222-2222-4222-8222-222222222222"],
+    });
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(stdout.join("\n")).toContain("Codex credentials connected: research");
+  });
+
+  it("removes deployment-scoped Codex credentials", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const runtime = await createRuntime(hub, prompt);
+    await seedCodexCredentialDeployment(runtime.configRoot, hub);
+    hub.bucketObjects.set(codexAuthObjectPath(), "encrypted");
+
+    await expect(main(["credentials", "codex", "logout", "research"], runtime)).resolves.toBe(0);
+
+    expect(hub.bucketObjects.has(codexAuthObjectPath())).toBe(false);
+    expect(hub.calls).toContainEqual({ name: "bucket.deleteFiles", args: [[codexAuthObjectPath()]] });
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+  });
 });
+
+async function seedCodexCredentialDeployment(
+  configRoot: string,
+  hub: ReturnType<typeof createFakeHub>,
+): Promise<string> {
+  const credentialKey = "codex-credential-key";
+  const credentialKeySha256 = createHash("sha256").update(credentialKey).digest("hex");
+  await writeManifest(configRoot, {
+    version: 2,
+    deploymentId: "22222222-2222-4222-8222-222222222222",
+    desiredGeneration: 0,
+    agent: "research",
+    owner: "alice",
+    bucket: "alice/research-data",
+    space: "alice/research",
+    localRuntimeId: "local-research-existing",
+    gatewayLocation: "space",
+    model: DEFAULT_MODEL,
+    runtimeImage: DEFAULT_RUNTIME_IMAGE,
+    credentialKeySha256,
+    createdAt: "2026-06-16T00:00:00.000Z",
+    updatedAt: "2026-06-16T00:00:00.000Z",
+  });
+  await writeSecretEnv(configRoot, "research", {
+    MLCLAW_CREDENTIAL_KEY: credentialKey,
+    MLCLAW_BROKER_HF_TOKEN: "hf_broker_test",
+    OPENCLAW_HF_STATE_BUCKET: "alice/research-data",
+    OPENCLAW_AGENT_NAME: "research",
+    OPENCLAW_MODEL: DEFAULT_MODEL,
+    MLCLAW_GATEWAY_LOCATION: "space",
+    MLCLAW_RUNTIME_ID: "space-research",
+    MLCLAW_RUNTIME_IMAGE: DEFAULT_RUNTIME_IMAGE,
+  });
+  hub.bucketObjects.set(
+    ".mlclaw/deployment.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      deploymentId: "22222222-2222-4222-8222-222222222222",
+      agent: "research",
+      owner: "alice",
+      bucket: "alice/research-data",
+      statePrefix: "openclaw-state",
+      credentialKeySha256,
+      createdAt: "2026-06-16T00:00:00.000Z",
+    }) + "\n",
+  );
+  return credentialKey;
+}
 
 async function seedDedicatedCredentialDeployment(runtime: { configRoot: string }): Promise<void> {
   const token = "hf_broker_test";

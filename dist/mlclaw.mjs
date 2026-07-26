@@ -1202,7 +1202,7 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path16 = __require("node:path");
+    var path17 = __require("node:path");
     var fs16 = __require("node:fs");
     var process5 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2215,9 +2215,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path16.resolve(baseDir, baseName);
+          const localBin = path17.resolve(baseDir, baseName);
           if (fs16.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path16.extname(baseName))) return void 0;
+          if (sourceExt.includes(path17.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs16.existsSync(`${localBin}${ext}`)
           );
@@ -2235,17 +2235,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path16.resolve(
-            path16.dirname(resolvedScriptPath),
+          executableDir = path17.resolve(
+            path17.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path16.basename(
+            const legacyName = path17.basename(
               this._scriptPath,
-              path16.extname(this._scriptPath)
+              path17.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2256,7 +2256,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path16.extname(executableFile));
+        launchWithNode = sourceExt.includes(path17.extname(executableFile));
         let proc;
         if (process5.platform !== "win32") {
           if (launchWithNode) {
@@ -3171,7 +3171,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path16.basename(filename, path16.extname(filename));
+        this._name = path17.basename(filename, path17.extname(filename));
         return this;
       }
       /**
@@ -3185,9 +3185,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path17) {
-        if (path17 === void 0) return this._executableDir;
-        this._executableDir = path17;
+      executableDir(path18) {
+        if (path18 === void 0) return this._executableDir;
+        this._executableDir = path18;
         return this;
       }
       /**
@@ -8952,11 +8952,13 @@ var init_cli = __esm({
 });
 
 // src/mlclaw/cli.ts
+import { spawn as spawn2 } from "node:child_process";
 import fs15 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os8 from "node:os";
+import path16 from "node:path";
 import process4 from "node:process";
-import { createHash as createHash4, randomBytes, randomUUID as randomUUID2 } from "node:crypto";
+import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as randomUUID2 } from "node:crypto";
 import { pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
@@ -13950,10 +13952,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path16, processedBytes]) => ({
-        path: path16,
-        progress: processedBytes / this.fileSize[path16],
-        lastSentProgress: ((this.fileUploadedBytes[path16] ?? 0) + (processedBytes - (this.fileUploadedBytes[path16] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path16]
+      files: Object.entries(this.fileProcessedBytes).map(([path17, processedBytes]) => ({
+        path: path17,
+        progress: processedBytes / this.fileSize[path17],
+        lastSentProgress: ((this.fileUploadedBytes[path17] ?? 0) + (processedBytes - (this.fileUploadedBytes[path17] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path17]
       }))
     };
   }
@@ -14826,7 +14828,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path16) => ({ type: "deleteFile", path: path16 })));
+    await this.batch(paths.map((path17) => ({ type: "deleteFile", path: path17 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -14842,8 +14844,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path16) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path16)}`;
+  async downloadFile(path17) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path17)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -14945,19 +14947,19 @@ var HubApi = class {
   async deploymentControlStore(owner, deploymentId) {
     const repoId = `${owner}/mlclaw-control-${deploymentId.replaceAll("-", "")}`;
     await this.ensurePrivateModelRepo(repoId);
-    const path16 = "control-lease.json";
+    const path17 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path16),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path17),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
     };
   }
   async deploymentClaimStore(owner) {
     const repoId = `${owner}/mlclaw-control-claims`;
     await this.ensurePrivateModelRepo(repoId);
-    const path16 = "control-lease.json";
+    const path17 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path16),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path17),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
     };
   }
   async createDockerSpace(repoId, options) {
@@ -15185,9 +15187,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path16) => ({
+      ...(params.deletePaths ?? []).map((path17) => ({
         key: "deletedFile",
-        value: { path: path16 }
+        value: { path: path17 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -15217,10 +15219,10 @@ var HubApi = class {
     if (info.sha) return;
     await this.commitModelDocument(repoId, "README.md", "", "# ML Claw deployment control\n");
   }
-  async readModelDocument(repoId, path16) {
+  async readModelDocument(repoId, path17) {
     const info = await this.requestJson(`/api/models/${repoId}`);
     if (!info.sha) throw new Error(`control repository ${repoId} has no revision`);
-    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path16.split("/").map(encodeURIComponent).join("/")}`;
+    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path17.split("/").map(encodeURIComponent).join("/")}`;
     const response = await this.fetchImpl(url, {
       headers: { Authorization: `Bearer ${this.token}` }
     });
@@ -15228,16 +15230,16 @@ var HubApi = class {
     if (!response.ok) throw new HubApiError2(response.status, url, await response.text());
     return { value: JSON.parse(await response.text()), revision: info.sha };
   }
-  async commitModelDocument(repoId, path16, parentCommit, value) {
+  async commitModelDocument(repoId, path17, parentCommit, value) {
     const header = {
       summary: value === null ? "Release deployment control" : "Update deployment control",
       description: "ML Claw deployment reconciliation state"
     };
     if (parentCommit) header.parentCommit = parentCommit;
-    const operation = value === null ? { key: "deletedFile", value: { path: path16 } } : {
+    const operation = value === null ? { key: "deletedFile", value: { path: path17 } } : {
       key: "file",
       value: {
-        path: path16,
+        path: path17,
         content: Buffer.from(typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}
 `).toString(
           "base64"
@@ -15383,10 +15385,11 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.5.0",
+  "packageVersion": "0.6.0",
   "openclawVersion": "2026.7.1",
   "brokerkitVersion": "hf-broker/v0.6.2",
   "brokerkitPluginVersion": "0.4.1",
+  "codexCliVersion": "0.145.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 
@@ -15396,6 +15399,7 @@ var OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
 var BROKERKIT_PLUGIN_VERSION = RELEASE_CONFIG.brokerkitPluginVersion;
 var BROKERKIT_VERSION = RELEASE_CONFIG.brokerkitVersion;
+var CODEX_CLI_VERSION = RELEASE_CONFIG.codexCliVersion;
 var RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
@@ -15498,6 +15502,7 @@ function imageDockerfile(runtimeImage) {
 function bundledDockerfile() {
   return `ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
 ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
+ARG CODEX_CLI_VERSION=${CODEX_CLI_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
@@ -15542,7 +15547,9 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
 ARG BROKERKIT_PLUGIN_VERSION
+ARG CODEX_CLI_VERSION
 RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
+RUN npm install --global --omit=dev --omit=peer --no-audit --no-fund "@openai/codex@\${CODEX_CLI_VERSION}"   && codex --version
 
 COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
@@ -15700,6 +15707,120 @@ async function assertNoLiveForeignLease(params) {
   throw new Error(
     `another gateway appears active (${lease.gatewayLocation}, ${lease.runtimeId}, heartbeat ${lease.lastHeartbeatAt}); pass --takeover to replace it`
   );
+}
+
+// src/mlclaw/codex-auth.ts
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
+var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
+function codexAuthObjectPath(statePrefix) {
+  return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_OBJECT_BASENAME}`;
+}
+function codexAuthContext(params) {
+  return compactContext({
+    ...params.deploymentId ? { deploymentId: params.deploymentId } : {},
+    ...params.bucket ? { bucket: params.bucket } : {},
+    statePrefix: normalizeBucketPrefix(params.statePrefix)
+  });
+}
+function encodeCodexAuthDocument(params) {
+  if (!params.authJson || typeof params.authJson !== "object" || Array.isArray(params.authJson)) {
+    throw new Error("Codex auth.json must contain a JSON object");
+  }
+  const authJson = params.authJson;
+  const authMode = typeof authJson.auth_mode === "string" ? authJson.auth_mode : void 0;
+  if (authMode && authMode !== "chatgpt") {
+    throw new Error("Codex auth.json is not a ChatGPT account login");
+  }
+  if (!authMode && !("tokens" in authJson)) {
+    throw new Error("Codex auth.json does not look like account credentials");
+  }
+  return {
+    version: 1,
+    kind: "codex-auth",
+    authJson,
+    updatedAt: params.now.toISOString()
+  };
+}
+function encryptCodexAuthDocument(params) {
+  const context = compactContext(params.context);
+  const key = deriveCodexAuthKey(params.secret);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(contextAad(context));
+  const plaintext = Buffer.from(JSON.stringify(params.document), "utf8");
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const envelope = {
+    version: 1,
+    kind: "codex-auth",
+    algorithm: "aes-256-gcm",
+    context,
+    iv: iv.toString("base64url"),
+    tag: cipher.getAuthTag().toString("base64url"),
+    ciphertext: ciphertext.toString("base64url")
+  };
+  return `${JSON.stringify(envelope)}
+`;
+}
+function decryptCodexAuthDocument(params) {
+  const envelope = JSON.parse(params.encrypted);
+  if (envelope.version !== 1 || envelope.kind !== "codex-auth" || envelope.algorithm !== "aes-256-gcm" || !envelope.context || typeof envelope.context !== "object" || !envelope.iv || !envelope.tag || !envelope.ciphertext) {
+    throw new Error("invalid Codex auth envelope");
+  }
+  const context = compactContext(envelope.context);
+  assertContextMatches(context, params.expectedContext);
+  const key = deriveCodexAuthKey(params.secret);
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64url"));
+  decipher.setAAD(contextAad(context));
+  decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+  const plaintext = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, "base64url")), decipher.final()]);
+  return decodeCodexAuthDocument(JSON.parse(plaintext.toString("utf8")));
+}
+function decodeCodexAuthDocument(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid Codex auth document");
+  }
+  const record2 = value;
+  if (record2.version !== 1 || record2.kind !== "codex-auth") {
+    throw new Error("invalid Codex auth document");
+  }
+  if (!record2.authJson || typeof record2.authJson !== "object" || Array.isArray(record2.authJson)) {
+    throw new Error("invalid Codex auth document");
+  }
+  const updatedAt = typeof record2.updatedAt === "string" ? record2.updatedAt : void 0;
+  if (!updatedAt || Number.isNaN(Date.parse(updatedAt))) {
+    throw new Error("invalid Codex auth document");
+  }
+  return {
+    version: 1,
+    kind: "codex-auth",
+    authJson: record2.authJson,
+    updatedAt
+  };
+}
+function deriveCodexAuthKey(secret) {
+  return Buffer.from(
+    hkdfSync("sha256", Buffer.from(secret, "utf8"), Buffer.alloc(0), Buffer.from("mlclaw:codex-auth:v1"), 32)
+  );
+}
+function compactContext(context) {
+  const statePrefix = normalizeBucketPrefix(context.statePrefix);
+  return {
+    ...context.deploymentId ? { deploymentId: context.deploymentId } : {},
+    ...context.bucket ? { bucket: context.bucket } : {},
+    statePrefix
+  };
+}
+function assertContextMatches(observed, expected) {
+  if (!expected) return;
+  const normalized = compactContext(expected);
+  for (const key of ["deploymentId", "bucket", "statePrefix"]) {
+    if (normalized[key] && observed[key] !== normalized[key]) {
+      throw new Error("Codex auth context does not match this deployment");
+    }
+  }
+}
+function contextAad(context) {
+  return Buffer.from(JSON.stringify(compactContext(context)), "utf8");
 }
 
 // src/mlclaw-space-runtime/model-default.ts
@@ -16198,8 +16319,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path16, errorMaps, issueData } = params;
-  const fullPath = [...path16, ...issueData.path || []];
+  const { data, path: path17, errorMaps, issueData } = params;
+  const fullPath = [...path17, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -16315,11 +16436,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path16, key) {
+  constructor(parent, value, path17, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path16;
+    this._path = path17;
     this._key = key;
   }
   get path() {
@@ -20268,8 +20389,8 @@ async function readDocument(client, file, schema) {
   if (blob.size > MAX_CONTROL_BYTES) throw new Error(`${file} exceeds ${MAX_CONTROL_BYTES} bytes`);
   return schema.parse(JSON.parse(await blob.text()));
 }
-function jsonBlob(path16, value) {
-  return { path: path16, content: new Blob([stringify(value)], { type: "application/json" }) };
+function jsonBlob(path17, value) {
+  return { path: path17, content: new Blob([stringify(value)], { type: "application/json" }) };
 }
 function stringify(value) {
   return `${JSON.stringify(value, null, 2)}
@@ -20571,6 +20692,7 @@ var REMOTE_DISCOVERY_TIMEOUT_MS = 2e4;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 var DEFAULT_CANONICAL_TEMPLATE_SPACE = "osolmaz/mlclaw";
+var CODEX_CLI_INSTALL_COMMAND = "npm install --global @openai/codex@0.145.0";
 var PAID_HARDWARE_COST_NOTE = "Paid Hugging Face Space hardware costs money while allocated. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
   isInteractive: () => Boolean(process4.stdin.isTTY && process4.stdout.isTTY),
@@ -20596,6 +20718,7 @@ function createRuntime(overrides = {}) {
     dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
     podmanRunner: overrides.podmanRunner ?? new CliPodmanRunner(),
     tailscaleRunner: overrides.tailscaleRunner ?? new CliTailscaleRunner(),
+    codexDeviceLogin: overrides.codexDeviceLogin ?? (async (codexHome) => await runCodexDeviceLogin(codexHome)),
     configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process4.env),
     now: overrides.now ?? (() => /* @__PURE__ */ new Date()),
     sleep: overrides.sleep ?? delay2,
@@ -20642,6 +20765,16 @@ function createProgram(runtimeOverrides = {}) {
   });
   credentials.command("repair").description("Replace and apply the dedicated HF Broker credential").argument("[agent]", "Agent name; inferred when exactly one deployment exists").option("--broker-hf-token-file <path>", "File containing MLCLAW_BROKER_HF_TOKEN=... or a raw token").action(async (agent, opts) => {
     await credentialsRepair(agent, opts, runtime);
+  });
+  const codexCredentials = credentials.command("codex").description("Manage deployment-scoped OpenAI Codex account credentials");
+  codexCredentials.command("login").description("Connect a Codex ChatGPT account to one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").option("--auth-json-file <path>", "Advanced: import a Codex auth.json file for this deployment").action(async (agent, opts) => {
+    await codexCredentialsLogin(agent, opts, runtime);
+  });
+  codexCredentials.command("status").description("Show the Codex credential status for one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").action(async (agent) => {
+    await codexCredentialsStatus(agent, runtime);
+  });
+  codexCredentials.command("logout").description("Remove Codex account credentials from one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").action(async (agent) => {
+    await codexCredentialsLogout(agent, runtime);
   });
   const gateway = program2.command("gateway").description("Operate a ML Claw gateway");
   gateway.command("start").argument("<agent>", "Agent name").option("--docker-context <name>", "Set Docker context only when the deployment has no pinned context").option("--local-port <port>", "Loopback port for the local gateway", parseLocalPort).option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode).option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort).option("--no-pull", "Do not docker pull before starting a local gateway").option("--takeover", "Start even if another live runtime lease is present", false).action(async (agent, opts) => {
@@ -21343,14 +21476,14 @@ async function resolveBootstrapPlan(params) {
     existingSecrets,
     runtime
   });
-  const sessionSecret = existingSecrets.MLCLAW_SESSION_SECRET ?? randomBytes(48).toString("base64url");
+  const sessionSecret = existingSecrets.MLCLAW_SESSION_SECRET ?? randomBytes2(48).toString("base64url");
   const restoredCredentialKey = existingSecrets.MLCLAW_CREDENTIAL_KEY ?? runtime.env.MLCLAW_CREDENTIAL_KEY;
   if (existingManifest?.recoveredWithoutCredentialKey && !restoredCredentialKey) {
     throw new Error(
       "recovered deployment requires its existing MLCLAW_CREDENTIAL_KEY; restore it in the environment and rerun bootstrap"
     );
   }
-  const credentialKey = restoredCredentialKey ?? randomBytes(32).toString("base64url");
+  const credentialKey = restoredCredentialKey ?? randomBytes2(32).toString("base64url");
   const credentialKeySha256 = createHash4("sha256").update(credentialKey).digest("hex");
   if (existingManifest?.credentialKeySha256 && existingManifest.credentialKeySha256 !== credentialKeySha256) {
     throw new Error("MLCLAW_CREDENTIAL_KEY does not match the recovered deployment");
@@ -21448,6 +21581,7 @@ async function resolveBootstrapPlan(params) {
     gatewayLocation,
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
+    deploymentId: manifest.deploymentId,
     ...bucketPrefix ? { bucketPrefix } : {},
     ...effectiveTelegramProxy ? { telegramProxy: effectiveTelegramProxy } : {},
     ...effectiveTelegramApiRoot ? { telegramApiRoot: effectiveTelegramApiRoot } : {},
@@ -21816,7 +21950,8 @@ async function stateAdopt(agent, opts, runtime) {
     OPENCLAW_MODEL: updated.model,
     MLCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
     MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-    MLCLAW_RUNTIME_ID: runtimeIdFor(updated)
+    MLCLAW_RUNTIME_ID: runtimeIdFor(updated),
+    MLCLAW_DEPLOYMENT_ID: updated.deploymentId
   };
   const reconciled = await reconcileManifest({
     manifest: updated,
@@ -21873,7 +22008,8 @@ async function stateAdopt(agent, opts, runtime) {
           OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
           MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
           MLCLAW_GATEWAY_LOCATION: "space",
-          MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent)
+          MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId
         },
         assertLease
       );
@@ -21919,7 +22055,9 @@ async function inspectStateBucket(hub, bucket, bucketPrefix) {
   const prefix = normalizeBucketPrefix(bucketPrefix);
   const prefixWithSlash = `${prefix}/`;
   const manifestPath2 = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
-  const payloadEntries = fileEntries.filter((entry) => !entry.path.startsWith(".mlclaw/"));
+  const payloadEntries = fileEntries.filter(
+    (entry) => !entry.path.startsWith(".mlclaw/") && !entry.path.startsWith(`${prefixWithSlash}.mlclaw/`)
+  );
   const stateEntries = payloadEntries.filter(
     (entry) => entry.path === manifestPath2 || entry.path.startsWith(`${prefixWithSlash}snapshots/`) || entry.path.startsWith(`${prefixWithSlash}runtime/`)
   );
@@ -21984,6 +22122,7 @@ function deploymentSecrets(params) {
     MLCLAW_GATEWAY_LOCATION: params.gatewayLocation,
     MLCLAW_RUNTIME_IMAGE: params.runtimeImage,
     MLCLAW_RUNTIME_ID: params.runtimeId,
+    MLCLAW_DEPLOYMENT_ID: params.deploymentId,
     MLCLAW_SESSION_SECRET: params.sessionSecret,
     MLCLAW_CREDENTIAL_KEY: params.credentialKey,
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
@@ -22144,6 +22283,7 @@ function spaceGatewayNeedsRepair(manifest, variables, runtime, allowedUsers) {
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
     MLCLAW_ALLOWED_USERS: allowedUsers,
     MLCLAW_ADMINS: allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -22199,6 +22339,7 @@ async function deploySpaceGateway(params) {
       MLCLAW_GATEWAY_LOCATION: "space",
       MLCLAW_RUNTIME_IMAGE: spaceRuntimeRef,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+      MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
       MLCLAW_ALLOWED_USERS: params.allowedUsers,
       MLCLAW_ADMINS: params.allowedUsers,
       MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -22237,7 +22378,7 @@ async function startLocalGateway(params) {
   }
   let secrets = await ensureDeploymentCredentialKey(runtime, manifest.agent);
   if (!secrets.MLCLAW_SESSION_SECRET) {
-    secrets = { ...secrets, MLCLAW_SESSION_SECRET: randomBytes(48).toString("base64url") };
+    secrets = { ...secrets, MLCLAW_SESSION_SECRET: randomBytes2(48).toString("base64url") };
     await writeSecretEnv(runtime.configRoot, manifest.agent, secrets);
   }
   const accessSecrets = localAccessSecrets(manifest.owner, localGatewayPort(manifest), secrets, manifest.networkAccess);
@@ -22638,7 +22779,8 @@ async function gatewayMigrate(agent, opts, runtime) {
           ...deploymentSecrets2,
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
-          MLCLAW_RUNTIME_ID: spaceRuntimeId(agent)
+          MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId
         });
         await writeManifest(runtime.configRoot, updated);
       }
@@ -22689,6 +22831,7 @@ async function gatewayMigrate(agent, opts, runtime) {
           MLCLAW_GATEWAY_LOCATION: "local",
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: updated.localRuntimeId,
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
           ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess)
         });
         await assertLease();
@@ -23164,7 +23307,7 @@ function nonEmpty(value) {
   return trimmed ? trimmed : void 0;
 }
 function newLocalRuntimeId(agent) {
-  return `local-${agent}-${randomBytes(8).toString("hex")}`;
+  return `local-${agent}-${randomBytes2(8).toString("hex")}`;
 }
 function runtimeIdFor(manifest) {
   return manifest.gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(manifest.agent);
@@ -23187,7 +23330,7 @@ async function handoffAndStopLocalGateway(params) {
   }
   await runner.disableRestart(containerName, connection);
   const handoffStartedAt = params.runtime.now();
-  const requestId = randomBytes(16).toString("hex");
+  const requestId = randomBytes2(16).toString("hex");
   await writeRuntimeHandoffRequest(
     params.hub,
     params.manifest.bucket,
@@ -23217,7 +23360,7 @@ async function handoffAndStopLocalGateway(params) {
 }
 async function disableAndPauseSpaceGateway(params) {
   const handoffStartedAt = params.runtime.now();
-  const requestId = randomBytes(16).toString("hex");
+  const requestId = randomBytes2(16).toString("hex");
   const shouldWaitForHandoff = await spaceGatewayShouldWaitForHandoff(params);
   if (!shouldWaitForHandoff) {
     await params.hub.addSpaceVariable(params.manifest.space, "MLCLAW_GATEWAY_DISABLED", "1");
@@ -23312,7 +23455,7 @@ async function ensureDeploymentCredentialKey(runtime, agent, existing) {
   }
   const updated = {
     ...secrets,
-    MLCLAW_CREDENTIAL_KEY: randomBytes(32).toString("base64url")
+    MLCLAW_CREDENTIAL_KEY: randomBytes2(32).toString("base64url")
   };
   await writeSecretEnv(runtime.configRoot, agent, updated);
   return updated;
@@ -23375,6 +23518,9 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   }
   await hub.addSpaceVariable(repoId, "MLCLAW_GATEWAY_LOCATION", "space");
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
+  if (localManifest) {
+    await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_ID", localManifest.deploymentId);
+  }
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value;
@@ -23410,7 +23556,8 @@ async function reconcileUpdatedDeployment(localManifest, runtimeImage, hub, runt
         ...currentSecrets,
         MLCLAW_GATEWAY_LOCATION: "space",
         MLCLAW_RUNTIME_IMAGE: runtimeImage,
-        MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent)
+        MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
+        MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
       });
     }
   });
@@ -23589,7 +23736,7 @@ async function doctor(repoId, opts, hub, runtime) {
   }
   if (!secrets.has("MLCLAW_SESSION_SECRET")) {
     if (fix) {
-      await hub.addSpaceSecret(repoId, "MLCLAW_SESSION_SECRET", randomBytes(48).toString("base64url"));
+      await hub.addSpaceSecret(repoId, "MLCLAW_SESSION_SECRET", randomBytes2(48).toString("base64url"));
       fixed.push("set secret MLCLAW_SESSION_SECRET");
     } else {
       issues.push("secret MLCLAW_SESSION_SECRET is missing");
@@ -23598,7 +23745,7 @@ async function doctor(repoId, opts, hub, runtime) {
   if (!secrets.has("MLCLAW_CREDENTIAL_KEY")) {
     if (fix) {
       const agent = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
-      const credentialKey = await manifestExists(runtime.configRoot, agent) ? requiredSecret(await ensureDeploymentCredentialKey(runtime, agent), "MLCLAW_CREDENTIAL_KEY") : randomBytes(32).toString("base64url");
+      const credentialKey = await manifestExists(runtime.configRoot, agent) ? requiredSecret(await ensureDeploymentCredentialKey(runtime, agent), "MLCLAW_CREDENTIAL_KEY") : randomBytes2(32).toString("base64url");
       await hub.addSpaceSecret(repoId, "MLCLAW_CREDENTIAL_KEY", credentialKey);
       fixed.push("set secret MLCLAW_CREDENTIAL_KEY");
     } else {
@@ -23917,6 +24064,101 @@ async function readOptionalRouterTokenFile(file) {
   const parsed = parseSecretEnv(raw);
   return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
 }
+async function codexCredentialsLogin(requestedAgent, opts, runtime) {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
+    const current = await readManifest(runtime.configRoot, manifest.agent);
+    const secrets = await readSecretEnv(runtime.configRoot, current.agent);
+    const credentialKey = await verifiedDeploymentCredentialKey(current, secrets, runtime);
+    const statePrefix = persistedBucketPrefix(secrets);
+    const authJson = opts.authJsonFile ? await readCodexAuthJsonFile(opts.authJsonFile) : await runTemporaryCodexDeviceLogin(current, runtime);
+    const document = encodeCodexAuthDocument({ authJson, now: runtime.now() });
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const control = await hub.deploymentControlStore(current.owner, current.deploymentId);
+    const operation = newOperation(current, runtime.now());
+    let lease = await acquireControlLease(control, current, operation, runtime.now());
+    let renewalError;
+    let renewal = Promise.resolve();
+    const renewalTimer = setInterval(() => {
+      renewal = renewal.then(async () => {
+        if (renewalError) return;
+        try {
+          lease = await renewControlLease(control, lease, runtime.now());
+        } catch (error) {
+          renewalError = error;
+        }
+      });
+    }, 45e3);
+    const assertLease = async () => {
+      await renewal;
+      if (renewalError) throw renewalError;
+      await assertControlLease(control, lease, runtime.now());
+      if (renewalError) throw renewalError;
+    };
+    try {
+      await assertLease();
+      await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
+      await assertLease();
+      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
+      await assertLease();
+      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
+    } finally {
+      clearInterval(renewalTimer);
+      await renewal;
+      await releaseControlLease(control, lease);
+    }
+    runtime.stdout.log(`Codex credentials connected: ${current.agent}`);
+  });
+}
+async function codexCredentialsStatus(requestedAgent, runtime) {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  const secrets = await readSecretEnv(runtime.configRoot, manifest.agent);
+  const credentialKey = await verifiedDeploymentCredentialKey(manifest, secrets, runtime);
+  const token = await runtime.readToken(runtime.env);
+  const hub = runtime.hubFactory(token);
+  const statePrefix = persistedBucketPrefix(secrets);
+  const encrypted = await readCodexCredentialBundle({ hub, manifest, statePrefix });
+  if (!encrypted) {
+    runtime.stdout.log(`Agent: ${manifest.agent}`);
+    runtime.stdout.log("Codex account: not configured");
+    return;
+  }
+  const document = decryptCodexAuthDocument({
+    encrypted,
+    secret: credentialKey,
+    expectedContext: codexContextForManifest(manifest, statePrefix)
+  });
+  runtime.stdout.log(`Agent: ${manifest.agent}`);
+  runtime.stdout.log("Codex account: configured");
+  runtime.stdout.log(`Updated: ${document.updatedAt}`);
+  runtime.stdout.log(`Credential object: ${codexAuthObjectPath(statePrefix)}`);
+}
+async function codexCredentialsLogout(requestedAgent, runtime) {
+  const manifest = await credentialManifest(requestedAgent, runtime);
+  await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
+    const current = await readManifest(runtime.configRoot, manifest.agent);
+    const secrets = await readSecretEnv(runtime.configRoot, current.agent);
+    await verifiedDeploymentCredentialKey(current, secrets, runtime);
+    const statePrefix = persistedBucketPrefix(secrets);
+    const token = await runtime.readToken(runtime.env);
+    const hub = runtime.hubFactory(token);
+    const control = await hub.deploymentControlStore(current.owner, current.deploymentId);
+    const operation = newOperation(current, runtime.now());
+    const lease = await acquireControlLease(control, current, operation, runtime.now());
+    try {
+      await assertControlLease(control, lease, runtime.now());
+      await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
+      await assertControlLease(control, lease, runtime.now());
+      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
+        await assertControlLease(control, lease, runtime.now());
+      });
+    } finally {
+      await releaseControlLease(control, lease);
+    }
+    runtime.stdout.log(`Codex credentials removed: ${current.agent}`);
+  });
+}
 async function credentialsStatus(requestedAgent, runtime) {
   const manifest = await credentialManifest(requestedAgent, runtime);
   await verifiedStoredBrokerCredential(manifest, runtime);
@@ -24020,6 +24262,110 @@ async function credentialsRepair(requestedAgent, opts, runtime) {
     }
     runtime.stdout.log(`HF Broker credential repaired: ${manifest.agent}`);
   });
+}
+async function verifiedDeploymentCredentialKey(manifest, secrets, runtime) {
+  if (manifest.recoveredWithoutCredentialKey) {
+    throw new Error(
+      `deployment ${manifest.agent} was recovered without its credential key; run bootstrap or repair from a machine that has the original key`
+    );
+  }
+  const credentialKey = nonEmpty(secrets.MLCLAW_CREDENTIAL_KEY);
+  if (!credentialKey) {
+    throw new Error(`deployment ${manifest.agent} has no MLCLAW_CREDENTIAL_KEY`);
+  }
+  const fingerprint = createHash4("sha256").update(credentialKey).digest("hex");
+  if (manifest.credentialKeySha256 && manifest.credentialKeySha256 !== fingerprint) {
+    throw new Error("local credential key fingerprint does not match the deployment manifest");
+  }
+  const token = await runtime.readToken(runtime.env);
+  const identity = await readDeploymentIdentity(runtime.hubFactory(token).bucket(manifest.bucket));
+  if (!identity) {
+    throw new Error(`bucket ${manifest.bucket} has no canonical deployment identity`);
+  }
+  if (identity.deploymentId !== manifest.deploymentId || identity.bucket !== manifest.bucket) {
+    throw new Error(`bucket ${manifest.bucket} belongs to another deployment`);
+  }
+  if (identity.credentialKeySha256 !== fingerprint) {
+    throw new Error("local credential key fingerprint does not match canonical deployment identity");
+  }
+  return credentialKey;
+}
+async function readCodexAuthJsonFile(file) {
+  const parsed = JSON.parse(await fs15.readFile(file, "utf8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Codex auth JSON file must contain an object");
+  }
+  return parsed;
+}
+async function runTemporaryCodexDeviceLogin(manifest, runtime) {
+  if (!runtime.prompt.isInteractive()) {
+    throw new Error("Codex device login requires an interactive terminal or --auth-json-file");
+  }
+  await assertCodexCliAvailable();
+  const parent = await fs15.mkdtemp(path16.join(os8.tmpdir(), `mlclaw-codex-${manifest.agent}-`));
+  try {
+    await fs15.writeFile(
+      path16.join(parent, "config.toml"),
+      'cli_auth_credentials_store = "file"\nforced_login_method = "chatgpt"\n',
+      { encoding: "utf8", mode: 384 }
+    );
+    runtime.prompt.note(
+      `ML Claw will start Codex device login for deployment ${manifest.agent}. Complete the OpenAI login shown by Codex; the resulting auth file is encrypted into this deployment only.`,
+      "Codex login"
+    );
+    await runtime.codexDeviceLogin(parent);
+    return await readCodexAuthJsonFile(path16.join(parent, "auth.json"));
+  } finally {
+    await fs15.rm(parent, { recursive: true, force: true });
+  }
+}
+function codexContextForManifest(manifest, statePrefix) {
+  return codexAuthContext({
+    deploymentId: manifest.deploymentId,
+    bucket: manifest.bucket,
+    ...statePrefix ? { statePrefix } : {}
+  });
+}
+async function writeCodexCredentialBundle(params) {
+  const encrypted = encryptCodexAuthDocument({
+    document: params.document,
+    secret: params.credentialKey,
+    context: codexContextForManifest(params.manifest, params.statePrefix)
+  });
+  await params.hub.bucket(params.manifest.bucket).uploadFiles([{ path: codexAuthObjectPath(params.statePrefix), content: new Blob([encrypted]) }]);
+}
+async function readCodexCredentialBundle(params) {
+  const blob = await params.hub.bucket(params.manifest.bucket).downloadFile(codexAuthObjectPath(params.statePrefix));
+  return blob ? await blob.text() : void 0;
+}
+async function ensureRuntimeDeploymentId(manifest, secrets, hub, runtime, assertLease) {
+  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    return;
+  }
+  await assertLease();
+  await writeSecretEnv(runtime.configRoot, manifest.agent, {
+    ...secrets,
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
+  });
+}
+async function restartDeploymentForCredentialChange(manifest, runtime, hub, assertLease) {
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.restartSpace(manifest.space, true);
+    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
+    return;
+  }
+  const runner = localRunnerFor(manifest, runtime);
+  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
+  if (!existing?.running) {
+    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
+    return;
+  }
+  await assertLease();
+  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 async function credentialManifest(requestedAgent, runtime) {
   if (requestedAgent) return await readManifest(runtime.configRoot, requestedAgent);
@@ -24317,6 +24663,56 @@ function parseInteger(value) {
 function parseTailscaleMode(value) {
   if (value === "off" || value === "direct" || value === "serve") return value;
   throw new InvalidArgumentError(`expected tailscale mode off, direct, or serve; got ${value}`);
+}
+async function assertCodexCliAvailable() {
+  await new Promise((resolve, reject) => {
+    const child = spawn2("codex", ["--version"], { stdio: "ignore", env: codexLoginEnvironment(os8.tmpdir()) });
+    child.once("error", () => {
+      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
+    });
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
+    });
+  });
+}
+async function runCodexDeviceLogin(codexHome) {
+  await assertCodexCliAvailable();
+  await new Promise((resolve, reject) => {
+    const child = spawn2("codex", ["login", "--device-auth"], {
+      stdio: "inherit",
+      env: codexLoginEnvironment(codexHome)
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(`codex login failed${signal ? ` with signal ${signal}` : ` with exit code ${code ?? "unknown"}`}`)
+      );
+    });
+  });
+}
+function codexLoginEnvironment(codexHome) {
+  return {
+    PATH: process4.env.PATH,
+    HOME: process4.env.HOME ?? os8.homedir(),
+    USER: process4.env.USER,
+    LOGNAME: process4.env.LOGNAME,
+    TERM: process4.env.TERM,
+    COLORTERM: process4.env.COLORTERM,
+    LANG: process4.env.LANG,
+    LC_ALL: process4.env.LC_ALL,
+    SSL_CERT_FILE: process4.env.SSL_CERT_FILE,
+    SSL_CERT_DIR: process4.env.SSL_CERT_DIR,
+    NODE_EXTRA_CA_CERTS: process4.env.NODE_EXTRA_CA_CERTS,
+    CODEX_HOME: codexHome
+  };
 }
 function parseLocalPort(value) {
   if (!/^\d+$/.test(value)) {

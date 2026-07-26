@@ -2,7 +2,8 @@ ARG OPENCLAW_VERSION=2026.7.1
 ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
 ARG BROKERKIT_PLUGIN_VERSION=0.4.1
 ARG BROKERKIT_VERSION=hf-broker/v0.6.2
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.5.0-openclaw-2026.7.1
+ARG CODEX_CLI_VERSION=0.145.0
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.6.0-openclaw-2026.7.1
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
@@ -55,9 +56,12 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
   "uv==0.11.28" \
   "hf-discover==1.3.7"
 ARG BROKERKIT_PLUGIN_VERSION
+ARG CODEX_CLI_VERSION
 RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins \
   "openclaw-brokerkit@${BROKERKIT_PLUGIN_VERSION}" \
   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
+RUN npm install --global --omit=dev --omit=peer --no-audit --no-fund "@openai/codex@${CODEX_CLI_VERSION}" \
+  && codex --version
 
 COPY --from=sync-build /build/dist/hf-state-sync.js /app/hf-state-sync.js
 COPY --from=sync-build /build/dist/hf-tooling-seed.js /app/hf-tooling-seed.js

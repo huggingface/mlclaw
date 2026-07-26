@@ -66,7 +66,10 @@ export type SpaceRuntimeConfig = {
   gatewayLocation: string | undefined;
   runtimeImage: string | undefined;
   runtimeId: string | undefined;
+  deploymentId: string | undefined;
   templateRev: string | undefined;
+  codexHome: string;
+  codexAuthStoreFile: string;
   assetsDir: string;
   branding: RuntimeBranding;
 };
@@ -117,11 +120,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     (stateMountDir
       ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc`
       : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
+  const protectedControlDir = `${pathDirname(pathDirname(runtimeSettingsFile))}/.mlclaw-protected/control`;
+  const mountedControlDir = stateMountDir
+    ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw`
+    : undefined;
   const openaiCredentialStoreFile =
     trim(env.MLCLAW_OPENAI_CREDENTIAL_STORE_FILE) ??
-    (stateMountDir
-      ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/openai-api-key.enc`
-      : `${pathDirname(pathDirname(runtimeSettingsFile))}/.mlclaw-protected/control/openai-api-key.enc`);
+    (mountedControlDir ? `${mountedControlDir}/openai-api-key.enc` : `${protectedControlDir}/openai-api-key.enc`);
+  const codexAuthStoreFile =
+    trim(env.MLCLAW_CODEX_AUTH_STORE_FILE) ??
+    (mountedControlDir ? `${mountedControlDir}/codex-auth.enc` : `${protectedControlDir}/codex-auth.enc`);
   const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
@@ -191,7 +199,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     gatewayLocation,
     runtimeImage: trim(env.MLCLAW_RUNTIME_IMAGE),
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
+    deploymentId: trim(env.MLCLAW_DEPLOYMENT_ID),
     templateRev: trim(env.MLCLAW_TEMPLATE_REV),
+    codexHome: trim(env.CODEX_HOME) ?? trim(env.MLCLAW_CODEX_HOME) ?? "/tmp/mlclaw-codex",
+    codexAuthStoreFile,
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName),
   };
