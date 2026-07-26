@@ -5,7 +5,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { HubApi } from "./hub-api.js";
-import { BROKERKIT_PLUGIN_VERSION, BROKERKIT_VERSION, OPENCLAW_BASE_IMAGE } from "./runtime-image.js";
+import {
+  BROKERKIT_PLUGIN_VERSION,
+  BROKERKIT_VERSION,
+  CODEX_CLI_VERSION,
+  OPENCLAW_BASE_IMAGE,
+} from "./runtime-image.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -106,6 +111,7 @@ function imageDockerfile(runtimeImage: string): string {
 function bundledDockerfile(): string {
   return `ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
 ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
+ARG CODEX_CLI_VERSION=${CODEX_CLI_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
@@ -150,9 +156,12 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
 ARG BROKERKIT_PLUGIN_VERSION
+ARG CODEX_CLI_VERSION
 RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins \
   "openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}" \
   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
+RUN npm install --global --omit=dev --omit=peer --no-audit --no-fund "@openai/codex@\${CODEX_CLI_VERSION}" \
+  && codex --version
 
 COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
