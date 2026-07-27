@@ -1,14 +1,14 @@
-# Codex Device Login and Provider Plan
+# OpenAI Device Login and Native Provider Plan
 
 Date: 2026-07-09
 
-Status: implemented for CLI-managed deployment credentials and automatic OpenClaw provider activation; browser UI remains future work
+Status: device login and encrypted credential staging are implemented; direct native OpenAI profile integration is planned
 
 ## Goal
 
-ML Claw lets an administrator connect a ChatGPT account to one deployment through OpenAI's Codex device-code flow. After login, Codex appears automatically as a selectable OpenClaw provider and survives runtime restarts.
+ML Claw lets an administrator connect a ChatGPT account to one deployment through OpenAI's device-code flow. MLClaw then imports that credential into OpenClaw's native private `openai` OAuth profile so OpenClaw can discover account models, call OpenAI directly, refresh credentials, and use ordinary `openai/*` model references.
 
-The flow does not require a local Codex installation or a Codex binary in the ML Claw runtime. OpenClaw never receives the OpenAI access token, refresh token, encrypted credential object, or deployment encryption key.
+The target design has no custom `mlclaw-codex` provider and no MLClaw proxy for model discovery or inference. It requires no OpenClaw source changes.
 
 ## Device Login
 
@@ -19,10 +19,10 @@ ML Claw implements the device-code protocol directly over HTTPS:
 3. Poll `https://auth.openai.com/api/accounts/deviceauth/token` until approval or the 15-minute deadline.
 4. Exchange the returned authorization code and verifier at `https://auth.openai.com/oauth/token`.
 5. Validate that the access-token JWT contains a ChatGPT account id and expiry.
-6. Encrypt the normalized OAuth credential into the selected deployment's private bucket.
-7. Restart the deployment runtime so the provider appears without manual configuration.
+6. Encrypt the normalized OAuth credential into the selected deployment's private bucket as staging data.
+7. Restart the deployment runtime so it can import the credential into OpenClaw's native auth store.
 
-The implementation follows the OpenAI Codex OAuth flow in Pi's MIT-licensed `packages/ai/src/auth/oauth/openai-codex.ts`. ML Claw owns the small protocol implementation locally, so installing ML Claw does not pull in Pi or Codex.
+The implementation follows the OpenAI OAuth flow in Pi's MIT-licensed `packages/ai/src/auth/oauth/openai-codex.ts`. ML Claw owns the small protocol implementation locally, so installing ML Claw does not pull in Pi or Codex.
 
 ## Commands
 
@@ -34,13 +34,13 @@ mlclaw credentials codex logout <agent>
 
 `login` prints only the verification URL, one-time user code, progress, and completion status. It never prints access or refresh tokens.
 
-`status` reports whether the selected deployment has an encrypted credential and when it was updated. It does not return account tokens.
+`status` reports whether the deployment has the managed native OpenAI OAuth profile or a pending encrypted credential import. It does not return account tokens.
 
-`logout` writes an authoritative revocation marker, deletes the encrypted credential, and restarts the deployment so the provider is removed.
+`logout` writes an authoritative revocation marker, removes pending encrypted credentials and the managed OpenClaw OAuth profile, and restarts the deployment. It must not affect unrelated OpenAI API-key or OAuth profiles.
 
-## Credential Persistence
+## Credential Ownership and Migration
 
-The encrypted credential object lives at:
+The encrypted credential object currently lives at:
 
 ```text
 <state-prefix>/.mlclaw/codex-auth.enc
@@ -52,89 +52,85 @@ Logout first writes:
 <state-prefix>/.mlclaw/codex-auth.revoked
 ```
 
-The encryption key is derived from `MLCLAW_CREDENTIAL_KEY` with provider-specific HKDF context. AES-256-GCM additional authenticated data binds the object to the deployment id, bucket, and state prefix. Moving deployment state to another bucket decrypts and re-encrypts the credential for the new authenticated context before deleting the old copy.
+In the target design, the encrypted object is a one-time staging format. On startup, MLClaw validates and imports it into a managed native OpenClaw OAuth profile such as `openai:mlclaw`. After the native profile is durably written, MLClaw removes the staging object. OpenClaw's private auth profile becomes the canonical credential and owns refresh-token rotation.
 
-The runtime refreshes expiring OAuth credentials inside the trusted ML Claw process and writes rotated credentials back to the encrypted object. Refresh persistence uses optimistic comparison so an old runtime cannot overwrite a newer login. The revocation marker remains authoritative if logout races with refresh.
+Migration must:
 
-Never store raw OAuth credentials in:
+- preserve unrelated auth profiles and profile ordering;
+- atomically write the managed profile with restrictive permissions and the OpenClaw runtime uid/gid;
+- refuse to overwrite a newer valid native profile with an older staged credential;
+- delete staging data only after a verified native-profile write;
+- keep the revocation marker authoritative if logout races with import;
+- import `goept`'s existing encrypted credential without requiring another login;
+- preserve deployment and bucket adoption behavior.
 
-- the Space repository;
-- Space variables or secrets;
-- OpenClaw config, environment, workspace, or state snapshots;
-- browser responses;
-- logs;
-- unencrypted bucket objects.
+The native OpenClaw auth store is an explicitly accepted trust boundary for this direct design. OAuth credentials must still never appear in browser responses, logs, repositories, Space variables, model configuration, or workspace files.
 
-## Trusted Provider Boundary
+## Native OpenAI Provider
 
-When encrypted credentials are available, ML Claw adds the following custom provider to generated OpenClaw config:
+When the managed OAuth profile exists, MLClaw configures only OpenClaw's native `openai` provider and native `openai/*` model references. OpenClaw owns account model discovery, model metadata, parsing, the ChatGPT Responses transport, authentication, and refresh.
 
-```text
-mlclaw-codex/gpt-5.4
-```
+MLClaw must:
 
-OpenClaw sends ChatGPT Responses requests to a loopback-only ML Claw endpoint. Its configured API key is a deployment-scoped internal capability JWT derived from `MLCLAW_SESSION_SECRET`; it is not an OpenAI credential.
+- remove the custom `mlclaw-codex` provider and hardcoded GPT-5.4 model definition;
+- remove internal Codex JWTs, random capabilities, SecretRefs, proxy routes, and upstream forwarding;
+- remove `/backend-api/codex/models` and `/backend-api/codex/responses`;
+- rewrite generated and persisted `mlclaw-codex/gpt-5.4` references to `openai/gpt-5.4`;
+- populate model selection from OpenClaw's native account catalog rather than maintaining a second catalog;
+- preserve an independent normal OpenAI API-key profile when configured;
+- send all OpenAI model discovery and inference traffic directly from OpenClaw to OpenAI.
 
-The trusted proxy:
-
-- accepts only the exact loopback Codex Responses route;
-- authenticates the internal capability with constant-time comparison;
-- allows only the registered Codex model;
-- forces streaming and `store: false`;
-- loads and decrypts the deployment credential in the trusted process;
-- refreshes the OAuth credential when needed and persists token rotation;
-- adds the real OpenAI bearer token and ChatGPT account id only on the upstream request;
-- streams the upstream Responses protocol back to OpenClaw;
-- retries once with a forced refresh after an upstream `401`.
-
-OpenClaw uses its built-in ChatGPT Responses adapter with the ordinary OpenClaw agent runtime. No Codex subprocess, app server, shell tool, or workspace access is introduced.
+No OpenClaw fork, patch, issue, or pull request is part of this design.
 
 ## Security Requirements
 
-- Validate every OpenAI response before using it.
-- Bound login and provider request bodies and sanitize upstream errors.
+- Validate every OpenAI device-login response before using it.
 - Enforce the 15-minute login deadline and OpenAI's polling interval.
 - Never convert ChatGPT OAuth into `OPENAI_API_KEY`.
 - Never import a user's global Pi or Codex auth file automatically.
 - Never install or execute `@openai/codex`.
 - Keep credentials scoped to one canonical deployment identity.
-- Treat the encrypted bucket object and revocation marker as authoritative.
-- Give OpenClaw only the narrow loopback provider capability, never OAuth material.
-- Remove the provider automatically when credentials are absent or revoked.
-
-## Browser Follow-up
-
-A future admin-only browser flow may expose structured start, status, cancellation, and logout routes. It should show the verification URL and user code, enforce one active login, require CSRF protection, and never return token material.
+- Write native auth profiles atomically with restrictive ownership and permissions.
+- Preserve unrelated OpenClaw auth profiles.
+- Make logout authoritative over pending import work.
+- Never log profile contents, access tokens, refresh tokens, account ids, or encryption keys.
 
 ## Tests
 
-Coverage verifies:
+Coverage must verify:
 
 - device-code request, polling, slow-down handling, token exchange, timeout, cancellation, malformed payloads, and bounded errors;
 - account-id and expiry extraction from access-token JWTs;
 - no Codex binary or npm package dependency;
-- encrypted credential round trips, refresh rotation, optimistic refresh races, and revocation;
+- atomic native profile import, permissions, unrelated-profile preservation, and failed-import recovery;
+- migration from the encrypted staging object without another login;
+- logout/import races and authoritative revocation;
 - bucket migration and cleanup;
-- loopback provider authentication, request bounds, model allowlisting, forced `store: false`, streaming, and `401` refresh retry;
-- automatic OpenClaw provider/model addition and removal;
+- hard removal of the custom provider and every proxy route or capability;
+- native `openai/*` model selection and persisted-session migration;
+- coexistence of ChatGPT OAuth and normal OpenAI API-key profiles;
 - login/logout runtime restart behavior;
 - generated Dockerfiles and release metadata contain no Codex installation.
 
 Live acceptance requires:
 
-1. Login to a deployment.
-2. Deploy the updated bundled runtime.
-3. Confirm startup reports `Codex provider enabled`.
-4. Confirm `mlclaw-codex/gpt-5.4` appears in OpenClaw's model picker.
-5. Select it and complete a real response.
-6. Restart the Space and repeat the response without logging in again.
-7. Logout and confirm the provider disappears after restart.
+1. Upgrade a deployment that already has an encrypted MLClaw OpenAI credential.
+2. Confirm the credential imports into the native OpenClaw profile without another login.
+3. Confirm OpenClaw contacts OpenAI directly and does not send Codex traffic to MLClaw loopback routes.
+4. Confirm every account-visible `openai/*` model appears, including `openai/gpt-5.6-sol` when entitled.
+5. Complete real responses with GPT-5.6 Sol and at least one additional discovered model.
+6. Verify an independent OpenAI API-key profile still uses the Platform route.
+7. Exercise OAuth refresh, restart the Space, and repeat discovery and inference.
+8. Logout and confirm the managed OAuth profile disappears without affecting API-key profiles.
+9. Scan logs and persisted files for credential leakage.
 
 ## Non-Goals
 
+- Modifying OpenClaw source code.
+- Running an MLClaw proxy for OpenAI model discovery or inference.
 - Installing or wrapping the Codex CLI.
 - Running a Codex subprocess or app server.
-- Passing OAuth tokens to OpenClaw.
 - Treating ChatGPT OAuth as an OpenAI API key.
-- Enabling OpenAI embeddings; Codex subscription OAuth covers model responses, not embeddings.
+- Keeping a compatibility `mlclaw-codex` provider or alias.
+- Enabling OpenAI embeddings; ChatGPT subscription OAuth covers model responses, not embeddings.
 - Shipping the future browser account UI in this phase.
