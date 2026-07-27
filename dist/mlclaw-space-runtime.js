@@ -11532,8 +11532,7 @@ var McpIntegrationServer = class {
       writeJson(res, 400, { error: { message: "Unsupported Codex model", type: "invalid_request_error" } });
       return;
     }
-    request.store = false;
-    request.stream = true;
+    normalizeCodexRequest(request);
     const upstream = await this.fetchCodexResponse(request, signal, false);
     res.writeHead(upstream.status, responseHeaders(upstream.headers));
     if (!upstream.body) {
@@ -11848,6 +11847,58 @@ function parseJsonObject(body) {
   } catch {
     return void 0;
   }
+}
+function normalizeCodexRequest(request) {
+  const instructions = codexInstructions(request.input);
+  const existingInstructions = stringValue2(request.instructions);
+  const combinedInstructions = [existingInstructions, ...instructions.text].filter(
+    (value) => Boolean(value)
+  );
+  if (combinedInstructions.length > 0) request.instructions = combinedInstructions.join("\n\n");
+  if (instructions.input) request.input = instructions.input;
+  for (const key of [
+    "max_output_tokens",
+    "metadata",
+    "prompt_cache_retention",
+    "service_tier",
+    "temperature",
+    "top_p"
+  ]) {
+    delete request[key];
+  }
+  const text = objectValue(request.text);
+  if (text) {
+    const sanitized = { ...text };
+    delete sanitized.format;
+    if (Object.keys(sanitized).length > 0) request.text = sanitized;
+    else delete request.text;
+  }
+  request.store = false;
+  request.stream = true;
+}
+function codexInstructions(input) {
+  if (!Array.isArray(input)) return { text: [] };
+  const remaining = [];
+  const text = [];
+  for (const item of input) {
+    const message = objectValue(item);
+    if (message?.role !== "system" && message?.role !== "developer") {
+      remaining.push(item);
+      continue;
+    }
+    const instruction = responseMessageText(message.content);
+    if (instruction) text.push(instruction);
+  }
+  if (remaining.length === 0 && text.length > 0) {
+    remaining.push({ role: "user", content: [{ type: "input_text", text: " " }] });
+  }
+  return { input: remaining, text };
+}
+function responseMessageText(content) {
+  if (typeof content === "string") return stringValue2(content);
+  if (!Array.isArray(content)) return void 0;
+  const text = content.map((item) => stringValue2(objectValue(item)?.text)).filter((value) => Boolean(value)).join("\n").trim();
+  return text || void 0;
 }
 function parseJsonRpc(body) {
   try {

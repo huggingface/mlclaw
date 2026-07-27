@@ -878,7 +878,22 @@ describe("automatic MCP integrations", () => {
         authorization: `Bearer ${deriveCodexProviderToken(fixture.config.sessionSecret)}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ model: "gpt-5.4", stream: false, store: true, input: [] }),
+      body: JSON.stringify({
+        model: "gpt-5.4",
+        stream: false,
+        store: true,
+        input: [
+          { role: "system", content: [{ type: "input_text", text: "Follow the system instruction." }] },
+          { role: "user", content: [{ type: "input_text", text: "Hello" }] },
+        ],
+        max_output_tokens: 128000,
+        metadata: { session: "generic-openclaw" },
+        prompt_cache_retention: "24h",
+        service_tier: "auto",
+        temperature: 0.5,
+        top_p: 0.9,
+        text: { format: { type: "json_schema" }, verbosity: "low" },
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -889,11 +904,25 @@ describe("automatic MCP integrations", () => {
     expect(upstream[1]?.url).toBe("https://chatgpt.com/backend-api/codex/responses");
     expect(new Headers(upstream[1]?.init.headers).get("authorization")).toBe("Bearer access-new");
     expect(new Headers(upstream[1]?.init.headers).get("chatgpt-account-id")).toBe("acct_123");
-    expect(JSON.parse(String(upstream[1]?.init.body))).toMatchObject({
+    const forwarded = JSON.parse(String(upstream[1]?.init.body)) as Record<string, unknown>;
+    expect(forwarded).toMatchObject({
       model: "gpt-5.4",
       stream: true,
       store: false,
+      instructions: "Follow the system instruction.",
+      input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
+      text: { verbosity: "low" },
     });
+    for (const key of [
+      "max_output_tokens",
+      "metadata",
+      "prompt_cache_retention",
+      "service_tier",
+      "temperature",
+      "top_p",
+    ]) {
+      expect(forwarded).not.toHaveProperty(key);
+    }
 
     const unauthorized = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
       method: "POST",
