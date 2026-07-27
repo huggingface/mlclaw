@@ -69,7 +69,7 @@ Never store raw OAuth credentials in:
 
 When encrypted credentials are available, ML Claw configures OpenClaw's native `openai` provider with a trusted loopback Codex base URL. OpenClaw retains its own account-filtered catalog parser, `openai/*` model ids, metadata, reasoning controls, and ChatGPT Responses transport.
 
-OpenClaw sends the loopback endpoint an opaque random capability through `OPENAI_OAUTH_TOKEN`. The capability is created once per ML Claw runtime, is never persisted, and is not an OpenAI credential. A separate `OPENAI_API_KEY` can remain available for explicitly selected Platform profiles.
+OpenClaw sends the loopback endpoint an opaque random capability through a managed token profile whose persisted credential is only a SecretRef to `MLCLAW_CODEX_PROXY_TOKEN`. The capability is created once per ML Claw runtime, is never persisted, and is not an OpenAI credential. A separate SecretRef-backed `OPENAI_API_KEY` profile remains available for explicitly selected Platform routes.
 
 The trusted proxy:
 

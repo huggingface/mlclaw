@@ -9,6 +9,12 @@ import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
+import {
+  CODEX_AUTH_PROFILE_ID,
+  CODEX_PROXY_TOKEN_ENV,
+  OPENAI_API_KEY_PROFILE_ID,
+  openClawAuthProfilePlan,
+} from "../src/mlclaw-space-runtime/openclaw-auth-profiles.js";
 import { DEFAULT_CODEX_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "../src/mlclaw-space-runtime/codex-proxy.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import {
@@ -1869,6 +1875,32 @@ describe("ML Claw Space runtime", () => {
     await expect(fs.readFile(envFile, "utf8")).resolves.toBe(JSON.stringify({ OPENAI_API_KEY: apiKey }));
   });
 
+  it("maps ephemeral OpenAI credentials into SecretRef auth profiles", () => {
+    expect(openClawAuthProfilePlan({ codexConfigured: true, openAiConfigured: true })).toMatchObject({
+      version: 1,
+      protocolVersion: 1,
+      targets: [
+        {
+          type: "auth-profiles.token.token",
+          path: `profiles.${CODEX_AUTH_PROFILE_ID}.token`,
+          authProfileProvider: "openai",
+          ref: { source: "env", provider: "default", id: CODEX_PROXY_TOKEN_ENV },
+        },
+        {
+          type: "auth-profiles.api_key.key",
+          path: `profiles.${OPENAI_API_KEY_PROFILE_ID}.key`,
+          authProfileProvider: "openai",
+          ref: { source: "env", provider: "default", id: "OPENAI_API_KEY" },
+        },
+      ],
+      options: {
+        scrubEnv: false,
+        scrubAuthProfilesForProviderTargets: false,
+        scrubLegacyAuthJson: false,
+      },
+    });
+  });
+
   it("passes an ephemeral Codex capability alongside a normal OpenAI API key", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-capability-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -1883,7 +1915,7 @@ describe("ML Claw Space runtime", () => {
     const config = await testConfig({
       openclawArgs: [
         "-e",
-        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({OPENAI_API_KEY:process.env.OPENAI_API_KEY,OPENAI_OAUTH_TOKEN:process.env.OPENAI_OAUTH_TOKEN}));setInterval(()=>undefined,100000)`,
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({OPENAI_API_KEY:process.env.OPENAI_API_KEY,MLCLAW_CODEX_PROXY_TOKEN:process.env.MLCLAW_CODEX_PROXY_TOKEN}));setInterval(()=>undefined,100000)`,
       ],
     });
     const now = new Date();
@@ -1925,10 +1957,10 @@ describe("ML Claw Space runtime", () => {
     await waitFor(async () => fileExists(envFile));
     const env = JSON.parse(await fs.readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.OPENAI_API_KEY).toBe(apiKey);
-    expect(env.OPENAI_OAUTH_TOKEN).toMatch(/^[A-Za-z0-9_-]{64}$/u);
-    expect(env.OPENAI_OAUTH_TOKEN).not.toBe(config.sessionSecret);
+    expect(env.MLCLAW_CODEX_PROXY_TOKEN).toMatch(/^[A-Za-z0-9_-]{64}$/u);
+    expect(env.MLCLAW_CODEX_PROXY_TOKEN).not.toBe(config.sessionSecret);
     const openclawConfig = await fs.readFile(config.openclawConfigPath, "utf8");
-    expect(openclawConfig).not.toContain(env.OPENAI_OAUTH_TOKEN);
+    expect(openclawConfig).not.toContain(env.MLCLAW_CODEX_PROXY_TOKEN);
     expect(JSON.parse(openclawConfig).models.providers.openai.params.codexProxyBaseUrl).toBe(
       `http://127.0.0.1:${config.mcpPort}/backend-api/codex`,
     );
@@ -2187,6 +2219,12 @@ describe("ML Claw Space runtime", () => {
       agentRuntime: { id: "openclaw" },
     });
     expect(rewritten.agents.defaults.models[LEGACY_CODEX_MODEL_REF]).toBeUndefined();
+    expect(rewritten.auth.profiles[CODEX_AUTH_PROFILE_ID]).toEqual({
+      provider: "openai",
+      mode: "token",
+      displayName: "ChatGPT",
+    });
+    expect(rewritten.auth.order.openai).toEqual([CODEX_AUTH_PROFILE_ID]);
     expect(JSON.stringify(rewritten)).not.toContain("obsolete-capability");
     expect(JSON.stringify(rewritten)).not.toContain("OPENAI_OAUTH_TOKEN");
     expect(JSON.stringify(rewritten)).not.toContain("refresh_token");
@@ -2195,6 +2233,8 @@ describe("ML Claw Space runtime", () => {
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
     expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
+    expect(disconnected.auth.profiles[CODEX_AUTH_PROFILE_ID]).toBeUndefined();
+    expect(disconnected.auth.order.openai).toBeUndefined();
 
     await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
     const apiKeyOnly = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
@@ -2202,6 +2242,12 @@ describe("ML Claw Space runtime", () => {
     expect(apiKeyOnly.agents.defaults.models["openai/*"]).toEqual({
       agentRuntime: { id: "openclaw" },
     });
+    expect(apiKeyOnly.auth.profiles[OPENAI_API_KEY_PROFILE_ID]).toEqual({
+      provider: "openai",
+      mode: "api_key",
+      displayName: "OpenAI API key",
+    });
+    expect(apiKeyOnly.auth.order.openai).toEqual([OPENAI_API_KEY_PROFILE_ID]);
   });
 
   it("does not create a restrictive plugin allowlist", async () => {

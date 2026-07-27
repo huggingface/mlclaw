@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SpaceRuntimeConfig } from "./config.js";
+import { configureManagedOpenClawAuthProfiles } from "./openclaw-auth-profiles.js";
 import { CODEX_PROXY_BASE_PATH, DEFAULT_CODEX_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "./codex-proxy.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
@@ -35,7 +36,10 @@ export async function configureOpenClawGateway(
     allowedOrigins: config.accessOrigins,
     embedSandbox: "scripts",
   };
-  configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config, codexConfigured, openAiConfigured);
+  configureManagedOpenClawAuthProfiles(openclawConfig, { codexConfigured, openAiConfigured });
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
