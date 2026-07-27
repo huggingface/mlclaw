@@ -19821,7 +19821,11 @@ async function migrateJsonSessionStore(file, now) {
   const value = parseSessionStore(await fs8.readFile(file, "utf8"), file);
   const result = migrateSessionStore(value, now);
   if (result.changed === 0) return 0;
-  await writeJsonAtomic(file, result.value);
+  await writeJsonAtomic(file, result.value, {
+    mode: stat.mode & 511,
+    uid: stat.uid,
+    gid: stat.gid
+  });
   return result.changed;
 }
 async function optionalStat(file) {
@@ -19908,13 +19912,17 @@ async function directoryNames(directory) {
     throw error;
   }
 }
-async function writeJsonAtomic(file, value) {
+async function writeJsonAtomic(file, value, ownership) {
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
     await fs8.writeFile(temporary, `${JSON.stringify(value, null, 2)}
-`, { mode: 384, flag: "wx" });
+`, {
+      mode: ownership.mode,
+      flag: "wx"
+    });
+    if (process.getuid?.() === 0) await fs8.chown(temporary, ownership.uid, ownership.gid);
     await fs8.rename(temporary, file);
-    await fs8.chmod(file, 384);
+    await fs8.chmod(file, ownership.mode);
   } finally {
     await fs8.rm(temporary, { force: true });
   }

@@ -33,7 +33,10 @@ describe("native OpenAI session migration", () => {
         },
         untouched: { sessionId: "other", modelProvider: "huggingface", model: "model", updatedAt: 2 },
       }),
+      { mode: 0o640 },
     );
+    await fs.chmod(jsonFile, 0o640);
+    const originalOwner = await fs.stat(jsonFile);
     const database = new DatabaseSync(sqliteFile);
     database.exec(
       "CREATE TABLE session_entries (session_key TEXT PRIMARY KEY, session_id TEXT NOT NULL, entry_json TEXT NOT NULL, updated_at INTEGER NOT NULL)",
@@ -55,6 +58,10 @@ describe("native OpenAI session migration", () => {
       migrateLegacyOpenAiSessionRefs({ openclawConfigPath: path.join(stateDir, "openclaw.json") }, () => 100),
     ).resolves.toBe(2);
 
+    const migratedOwner = await fs.stat(jsonFile);
+    expect(migratedOwner.mode & 0o777).toBe(0o640);
+    expect(migratedOwner.uid).toBe(originalOwner.uid);
+    expect(migratedOwner.gid).toBe(originalOwner.gid);
     const json = JSON.parse(await fs.readFile(jsonFile, "utf8"));
     expect(json.legacy).toMatchObject({
       modelProvider: "openai",

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -82,11 +82,15 @@ async function migrateJsonSessionStore(file: string, now: () => number): Promise
   const value = parseSessionStore(await fs.readFile(file, "utf8"), file);
   const result = migrateSessionStore(value, now);
   if (result.changed === 0) return 0;
-  await writeJsonAtomic(file, result.value);
+  await writeJsonAtomic(file, result.value, {
+    mode: stat.mode & 0o777,
+    uid: stat.uid,
+    gid: stat.gid,
+  });
   return result.changed;
 }
 
-async function optionalStat(file: string): Promise<Awaited<ReturnType<typeof fs.stat>> | undefined> {
+async function optionalStat(file: string): Promise<Stats | undefined> {
   try {
     return await fs.stat(file);
   } catch (error) {
@@ -185,12 +189,20 @@ async function directoryNames(directory: string): Promise<string[]> {
   }
 }
 
-async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
+async function writeJsonAtomic(
+  file: string,
+  value: unknown,
+  ownership: { mode: number; uid: number; gid: number },
+): Promise<void> {
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
-    await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+      mode: ownership.mode,
+      flag: "wx",
+    });
+    if (process.getuid?.() === 0) await fs.chown(temporary, ownership.uid, ownership.gid);
     await fs.rename(temporary, file);
-    await fs.chmod(file, 0o600);
+    await fs.chmod(file, ownership.mode);
   } finally {
     await fs.rm(temporary, { force: true });
   }
