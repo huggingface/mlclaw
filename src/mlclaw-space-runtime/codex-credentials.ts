@@ -40,6 +40,12 @@ export class CodexCredentialStore {
     return source ? openAICodexCredentialFromAuthJson(source.authJson) : undefined;
   }
 
+  async credentialIsCurrent(expected: OpenAICodexOAuthCredential): Promise<boolean> {
+    const source = await this.loadDocument();
+    if (!source) return false;
+    return stableJson(openAICodexCredentialFromAuthJson(source.authJson)) === stableJson(expected);
+  }
+
   async credential(
     options: { forceRefresh?: boolean; signal?: AbortSignal } = {},
   ): Promise<OpenAICodexOAuthCredential> {

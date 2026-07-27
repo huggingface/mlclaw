@@ -236,10 +236,14 @@ export class SpaceRuntimeServer {
     }
     this.openclawStarting = true;
     try {
-      const codexCredential = await this.codexCredentials.credentialForImport().catch((error) => {
+      const candidateCredential = await this.codexCredentials.credentialForImport().catch((error) => {
         process.stderr.write(`[mlclaw] OpenAI OAuth credentials unavailable: ${formatError(error)}\n`);
         return undefined;
       });
+      const codexCredential =
+        candidateCredential && (await this.codexCredentials.credentialIsCurrent(candidateCredential))
+          ? candidateCredential
+          : undefined;
       const codexConfigured = Boolean(codexCredential);
       const persistedOpenAiKey =
         (await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ??
@@ -281,6 +285,10 @@ export class SpaceRuntimeServer {
       });
       if (codexCredential && !profileSynced) {
         throw new Error("OpenClaw command does not support native OAuth profile provisioning");
+      }
+      if (codexCredential && !(await this.codexCredentials.credentialIsCurrent(codexCredential))) {
+        await this.syncOAuthProfile({ config: this.config, env });
+        throw new Error("OpenAI OAuth credentials were revoked during native profile provisioning");
       }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",

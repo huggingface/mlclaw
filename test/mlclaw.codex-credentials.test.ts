@@ -87,6 +87,22 @@ describe("CodexCredentialStore", () => {
     await expect(store.credential()).resolves.toMatchObject({ refresh: "refresh-1", accountId: "acct_123" });
   });
 
+  it("rejects a staged credential after authoritative revocation", async () => {
+    const { config, store, now } = await fixture();
+    const expires = now.getTime() + 60 * 60_000;
+    await writeCredential(
+      config,
+      { access: accessToken("acct_123", expires), refresh: "refresh-1", expires, accountId: "acct_123" },
+      now,
+    );
+    const candidate = await store.credentialForImport();
+    if (!candidate) throw new Error("test credential missing");
+    await fs.writeFile(path.join(path.dirname(config.codexAuthStoreFile), "codex-auth.revoked"), "revoked\n");
+
+    await expect(store.credentialIsCurrent(candidate)).resolves.toBe(false);
+    await expect(fs.stat(config.codexAuthStoreFile)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("refreshes expiring credentials and persists the rotated token", async () => {
     const { config, now } = await fixture();
     const expires = now.getTime() + 60_000;
