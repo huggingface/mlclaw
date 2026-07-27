@@ -4,15 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
-import type { CodexCredentialStore } from "../src/mlclaw-space-runtime/codex-credentials.js";
-import { deriveCodexProviderToken } from "../src/mlclaw-space-runtime/codex-provider.js";
 import { McpCredentialStore } from "../src/mlclaw-space-runtime/mcp-credentials.js";
 import { deriveInternalToken, McpIntegrationServer } from "../src/mlclaw-space-runtime/mcp-integrations.js";
-import {
-  authorizeUrl,
-  HF_LOGIN_OAUTH_SCOPES,
-  HF_MCP_OAUTH_SCOPES,
-} from "../src/mlclaw-space-runtime/oauth.js";
+import { authorizeUrl, HF_LOGIN_OAUTH_SCOPES, HF_MCP_OAUTH_SCOPES } from "../src/mlclaw-space-runtime/oauth.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -77,8 +71,10 @@ describe("automatic MCP integrations", () => {
     expect(encrypted).not.toContain("refresh-old");
     expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
 
-    await expect(Promise.all([store.accessToken("alice"), store.accessToken("alice")]))
-      .resolves.toEqual(["hf_access_refreshed", "hf_access_refreshed"]);
+    await expect(Promise.all([store.accessToken("alice"), store.accessToken("alice")])).resolves.toEqual([
+      "hf_access_refreshed",
+      "hf_access_refreshed",
+    ]);
     expect(refreshCalls).toBe(1);
     expect(await fs.readFile(file, "utf8")).not.toContain("hf_access_refreshed");
 
@@ -89,11 +85,13 @@ describe("automatic MCP integrations", () => {
       now: () => 2_100_000,
     });
     await expect(reloaded.accessToken("alice")).resolves.toBe("hf_access_refreshed");
-    await expect(new McpCredentialStore({
-      file,
-      secret: "wrong-secret",
-      providerUrl: "https://huggingface.test",
-    }).status("alice")).rejects.toThrow("cannot be decrypted");
+    await expect(
+      new McpCredentialStore({
+        file,
+        secret: "wrong-secret",
+        providerUrl: "https://huggingface.test",
+      }).status("alice"),
+    ).rejects.toThrow("cannot be decrypted");
   });
 
   it("serializes first load and keeps one deployment identity across admins", async () => {
@@ -104,22 +102,22 @@ describe("automatic MCP integrations", () => {
       secret: "credential-secret",
       providerUrl: "https://huggingface.test",
     });
-    await writer.save({
-      username: "bob",
-      accessToken: "hf_bob",
-      tokenType: "Bearer",
-      scope: ["read-mcp"],
-    }, "primary-admin");
+    await writer.save(
+      {
+        username: "bob",
+        accessToken: "hf_bob",
+        tokenType: "Bearer",
+        scope: ["read-mcp"],
+      },
+      "primary-admin",
+    );
 
     const reader = new McpCredentialStore({
       file,
       secret: "credential-secret",
       providerUrl: "https://huggingface.test",
     });
-    const [status, token] = await Promise.all([
-      reader.status("primary-admin"),
-      reader.accessToken("primary-admin"),
-    ]);
+    const [status, token] = await Promise.all([reader.status("primary-admin"), reader.accessToken("primary-admin")]);
     expect(status).toMatchObject({ configured: true, username: "bob" });
     expect(token).toBe("hf_bob");
   });
@@ -150,11 +148,13 @@ describe("automatic MCP integrations", () => {
     });
     await clearing.clear("alice");
     await expect(clearing.status("alice")).resolves.toMatchObject({ configured: false });
-    await expect(new McpCredentialStore({
-      file,
-      secret: "credential-secret",
-      providerUrl: "https://huggingface.test",
-    }).status("alice")).resolves.toMatchObject({ configured: false });
+    await expect(
+      new McpCredentialStore({
+        file,
+        secret: "credential-secret",
+        providerUrl: "https://huggingface.test",
+      }).status("alice"),
+    ).resolves.toMatchObject({ configured: false });
   });
 
   it("disconnects after a rejected refresh and does not resurrect access during disconnect", async () => {
@@ -259,10 +259,11 @@ describe("automatic MCP integrations", () => {
       clientSecret: "client-secret",
       now: () => 2_000_000,
       refreshTimeoutMs: 10,
-      fetchImpl: async (_url, request) => await new Promise<Response>((_resolve, reject) => {
-        const signal = request?.signal;
-        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
-      }),
+      fetchImpl: async (_url, request) =>
+        await new Promise<Response>((_resolve, reject) => {
+          const signal = request?.signal;
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
     });
     await store.save({
       username: "alice",
@@ -386,14 +387,17 @@ describe("automatic MCP integrations", () => {
     const upstreamPort = await listen(upstream);
     cleanups.push(() => closeServer(upstream));
 
-    const fixture = await integrationFixture({
-      gatewayLocation: "local",
-      hfToken: "hf_local_wrapper",
-      spaceId: undefined,
-      adminUsers: [],
-      allowedUsers: [],
-      hfMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
-    }, { skipCredential: true });
+    const fixture = await integrationFixture(
+      {
+        gatewayLocation: "local",
+        hfToken: "hf_local_wrapper",
+        spaceId: undefined,
+        adminUsers: [],
+        allowedUsers: [],
+        hfMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+      },
+      { skipCredential: true },
+    );
     const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/huggingface`, {
       method: "POST",
       headers: {
@@ -426,7 +430,15 @@ describe("automatic MCP integrations", () => {
       res.setHeader("content-type", "text/event-stream");
       res.setHeader("mcp-session-id", "research-session");
       if (method === "initialize") {
-        sse(res, { jsonrpc: "2.0", id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "research", version: "1" } } });
+        sse(res, {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            protocolVersion: "2025-06-18",
+            capabilities: { tools: {} },
+            serverInfo: { name: "research", version: "1" },
+          },
+        });
         return;
       }
       if (method === "notifications/initialized") {
@@ -456,11 +468,26 @@ describe("automatic MCP integrations", () => {
         return;
       }
       if (tool === "abc_start_research") {
-        sse(res, { jsonrpc: "2.0", id, result: { structuredContent: { job_id: "research-test", status: "running", done: false } } });
+        sse(res, {
+          jsonrpc: "2.0",
+          id,
+          result: { structuredContent: { job_id: "research-test", status: "running", done: false } },
+        });
         return;
       }
       if (tool === "xyz_research_status") {
-        sse(res, { jsonrpc: "2.0", id, result: { structuredContent: { job_id: "research-test", status: "completed", result: "Verified research result", done: true } } });
+        sse(res, {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            structuredContent: {
+              job_id: "research-test",
+              status: "completed",
+              result: "Verified research result",
+              done: true,
+            },
+          },
+        });
         return;
       }
       sse(res, { jsonrpc: "2.0", id, error: { code: -32601, message: "unknown" } });
@@ -549,35 +576,41 @@ describe("automatic MCP integrations", () => {
         jsonrpc: "2.0",
         id,
         result: {
-          structuredContent: tool === "abc_start_research"
-            ? { status: "running", done: false }
-            : { status: "completed", result: "Fresh token result", done: true },
+          structuredContent:
+            tool === "abc_start_research"
+              ? { status: "running", done: false }
+              : { status: "completed", result: "Fresh token result", done: true },
         },
       });
     });
     const upstreamPort = await listen(upstream);
     cleanups.push(() => closeServer(upstream));
 
-    const fixture = await integrationFixture({
-      researchMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
-      researchPollMs: 1,
-    }, {
-      skipCredential: true,
-      createStore: (config) => new McpCredentialStore({
-        file: config.mcpCredentialFile,
-        secret: config.credentialKey,
-        providerUrl: config.providerUrl,
-        clientId: "client",
-        clientSecret: "secret",
-        now: () => now,
-        fetchImpl: async () => Response.json({
-          access_token: "hf_mcp_refreshed",
-          refresh_token: "refresh-new",
-          token_type: "Bearer",
-          expires_in: 3600,
-        }),
-      }),
-    });
+    const fixture = await integrationFixture(
+      {
+        researchMcpUrl: `http://127.0.0.1:${upstreamPort}/mcp`,
+        researchPollMs: 1,
+      },
+      {
+        skipCredential: true,
+        createStore: (config) =>
+          new McpCredentialStore({
+            file: config.mcpCredentialFile,
+            secret: config.credentialKey,
+            providerUrl: config.providerUrl,
+            clientId: "client",
+            clientSecret: "secret",
+            now: () => now,
+            fetchImpl: async () =>
+              Response.json({
+                access_token: "hf_mcp_refreshed",
+                refresh_token: "refresh-new",
+                token_type: "Bearer",
+                expires_in: 3600,
+              }),
+          }),
+      },
+    );
     await fixture.store.save({
       username: "alice",
       accessToken: "hf_mcp_expiring",
@@ -604,11 +637,7 @@ describe("automatic MCP integrations", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ result: { content: [{ text: "Fresh token result" }] } });
-    expect(authorizations).toEqual([
-      "Bearer hf_mcp_expiring",
-      "Bearer hf_mcp_refreshed",
-      "Bearer hf_mcp_refreshed",
-    ]);
+    expect(authorizations).toEqual(["Bearer hf_mcp_expiring", "Bearer hf_mcp_refreshed", "Bearer hf_mcp_refreshed"]);
   });
 
   it("returns a running Research Agent job when the final status poll reaches the deadline", async () => {
@@ -849,101 +878,6 @@ describe("automatic MCP integrations", () => {
     expect(calls).toEqual(["research", "abc_start_research"]);
   });
 
-  it("proxies Codex Responses with trusted OAuth and retries once after a 401", async () => {
-    const credentialCalls: Array<{ forceRefresh?: boolean }> = [];
-    const codexCredentials = {
-      credential: async (options: { forceRefresh?: boolean } = {}) => {
-        credentialCalls.push(options);
-        return {
-          access: options.forceRefresh ? "access-new" : "access-old",
-          refresh: "refresh",
-          expires: Date.now() + 60_000,
-          accountId: "acct_123",
-        };
-      },
-    } as CodexCredentialStore;
-    const upstream: Array<{ url: string; init: RequestInit }> = [];
-    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
-      upstream.push({ url: String(input), init: init ?? {} });
-      if (upstream.length === 1) return new Response("unauthorized", { status: 401 });
-      return new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n\n', {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      });
-    };
-    const fixture = await integrationFixture({}, { codexCredentials, fetchFn });
-    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${deriveCodexProviderToken(fixture.config.sessionSecret)}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-5.4",
-        stream: false,
-        store: true,
-        input: [
-          { role: "system", content: [{ type: "input_text", text: "Follow the system instruction." }] },
-          { role: "user", content: [{ type: "input_text", text: "Hello" }] },
-        ],
-        max_output_tokens: 128000,
-        metadata: { session: "generic-openclaw" },
-        prompt_cache_retention: "24h",
-        service_tier: "auto",
-        temperature: 0.5,
-        top_p: 0.9,
-        text: { format: { type: "json_schema" }, verbosity: "low" },
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("text/event-stream");
-    expect(await response.text()).toContain("response.completed");
-    expect(credentialCalls).toEqual([{ forceRefresh: false, signal: expect.any(AbortSignal) }, { forceRefresh: true, signal: expect.any(AbortSignal) }]);
-    expect(upstream).toHaveLength(2);
-    expect(upstream[1]?.url).toBe("https://chatgpt.com/backend-api/codex/responses");
-    expect(new Headers(upstream[1]?.init.headers).get("authorization")).toBe("Bearer access-new");
-    expect(new Headers(upstream[1]?.init.headers).get("chatgpt-account-id")).toBe("acct_123");
-    const forwarded = JSON.parse(String(upstream[1]?.init.body)) as Record<string, unknown>;
-    expect(forwarded).toMatchObject({
-      model: "gpt-5.4",
-      stream: true,
-      store: false,
-      instructions: "Follow the system instruction.",
-      input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
-      text: { verbosity: "low" },
-    });
-    for (const key of [
-      "max_output_tokens",
-      "metadata",
-      "prompt_cache_retention",
-      "service_tier",
-      "temperature",
-      "top_p",
-    ]) {
-      expect(forwarded).not.toHaveProperty(key);
-    }
-
-    const unauthorized = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: { authorization: "Bearer wrong", "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-5.4", input: [] }),
-    });
-    expect(unauthorized.status).toBe(401);
-
-    const unsupported = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${deriveCodexProviderToken(fixture.config.sessionSecret)}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ model: "gpt-5.4-admin", input: [] }),
-    });
-    expect(unsupported.status).toBe(400);
-    expect(await unsupported.json()).toMatchObject({ error: { message: "Unsupported Codex model" } });
-    expect(upstream).toHaveLength(2);
-  });
-
   it("aborts active upstream requests during shutdown", async () => {
     let requestStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -981,8 +915,6 @@ async function integrationFixture(
   options: {
     skipCredential?: boolean;
     createStore?: (config: SpaceRuntimeConfig) => McpCredentialStore;
-    codexCredentials?: CodexCredentialStore;
-    fetchFn?: typeof fetch;
   } = {},
 ): Promise<{
   config: SpaceRuntimeConfig;
@@ -1001,11 +933,13 @@ async function integrationFixture(
     }),
     ...overrides,
   };
-  const store = options.createStore?.(config) ?? new McpCredentialStore({
-    file: config.mcpCredentialFile,
-    secret: config.credentialKey,
-    providerUrl: config.providerUrl,
-  });
+  const store =
+    options.createStore?.(config) ??
+    new McpCredentialStore({
+      file: config.mcpCredentialFile,
+      secret: config.credentialKey,
+      providerUrl: config.providerUrl,
+    });
   if (!options.skipCredential) {
     await store.save({
       username: "alice",
@@ -1014,7 +948,7 @@ async function integrationFixture(
       scope: ["openid", "profile", "read-mcp"],
     });
   }
-  const server = new McpIntegrationServer(config, store, options.codexCredentials, options.fetchFn);
+  const server = new McpIntegrationServer(config, store);
   await server.start();
   cleanups.push(() => server.stop());
   return { config, store, server };
@@ -1059,9 +993,7 @@ async function drain(req: http.IncomingMessage): Promise<void> {
 }
 
 function object(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function sse(res: http.ServerResponse, value: unknown): void {

@@ -2,13 +2,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
-import type { CodexCredentialStore } from "./codex-credentials.js";
-import {
-  CODEX_MODEL_ID,
-  CODEX_RESPONSES_PATH,
-  CODEX_RESPONSES_URL,
-  deriveCodexProviderToken,
-} from "./codex-provider.js";
 import type { McpCredentialStore } from "./mcp-credentials.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -36,7 +29,6 @@ export class McpIntegrationServer {
   constructor(
     private readonly config: SpaceRuntimeConfig,
     private readonly credentials: McpCredentialStore,
-    private readonly codexCredentials?: CodexCredentialStore,
     private readonly fetchFn: typeof fetch = fetch,
   ) {
     this.internalToken = deriveInternalToken(config.sessionSecret);
@@ -102,15 +94,6 @@ export class McpIntegrationServer {
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse, signal: AbortSignal): Promise<void> {
     const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (pathname === CODEX_RESPONSES_PATH) {
-      if (!validBearerToken(req.headers.authorization, deriveCodexProviderToken(this.config.sessionSecret))) {
-        writeJson(res, 401, { error: { message: "Unauthorized", type: "authentication_error" } });
-        return;
-      }
-      const body = await readBody(req, MAX_REQUEST_BYTES);
-      await this.handleCodexResponses(req, res, body, signal);
-      return;
-    }
     if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
       writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
       return;
@@ -142,71 +125,6 @@ export class McpIntegrationServer {
       accessToken,
       signal,
     });
-  }
-
-  private async handleCodexResponses(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    body: Uint8Array,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (req.method !== "POST") {
-      writeJson(res, 405, { error: { message: "Method not allowed", type: "invalid_request_error" } });
-      return;
-    }
-    if (!this.codexCredentials) {
-      writeJson(res, 503, { error: { message: "Codex is not configured", type: "authentication_error" } });
-      return;
-    }
-    const request = parseJsonObject(body);
-    if (!request) {
-      writeJson(res, 400, { error: { message: "Invalid JSON request", type: "invalid_request_error" } });
-      return;
-    }
-    if (request.model !== CODEX_MODEL_ID) {
-      writeJson(res, 400, { error: { message: "Unsupported Codex model", type: "invalid_request_error" } });
-      return;
-    }
-    normalizeCodexRequest(request);
-    const upstream = await this.fetchCodexResponse(request, signal, false);
-    res.writeHead(upstream.status, responseHeaders(upstream.headers));
-    if (!upstream.body) {
-      res.end();
-      return;
-    }
-    await pipeResponseBody(upstream.body, res);
-  }
-
-  private async fetchCodexResponse(
-    request: Record<string, unknown>,
-    signal: AbortSignal,
-    refreshed: boolean,
-  ): Promise<Response> {
-    const credential = await this.codexCredentials?.credential({
-      forceRefresh: refreshed,
-      signal,
-    });
-    if (!credential) throw new Error("Codex is not configured");
-    const response = await this.fetchFn(CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential.access}`,
-        "chatgpt-account-id": credential.accountId,
-        originator: "mlclaw",
-        "user-agent": "mlclaw",
-        "openai-beta": "responses=experimental",
-        accept: "text/event-stream",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(request),
-      redirect: "error",
-      signal,
-    });
-    if (response.status === 401 && !refreshed) {
-      await response.body?.cancel().catch(() => undefined);
-      return await this.fetchCodexResponse(request, signal, true);
-    }
-    return response;
   }
 
   private async handleResearchCall(
@@ -529,74 +447,6 @@ async function readBody(req: http.IncomingMessage, limit: number): Promise<Uint8
   return Buffer.concat(chunks);
 }
 
-function parseJsonObject(body: Uint8Array): Record<string, unknown> | undefined {
-  try {
-    const value = JSON.parse(Buffer.from(body).toString("utf8"));
-    return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeCodexRequest(request: Record<string, unknown>): void {
-  const instructions = codexInstructions(request.input);
-  const existingInstructions = stringValue(request.instructions);
-  const combinedInstructions = [existingInstructions, ...instructions.text].filter((value): value is string =>
-    Boolean(value),
-  );
-  if (combinedInstructions.length > 0) request.instructions = combinedInstructions.join("\n\n");
-  if (instructions.input) request.input = instructions.input;
-  for (const key of [
-    "max_output_tokens",
-    "metadata",
-    "prompt_cache_retention",
-    "service_tier",
-    "temperature",
-    "top_p",
-  ]) {
-    delete request[key];
-  }
-  const text = objectValue(request.text);
-  if (text) {
-    const sanitized = { ...text };
-    delete sanitized.format;
-    if (Object.keys(sanitized).length > 0) request.text = sanitized;
-    else delete request.text;
-  }
-  request.store = false;
-  request.stream = true;
-}
-
-function codexInstructions(input: unknown): { input?: unknown[]; text: string[] } {
-  if (!Array.isArray(input)) return { text: [] };
-  const remaining: unknown[] = [];
-  const text: string[] = [];
-  for (const item of input) {
-    const message = objectValue(item);
-    if (message?.role !== "system" && message?.role !== "developer") {
-      remaining.push(item);
-      continue;
-    }
-    const instruction = responseMessageText(message.content);
-    if (instruction) text.push(instruction);
-  }
-  if (remaining.length === 0 && text.length > 0) {
-    remaining.push({ role: "user", content: [{ type: "input_text", text: " " }] });
-  }
-  return { input: remaining, text };
-}
-
-function responseMessageText(content: unknown): string | undefined {
-  if (typeof content === "string") return stringValue(content);
-  if (!Array.isArray(content)) return undefined;
-  const text = content
-    .map((item) => stringValue(objectValue(item)?.text))
-    .filter((value): value is string => Boolean(value))
-    .join("\n")
-    .trim();
-  return text || undefined;
-}
-
 function parseJsonRpc(body: Uint8Array): JsonRpcRequest | undefined {
   try {
     const value = JSON.parse(Buffer.from(body).toString("utf8"));
@@ -747,13 +597,6 @@ async function pipeResponseBody(body: ReadableStream<Uint8Array>, response: http
     response.once("finish", resolve);
     stream.pipe(response);
   });
-}
-
-function validBearerToken(value: string | undefined, expected: string): boolean {
-  const prefix = "Bearer ";
-  return typeof value === "string" && value.startsWith(prefix)
-    ? validInternalToken(value.slice(prefix.length), expected)
-    : false;
 }
 
 function validInternalToken(value: string | string[] | undefined, expected: string): boolean {

@@ -297,10 +297,12 @@ directly and does not require the Codex CLI:
 mlclaw credentials codex login <agent>
 ```
 
-After login, `mlclaw-codex/gpt-5.4` appears automatically in OpenClaw. The
-trusted ML Claw wrapper keeps the OAuth credential encrypted, refreshes it,
-and proxies loopback model requests. OpenClaw receives only an internal
-provider capability, never the OAuth credential or deployment encryption key.
+After login, ML Claw imports the deployment credential into a managed native
+OpenClaw OAuth profile. OpenClaw contacts OpenAI directly, refreshes the OAuth
+credential in its private auth store, and discovers the account-visible catalog
+under `openai/*`, including `openai/gpt-5.6-sol` when entitled. ML Claw does not
+proxy model discovery or inference. Normal `OPENAI_API_KEY` profiles continue
+to use the OpenAI Platform route.
 
 ## Branding
 

@@ -1,14 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SpaceRuntimeConfig } from "./config.js";
-import {
-  CODEX_MODEL_CHOICE,
-  CODEX_MODEL_ID,
-  CODEX_MODEL_REF,
-  CODEX_PROVIDER_ID,
-  CODEX_PROXY_BASE_PATH,
-  deriveCodexProviderToken,
-} from "./codex-provider.js";
+import { DEFAULT_OPENAI_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "./openai-models.js";
+import { OPENAI_OAUTH_PROFILE_ID } from "./openclaw-oauth-profile.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
@@ -19,10 +13,10 @@ export const AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2_147_483_647;
 
 export async function configureOpenClawGateway(
   config: SpaceRuntimeConfig,
-  options: { codexConfigured?: boolean } = {},
+  options: { codexConfigured?: boolean; openAiConfigured?: boolean } = {},
 ): Promise<void> {
   const raw = await fs.readFile(config.openclawConfigPath, "utf8");
-  const openclawConfig = JSON.parse(raw) as Record<string, unknown>;
+  const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw)) as Record<string, unknown>;
   const gateway = object(openclawConfig, "gateway");
   gateway.mode = "local";
   gateway.bind = "loopback";
@@ -42,7 +36,8 @@ export async function configureOpenClawGateway(
     allowedOrigins: config.accessOrigins,
     embedSandbox: "scripts",
   };
-  configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured));
+  configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
+  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
@@ -192,19 +187,21 @@ function configureOpenClawModels(
   openclawConfig: Record<string, unknown>,
   config: SpaceRuntimeConfig,
   codexConfigured: boolean,
+  openAiConfigured: boolean,
 ): void {
-  const routerChoices = config.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
+  const routerChoices = config.modelChoices;
   configureAgentModelChoices(
     object(object(openclawConfig, "agents"), "defaults"),
     config,
     routerChoices,
     codexConfigured,
+    openAiConfigured,
   );
   const models = object(openclawConfig, "models");
   models.mode = "merge";
   const providers = object(models, "providers");
   configureHuggingFaceProvider(object(providers, "huggingface"), config, routerChoices);
-  configureCodexProvider(providers, config, codexConfigured);
+  configureNativeOpenAiProvider(providers);
 }
 
 function configureAgentModelChoices(
@@ -212,20 +209,36 @@ function configureAgentModelChoices(
   config: SpaceRuntimeConfig,
   routerChoices: ModelChoice[],
   codexConfigured: boolean,
+  openAiConfigured: boolean,
 ): void {
   const existingModel = objectValue(defaults.model) ?? {};
-  const visibleChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
-  const primary = config.model === CODEX_MODEL_REF && !codexConfigured ? routerChoices[0]?.openclawModel : config.model;
-  defaults.model = { ...existingModel, ...(primary ? { primary } : {}) };
-  defaults.models = Object.fromEntries(
-    visibleChoices.map((choice) => [
-      choice.openclawModel,
-      {
-        alias: aliasForChoice(choice),
-        ...(choice.openclawModel === CODEX_MODEL_REF ? { agentRuntime: { id: "openclaw" } } : {}),
-      },
-    ]),
-  );
+  const openAiAvailable = codexConfigured || openAiConfigured;
+  const primary = resolvePrimaryModel({
+    existing: existingModel.primary,
+    requested: replaceLegacyCodexModelRef(config.model),
+    openAiAvailable,
+    ...(routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}),
+  });
+  defaults.model = {
+    ...existingModel,
+    ...(primary ? { primary } : {}),
+  };
+  defaults.models = {
+    ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
+    ...(openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}),
+  };
+}
+
+function resolvePrimaryModel(params: {
+  existing: unknown;
+  requested: string;
+  openAiAvailable: boolean;
+  fallback?: string;
+}): string | undefined {
+  const existing = typeof params.existing === "string" ? params.existing.trim() : undefined;
+  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
+  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
+  return params.requested;
 }
 
 function configureHuggingFaceProvider(
@@ -242,37 +255,53 @@ function configureHuggingFaceProvider(
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
 }
 
-function configureCodexProvider(
-  providers: Record<string, unknown>,
-  config: SpaceRuntimeConfig,
-  configured: boolean,
-): void {
-  if (!configured) {
-    delete providers[CODEX_PROVIDER_ID];
-    return;
+function configureNativeOpenAiProvider(providers: Record<string, unknown>): void {
+  delete providers["mlclaw-codex"];
+  const existing = objectValue(providers.openai);
+  const params = objectValue(existing?.params);
+  if (!params || !("codexProxyBaseUrl" in params)) return;
+  const nextParams = { ...params };
+  delete nextParams.codexProxyBaseUrl;
+  if (existing) {
+    if (Object.keys(nextParams).length > 0) existing.params = nextParams;
+    else delete existing.params;
   }
-  providers[CODEX_PROVIDER_ID] = {
-    baseUrl: `http://127.0.0.1:${config.mcpPort}${CODEX_PROXY_BASE_PATH}`,
-    apiKey: deriveCodexProviderToken(config.sessionSecret),
-    auth: "api-key",
-    api: "openai-chatgpt-responses",
-    models: [
-      {
-        id: CODEX_MODEL_ID,
-        name: CODEX_MODEL_CHOICE.label,
-        api: "openai-chatgpt-responses",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
-        contextWindow: 272000,
-        maxTokens: 128000,
-        thinkingLevelMap: { minimal: "low", xhigh: "xhigh" },
-        params: { transport: "sse" },
-        agentRuntime: { id: "openclaw" },
-        compat: { supportsTools: true, supportsStrictMode: true },
-      },
-    ],
-  };
+}
+
+function configureOpenAiAuthMetadata(openclawConfig: Record<string, unknown>, configured: boolean): void {
+  const auth = object(openclawConfig, "auth");
+  const profiles = object(auth, "profiles");
+  const order = object(auth, "order");
+  const existingOrder = Array.isArray(order.openai)
+    ? order.openai.filter((value): value is string => typeof value === "string" && value !== OPENAI_OAUTH_PROFILE_ID)
+    : [];
+  if (configured) {
+    profiles[OPENAI_OAUTH_PROFILE_ID] = {
+      provider: "openai",
+      mode: "oauth",
+      displayName: "MLClaw ChatGPT",
+    };
+    order.openai = [OPENAI_OAUTH_PROFILE_ID, ...existingOrder];
+  } else {
+    delete profiles[OPENAI_OAUTH_PROFILE_ID];
+    if (existingOrder.length > 0) order.openai = existingOrder;
+    else delete order.openai;
+  }
+  if (Object.keys(profiles).length === 0) delete auth.profiles;
+  if (Object.keys(order).length === 0) delete auth.order;
+}
+
+function replaceLegacyCodexModelRef(value: string): string {
+  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : value;
+}
+
+function migrateLegacyCodexModelRefs(value: unknown): unknown {
+  if (typeof value === "string") return replaceLegacyCodexModelRef(value);
+  if (Array.isArray(value)) return value.map(migrateLegacyCodexModelRefs);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [replaceLegacyCodexModelRef(key), migrateLegacyCodexModelRefs(entry)]),
+  );
 }
 
 function modelDefinitionFromChoice(choice: ModelChoice): Record<string, unknown> {

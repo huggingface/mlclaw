@@ -32,9 +32,9 @@ clearly and report the work as unverified.
 
 ## Runtime Boundary
 
-- Treat the OpenClaw process and agent account as untrusted.
-- Keep Hugging Face, broker operator, OAuth, session, and encryption secrets in
-  the trusted backend only.
+- Treat the OpenClaw process and agent account as untrusted except for credentials that OpenClaw must own to provide a native authenticated transport.
+- The managed native OpenAI OAuth profile is an explicit trust-boundary exception: OpenClaw may persist and refresh that credential only in its private auth store. It must not receive the deployment encryption key or unrelated backend credentials.
+- Keep Hugging Face, broker operator, session, encryption, and all other OAuth secrets in the trusted backend only.
 - Browser routes may call only fixed typed broker operations.
 - Do not add arbitrary HTTP forwarding to broker, Hub, or operator APIs.
 - Validate unknown file, network, OAuth, and broker payloads at their boundary.

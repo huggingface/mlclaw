@@ -306,7 +306,7 @@ var require_ucs2length = __commonJS({
 });
 
 // src/mlclaw-space-runtime/cli.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 import process2 from "node:process";
 
 // src/mlclaw-space-runtime/config.ts
@@ -4570,13 +4570,13 @@ function readRuntimeSettings(file) {
 }
 
 // src/mlclaw-space-runtime/server.ts
-import { spawn } from "node:child_process";
+import { spawn as spawn2 } from "node:child_process";
 import http3 from "node:http";
 import { Readable as Readable2 } from "node:stream";
 
 // src/mlclaw-space-runtime/app.ts
-import fs3 from "node:fs/promises";
-import path3 from "node:path";
+import fs4 from "node:fs/promises";
+import path4 from "node:path";
 
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -4717,26 +4717,26 @@ var handleParsingNestedValues = (form, key, value) => {
 };
 
 // node_modules/hono/dist/utils/url.js
-var splitPath = (path7) => {
-  const paths = path7.split("/");
+var splitPath = (path9) => {
+  const paths = path9.split("/");
   if (paths[0] === "") {
     paths.shift();
   }
   return paths;
 };
 var splitRoutingPath = (routePath) => {
-  const { groups, path: path7 } = extractGroupsFromPath(routePath);
-  const paths = splitPath(path7);
+  const { groups, path: path9 } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path9);
   return replaceGroupMarks(paths, groups);
 };
-var extractGroupsFromPath = (path7) => {
+var extractGroupsFromPath = (path9) => {
   const groups = [];
-  path7 = path7.replace(/\{[^}]+\}/g, (match2, index) => {
+  path9 = path9.replace(/\{[^}]+\}/g, (match2, index) => {
     const mark = `@${index}`;
     groups.push([mark, match2]);
     return mark;
   });
-  return { groups, path: path7 };
+  return { groups, path: path9 };
 };
 var replaceGroupMarks = (paths, groups) => {
   for (let i = groups.length - 1; i >= 0; i--) {
@@ -4793,8 +4793,8 @@ var getPath = (request) => {
       const queryIndex = url.indexOf("?", i);
       const hashIndex = url.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
-      const path7 = url.slice(start, end);
-      return tryDecodeURI(path7.includes("%25") ? path7.replace(/%25/g, "%2525") : path7);
+      const path9 = url.slice(start, end);
+      return tryDecodeURI(path9.includes("%25") ? path9.replace(/%25/g, "%2525") : path9);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -4811,11 +4811,11 @@ var mergePath = (base, sub, ...rest) => {
   }
   return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
 };
-var checkOptionalParameter = (path7) => {
-  if (path7.charCodeAt(path7.length - 1) !== 63 || !path7.includes(":")) {
+var checkOptionalParameter = (path9) => {
+  if (path9.charCodeAt(path9.length - 1) !== 63 || !path9.includes(":")) {
     return null;
   }
-  const segments = path7.split("/");
+  const segments = path9.split("/");
   const results = [];
   let basePath = "";
   segments.forEach((segment) => {
@@ -4956,9 +4956,9 @@ var HonoRequest = class {
    */
   path;
   bodyCache = {};
-  constructor(request, path7 = "/", matchResult = [[]]) {
+  constructor(request, path9 = "/", matchResult = [[]]) {
     this.raw = request;
-    this.path = path7;
+    this.path = path9;
     this.#matchResult = matchResult;
     this.#validatedData = {};
   }
@@ -5710,8 +5710,8 @@ var Hono = class _Hono {
         return this;
       };
     });
-    this.on = (method, path7, ...handlers) => {
-      for (const p of [path7].flat()) {
+    this.on = (method, path9, ...handlers) => {
+      for (const p of [path9].flat()) {
         this.#path = p;
         for (const m of [method].flat()) {
           handlers.map((handler) => {
@@ -5768,8 +5768,8 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path7, app) {
-    const subApp = this.basePath(path7);
+  route(path9, app) {
+    const subApp = this.basePath(path9);
     app.routes.map((r) => {
       let handler;
       if (app.errorHandler === errorHandler) {
@@ -5795,9 +5795,9 @@ var Hono = class _Hono {
    * const api = new Hono().basePath('/api')
    * ```
    */
-  basePath(path7) {
+  basePath(path9) {
     const subApp = this.#clone();
-    subApp._basePath = mergePath(this._basePath, path7);
+    subApp._basePath = mergePath(this._basePath, path9);
     return subApp;
   }
   /**
@@ -5871,7 +5871,7 @@ var Hono = class _Hono {
    * })
    * ```
    */
-  mount(path7, applicationHandler, options) {
+  mount(path9, applicationHandler, options) {
     let replaceRequest;
     let optionHandler;
     if (options) {
@@ -5898,7 +5898,7 @@ var Hono = class _Hono {
       return [c.env, executionContext];
     };
     replaceRequest ||= (() => {
-      const mergedPath = mergePath(this._basePath, path7);
+      const mergedPath = mergePath(this._basePath, path9);
       const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
       return (request) => {
         const url = new URL(request.url);
@@ -5913,19 +5913,19 @@ var Hono = class _Hono {
       }
       await next();
     };
-    this.#addRoute(METHOD_NAME_ALL, mergePath(path7, "*"), handler);
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path9, "*"), handler);
     return this;
   }
-  #addRoute(method, path7, handler, baseRoutePath) {
+  #addRoute(method, path9, handler, baseRoutePath) {
     method = method.toUpperCase();
-    path7 = mergePath(this._basePath, path7);
+    path9 = mergePath(this._basePath, path9);
     const r = {
       basePath: baseRoutePath !== void 0 ? mergePath(this._basePath, baseRoutePath) : this._basePath,
-      path: path7,
+      path: path9,
       method,
       handler
     };
-    this.router.add(method, path7, [handler, r]);
+    this.router.add(method, path9, [handler, r]);
     this.routes.push(r);
   }
   #handleError(err, c) {
@@ -5938,10 +5938,10 @@ var Hono = class _Hono {
     if (method === "HEAD") {
       return (async () => new Response(null, await this.#dispatch(request, executionCtx, env, "GET")))();
     }
-    const path7 = this.getPath(request, { env });
-    const matchResult = this.router.match(method, path7);
+    const path9 = this.getPath(request, { env });
+    const matchResult = this.router.match(method, path9);
     const c = new Context(request, {
-      path: path7,
+      path: path9,
       matchResult,
       env,
       executionCtx,
@@ -6041,7 +6041,7 @@ var Hono = class _Hono {
 
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
-function match(method, path7) {
+function match(method, path9) {
   const matchers = this.buildAllMatchers();
   const match2 = ((method2, path22) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
@@ -6057,7 +6057,7 @@ function match(method, path7) {
     return [matcher[1][index], match3];
   });
   this.match = match2;
-  return match2(method, path7);
+  return match2(method, path9);
 }
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
@@ -6172,12 +6172,12 @@ var Node = class _Node {
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
-  insert(path7, index, pathErrorCheckOnly) {
+  insert(path9, index, pathErrorCheckOnly) {
     const paramAssoc = [];
     const groups = [];
     for (let i = 0; ; ) {
       let replaced = false;
-      path7 = path7.replace(/\{[^}]+\}/g, (m) => {
+      path9 = path9.replace(/\{[^}]+\}/g, (m) => {
         const mark = `@\\${i}`;
         groups[i] = [mark, m];
         i++;
@@ -6188,7 +6188,7 @@ var Trie = class {
         break;
       }
     }
-    const tokens = path7.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    const tokens = path9.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
     for (let i = groups.length - 1; i >= 0; i--) {
       const [mark] = groups[i];
       for (let j = tokens.length - 1; j >= 0; j--) {
@@ -6227,9 +6227,9 @@ var Trie = class {
 // node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
-function buildWildcardRegExp(path7) {
-  return wildcardRegExpCache[path7] ??= new RegExp(
-    path7 === "*" ? "" : `^${path7.replace(
+function buildWildcardRegExp(path9) {
+  return wildcardRegExpCache[path9] ??= new RegExp(
+    path9 === "*" ? "" : `^${path9.replace(
       /\/\*$|([.\\+*[^\]$()])/g,
       (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)"
     )}$`
@@ -6251,17 +6251,17 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   );
   const staticMap = /* @__PURE__ */ Object.create(null);
   for (let i = 0, j = -1, len = routesWithStaticPathFlag.length; i < len; i++) {
-    const [pathErrorCheckOnly, path7, handlers] = routesWithStaticPathFlag[i];
+    const [pathErrorCheckOnly, path9, handlers] = routesWithStaticPathFlag[i];
     if (pathErrorCheckOnly) {
-      staticMap[path7] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+      staticMap[path9] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
     } else {
       j++;
     }
     let paramAssoc;
     try {
-      paramAssoc = trie.insert(path7, j, pathErrorCheckOnly);
+      paramAssoc = trie.insert(path9, j, pathErrorCheckOnly);
     } catch (e) {
-      throw e === PATH_ERROR ? new UnsupportedPathError(path7) : e;
+      throw e === PATH_ERROR ? new UnsupportedPathError(path9) : e;
     }
     if (pathErrorCheckOnly) {
       continue;
@@ -6295,12 +6295,12 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware, path7) {
+function findMiddleware(middleware, path9) {
   if (!middleware) {
     return void 0;
   }
   for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
-    if (buildWildcardRegExp(k).test(path7)) {
+    if (buildWildcardRegExp(k).test(path9)) {
       return [...middleware[k]];
     }
   }
@@ -6314,7 +6314,7 @@ var RegExpRouter = class {
     this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
-  add(method, path7, handler) {
+  add(method, path9, handler) {
     const middleware = this.#middleware;
     const routes = this.#routes;
     if (!middleware || !routes) {
@@ -6329,18 +6329,18 @@ var RegExpRouter = class {
         });
       });
     }
-    if (path7 === "/*") {
-      path7 = "*";
+    if (path9 === "/*") {
+      path9 = "*";
     }
-    const paramCount = (path7.match(/\/:/g) || []).length;
-    if (/\*$/.test(path7)) {
-      const re = buildWildcardRegExp(path7);
+    const paramCount = (path9.match(/\/:/g) || []).length;
+    if (/\*$/.test(path9)) {
+      const re = buildWildcardRegExp(path9);
       if (method === METHOD_NAME_ALL) {
         Object.keys(middleware).forEach((m) => {
-          middleware[m][path7] ||= findMiddleware(middleware[m], path7) || findMiddleware(middleware[METHOD_NAME_ALL], path7) || [];
+          middleware[m][path9] ||= findMiddleware(middleware[m], path9) || findMiddleware(middleware[METHOD_NAME_ALL], path9) || [];
         });
       } else {
-        middleware[method][path7] ||= findMiddleware(middleware[method], path7) || findMiddleware(middleware[METHOD_NAME_ALL], path7) || [];
+        middleware[method][path9] ||= findMiddleware(middleware[method], path9) || findMiddleware(middleware[METHOD_NAME_ALL], path9) || [];
       }
       Object.keys(middleware).forEach((m) => {
         if (method === METHOD_NAME_ALL || method === m) {
@@ -6358,7 +6358,7 @@ var RegExpRouter = class {
       });
       return;
     }
-    const paths = checkOptionalParameter(path7) || [path7];
+    const paths = checkOptionalParameter(path9) || [path9];
     for (let i = 0, len = paths.length; i < len; i++) {
       const path22 = paths[i];
       Object.keys(routes).forEach((m) => {
@@ -6385,13 +6385,13 @@ var RegExpRouter = class {
     const routes = [];
     let hasOwnRoute = method === METHOD_NAME_ALL;
     [this.#middleware, this.#routes].forEach((r) => {
-      const ownRoute = r[method] ? Object.keys(r[method]).map((path7) => [path7, r[method][path7]]) : [];
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path9) => [path9, r[method][path9]]) : [];
       if (ownRoute.length !== 0) {
         hasOwnRoute ||= true;
         routes.push(...ownRoute);
       } else if (method !== METHOD_NAME_ALL) {
         routes.push(
-          ...Object.keys(r[METHOD_NAME_ALL]).map((path7) => [path7, r[METHOD_NAME_ALL][path7]])
+          ...Object.keys(r[METHOD_NAME_ALL]).map((path9) => [path9, r[METHOD_NAME_ALL][path9]])
         );
       }
     });
@@ -6411,13 +6411,13 @@ var SmartRouter = class {
   constructor(init) {
     this.#routers = init.routers;
   }
-  add(method, path7, handler) {
+  add(method, path9, handler) {
     if (!this.#routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    this.#routes.push([method, path7, handler]);
+    this.#routes.push([method, path9, handler]);
   }
-  match(method, path7) {
+  match(method, path9) {
     if (!this.#routes) {
       throw new Error("Fatal error");
     }
@@ -6432,7 +6432,7 @@ var SmartRouter = class {
         for (let i2 = 0, len2 = routes.length; i2 < len2; i2++) {
           router.add(...routes[i2]);
         }
-        res = router.match(method, path7);
+        res = router.match(method, path9);
       } catch (e) {
         if (e instanceof UnsupportedPathError) {
           continue;
@@ -6482,10 +6482,10 @@ var Node2 = class _Node2 {
     }
     this.#patterns = [];
   }
-  insert(method, path7, handler) {
+  insert(method, path9, handler) {
     this.#order = ++this.#order;
     let curNode = this;
-    const parts = splitRoutingPath(path7);
+    const parts = splitRoutingPath(path9);
     const possibleKeys = [];
     for (let i = 0, len = parts.length; i < len; i++) {
       const p = parts[i];
@@ -6534,12 +6534,12 @@ var Node2 = class _Node2 {
       }
     }
   }
-  search(method, path7) {
+  search(method, path9) {
     const handlerSets = [];
     this.#params = emptyParams;
     const curNode = this;
     let curNodes = [curNode];
-    const parts = splitPath(path7);
+    const parts = splitPath(path9);
     const curNodesQueue = [];
     const len = parts.length;
     let partOffsets = null;
@@ -6581,13 +6581,13 @@ var Node2 = class _Node2 {
           if (matcher instanceof RegExp) {
             if (partOffsets === null) {
               partOffsets = new Array(len);
-              let offset = path7[0] === "/" ? 1 : 0;
+              let offset = path9[0] === "/" ? 1 : 0;
               for (let p = 0; p < len; p++) {
                 partOffsets[p] = offset;
                 offset += parts[p].length + 1;
               }
             }
-            const restPathString = path7.substring(partOffsets[i]);
+            const restPathString = path9.substring(partOffsets[i]);
             const m = matcher.exec(restPathString);
             if (m) {
               params[name] = m[0];
@@ -6640,18 +6640,18 @@ var TrieRouter = class {
   constructor() {
     this.#node = new Node2();
   }
-  add(method, path7, handler) {
-    const results = checkOptionalParameter(path7);
+  add(method, path9, handler) {
+    const results = checkOptionalParameter(path9);
     if (results) {
       for (let i = 0, len = results.length; i < len; i++) {
         this.#node.insert(method, results[i], handler);
       }
       return;
     }
-    this.#node.insert(method, path7, handler);
+    this.#node.insert(method, path9, handler);
   }
-  match(method, path7) {
-    return this.#node.search(method, path7);
+  match(method, path9) {
+    return this.#node.search(method, path9);
   }
 };
 
@@ -7223,8 +7223,8 @@ async function restartCurrentSpace(config2) {
   });
   return true;
 }
-async function hubRequest(config2, path7, init) {
-  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path7}`, {
+async function hubRequest(config2, path9, init) {
+  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path9}`, {
     ...init,
     headers: {
       authorization: `Bearer ${config2.hfToken}`,
@@ -7715,8 +7715,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path7, errorMaps, issueData } = params;
-  const fullPath = [...path7, ...issueData.path || []];
+  const { data, path: path9, errorMaps, issueData } = params;
+  const fullPath = [...path9, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7832,11 +7832,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path7, key) {
+  constructor(parent, value, path9, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path7;
+    this._path = path9;
     this._key = key;
   }
   get path() {
@@ -11359,57 +11359,193 @@ function normalizeScope(value) {
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
+
+// src/mlclaw-space-runtime/openai-models.ts
+var LEGACY_CODEX_MODEL_REF = "mlclaw-codex/gpt-5.4";
+var DEFAULT_OPENAI_MODEL_REF = "openai/gpt-5.4";
+
+// src/mlclaw-space-runtime/openclaw-oauth-profile.ts
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
+var OPENAI_OAUTH_PROFILE_ID = "openai:mlclaw";
+var MAX_HELPER_OUTPUT_BYTES = 64 * 1024;
+var PROFILE_HELPER_SCRIPT = String.raw`
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
-// src/mlclaw-space-runtime/codex-provider.ts
-import { createHmac as createHmac4 } from "node:crypto";
-var CODEX_PROVIDER_ID = "mlclaw-codex";
-var CODEX_MODEL_ID = "gpt-5.4";
-var CODEX_MODEL_REF = `${CODEX_PROVIDER_ID}/${CODEX_MODEL_ID}`;
-var CODEX_PROXY_BASE_PATH = "/backend-api/codex";
-var CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/responses`;
-var CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
-var CODEX_MODEL_CHOICE = Object.freeze({
-  key: CODEX_MODEL_REF,
-  modelId: CODEX_MODEL_ID,
-  provider: CODEX_PROVIDER_ID,
-  openclawModel: CODEX_MODEL_REF,
-  label: "GPT-5.4 (Codex)",
-  note: "Connected ChatGPT account",
-  contextLength: 272e3,
-  pricing: { input: 2.5, output: 15 },
-  supportsTools: true,
-  supportsStructuredOutput: true,
-  status: "live",
-  inputModalities: ["text", "image"],
-  outputModalities: ["text"]
+const input = fs.readFileSync(0, "utf8");
+const payload = JSON.parse(input);
+const require = createRequire(pathToFileURL(payload.openclawEntry));
+const sdkPath = require.resolve("openclaw/plugin-sdk/provider-auth");
+const { updateAuthProfileStoreWithLock } = await import(pathToFileURL(sdkPath).href);
+
+const result = await updateAuthProfileStoreWithLock({
+  agentDir: payload.agentDir,
+  saveOptions: { filterExternalAuthProfiles: false, syncExternalCli: false },
+  updater(store) {
+    const profileId = payload.profileId;
+    const existing = store.profiles[profileId];
+    if (payload.operation === "remove") {
+      let changed = false;
+      if (existing) {
+        delete store.profiles[profileId];
+        changed = true;
+      }
+      if (store.usageStats?.[profileId]) {
+        delete store.usageStats[profileId];
+        changed = true;
+      }
+      if (store.lastGood) {
+        for (const [provider, value] of Object.entries(store.lastGood)) {
+          if (value === profileId) {
+            delete store.lastGood[provider];
+            changed = true;
+          }
+        }
+      }
+      if (store.order) {
+        for (const [provider, order] of Object.entries(store.order)) {
+          const next = Array.isArray(order) ? order.filter((value) => value !== profileId) : order;
+          if (Array.isArray(order) && next.length !== order.length) {
+            changed = true;
+            if (next.length > 0) store.order[provider] = next;
+            else delete store.order[provider];
+          }
+        }
+      }
+      return changed;
+    }
+
+    const incoming = payload.credential;
+    if (
+      existing?.type === "oauth" &&
+      existing.provider === "openai" &&
+      existing.accountId === incoming.accountId &&
+      Number(existing.expires) >= Number(incoming.expires)
+    ) {
+      return false;
+    }
+    store.profiles[profileId] = incoming;
+    const currentOrder = Array.isArray(store.order?.openai) ? store.order.openai : [];
+    store.order = {
+      ...store.order,
+      openai: [profileId, ...currentOrder.filter((value) => value !== profileId)],
+    };
+    return true;
+  },
 });
-function deriveCodexProviderToken(secret) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" }), "utf8").toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({
-      iss: "mlclaw",
-      "https://api.openai.com/auth": { chatgpt_account_id: "mlclaw-proxy" }
-    }),
-    "utf8"
-  ).toString("base64url");
-  const signature = createHmac4("sha256", secret).update(`${header}.${payload}`).digest("base64url");
-  return `${header}.${payload}.${signature}`;
+
+if (!result) throw new Error("OpenClaw auth profile store was unavailable");
+process.stdout.write(JSON.stringify({ ok: true }) + "\n");
+`;
+async function syncOpenAiOAuthProfile(params) {
+  const openclawEntry = await resolveOpenClawEntry(params.config.openclawCommand, params.env.PATH);
+  if (!openclawEntry) return false;
+  const agentDir = path.join(path.dirname(params.config.openclawConfigPath), "agents", "main", "agent");
+  const credential = params.credential ? {
+    type: "oauth",
+    provider: "openai",
+    access: params.credential.access,
+    refresh: params.credential.refresh,
+    expires: params.credential.expires,
+    accountId: params.credential.accountId,
+    ...params.credential.idToken ? { idToken: params.credential.idToken } : {},
+    displayName: "MLClaw ChatGPT"
+  } : void 0;
+  await runProfileHelper({
+    openclawEntry,
+    agentDir,
+    env: params.env,
+    payload: {
+      operation: credential ? "upsert" : "remove",
+      profileId: OPENAI_OAUTH_PROFILE_ID,
+      ...credential ? { credential } : {}
+    },
+    ...process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}
+  });
+  return true;
+}
+async function resolveOpenClawEntry(command, pathValue) {
+  const candidate = command.includes(path.sep) ? path.resolve(command) : await findOnPath(command, pathValue);
+  if (!candidate) return void 0;
+  try {
+    const real = await fs.realpath(candidate);
+    if (path.basename(real) !== "openclaw.mjs") return void 0;
+    return real;
+  } catch {
+    return void 0;
+  }
+}
+async function findOnPath(command, pathValue) {
+  for (const directory of (pathValue ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, command);
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+    }
+  }
+  return void 0;
+}
+async function runProfileHelper(params) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", PROFILE_HELPER_SCRIPT], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: params.env,
+      ...params.uid !== void 0 ? { uid: params.uid } : {},
+      ...params.gid !== void 0 ? { gid: params.gid } : {}
+    });
+    let stdout = "";
+    let stderr = "";
+    const append = (current, chunk) => `${current}${chunk.toString("utf8")}`.slice(-MAX_HELPER_OUTPUT_BYTES);
+    child.stdout.on("data", (chunk) => {
+      stdout = append(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = append(stderr, chunk);
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0 && stdout.includes('"ok":true')) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `OpenClaw OAuth profile update failed (code=${code ?? "null"}, signal=${signal ?? "null"}): ${sanitizeHelperError(stderr)}`
+        )
+      );
+    });
+    child.stdin.end(
+      JSON.stringify({
+        ...params.payload,
+        openclawEntry: params.openclawEntry,
+        agentDir: params.agentDir
+      })
+    );
+  });
+}
+function sanitizeHelperError(value) {
+  return value.replace(/[\r\n\t]+/gu, " ").trim().slice(0, 512) || "unknown error";
 }
 
 // src/mlclaw-space-runtime/mcp-integrations.ts
-import { createHmac as createHmac5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 var MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 var UPSTREAM_TIMEOUT_MS = 12e4;
 var INTERNAL_HEADER = "x-mlclaw-mcp-key";
 var McpIntegrationServer = class {
-  constructor(config2, credentials, codexCredentials, fetchFn = fetch) {
+  constructor(config2, credentials, fetchFn = fetch) {
     this.config = config2;
     this.credentials = credentials;
-    this.codexCredentials = codexCredentials;
     this.fetchFn = fetchFn;
     this.internalToken = deriveInternalToken(config2.sessionSecret);
   }
@@ -11473,15 +11609,6 @@ var McpIntegrationServer = class {
   }
   async handle(req, res, signal) {
     const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (pathname === CODEX_RESPONSES_PATH) {
-      if (!validBearerToken(req.headers.authorization, deriveCodexProviderToken(this.config.sessionSecret))) {
-        writeJson(res, 401, { error: { message: "Unauthorized", type: "authentication_error" } });
-        return;
-      }
-      const body2 = await readBody(req, MAX_REQUEST_BYTES);
-      await this.handleCodexResponses(req, res, body2, signal);
-      return;
-    }
     if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
       writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
       return;
@@ -11513,60 +11640,6 @@ var McpIntegrationServer = class {
       accessToken,
       signal
     });
-  }
-  async handleCodexResponses(req, res, body, signal) {
-    if (req.method !== "POST") {
-      writeJson(res, 405, { error: { message: "Method not allowed", type: "invalid_request_error" } });
-      return;
-    }
-    if (!this.codexCredentials) {
-      writeJson(res, 503, { error: { message: "Codex is not configured", type: "authentication_error" } });
-      return;
-    }
-    const request = parseJsonObject(body);
-    if (!request) {
-      writeJson(res, 400, { error: { message: "Invalid JSON request", type: "invalid_request_error" } });
-      return;
-    }
-    if (request.model !== CODEX_MODEL_ID) {
-      writeJson(res, 400, { error: { message: "Unsupported Codex model", type: "invalid_request_error" } });
-      return;
-    }
-    normalizeCodexRequest(request);
-    const upstream = await this.fetchCodexResponse(request, signal, false);
-    res.writeHead(upstream.status, responseHeaders(upstream.headers));
-    if (!upstream.body) {
-      res.end();
-      return;
-    }
-    await pipeResponseBody(upstream.body, res);
-  }
-  async fetchCodexResponse(request, signal, refreshed) {
-    const credential = await this.codexCredentials?.credential({
-      forceRefresh: refreshed,
-      signal
-    });
-    if (!credential) throw new Error("Codex is not configured");
-    const response = await this.fetchFn(CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential.access}`,
-        "chatgpt-account-id": credential.accountId,
-        originator: "mlclaw",
-        "user-agent": "mlclaw",
-        "openai-beta": "responses=experimental",
-        accept: "text/event-stream",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(request),
-      redirect: "error",
-      signal
-    });
-    if (response.status === 401 && !refreshed) {
-      await response.body?.cancel().catch(() => void 0);
-      return await this.fetchCodexResponse(request, signal, true);
-    }
-    return response;
   }
   async handleResearchCall(req, res, body, request, accessToken, signal) {
     const deadline = Date.now() + this.config.researchTimeoutMs;
@@ -11732,7 +11805,7 @@ var ResearchRpcError = class extends Error {
   }
 };
 function deriveInternalToken(secret) {
-  return createHmac5("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
+  return createHmac4("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
 }
 function managedMcpServerConfig(config2) {
   const headers = { [INTERNAL_HEADER]: deriveInternalToken(config2.sessionSecret) };
@@ -11839,66 +11912,6 @@ async function readBody(req, limit) {
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
-}
-function parseJsonObject(body) {
-  try {
-    const value = JSON.parse(Buffer.from(body).toString("utf8"));
-    return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function normalizeCodexRequest(request) {
-  const instructions = codexInstructions(request.input);
-  const existingInstructions = stringValue2(request.instructions);
-  const combinedInstructions = [existingInstructions, ...instructions.text].filter(
-    (value) => Boolean(value)
-  );
-  if (combinedInstructions.length > 0) request.instructions = combinedInstructions.join("\n\n");
-  if (instructions.input) request.input = instructions.input;
-  for (const key of [
-    "max_output_tokens",
-    "metadata",
-    "prompt_cache_retention",
-    "service_tier",
-    "temperature",
-    "top_p"
-  ]) {
-    delete request[key];
-  }
-  const text = objectValue(request.text);
-  if (text) {
-    const sanitized = { ...text };
-    delete sanitized.format;
-    if (Object.keys(sanitized).length > 0) request.text = sanitized;
-    else delete request.text;
-  }
-  request.store = false;
-  request.stream = true;
-}
-function codexInstructions(input) {
-  if (!Array.isArray(input)) return { text: [] };
-  const remaining = [];
-  const text = [];
-  for (const item of input) {
-    const message = objectValue(item);
-    if (message?.role !== "system" && message?.role !== "developer") {
-      remaining.push(item);
-      continue;
-    }
-    const instruction = responseMessageText(message.content);
-    if (instruction) text.push(instruction);
-  }
-  if (remaining.length === 0 && text.length > 0) {
-    remaining.push({ role: "user", content: [{ type: "input_text", text: " " }] });
-  }
-  return { input: remaining, text };
-}
-function responseMessageText(content) {
-  if (typeof content === "string") return stringValue2(content);
-  if (!Array.isArray(content)) return void 0;
-  const text = content.map((item) => stringValue2(objectValue(item)?.text)).filter((value) => Boolean(value)).join("\n").trim();
-  return text || void 0;
 }
 function parseJsonRpc(body) {
   try {
@@ -12025,10 +12038,6 @@ async function pipeResponseBody(body, response) {
     stream.pipe(response);
   });
 }
-function validBearerToken(value, expected) {
-  const prefix = "Bearer ";
-  return typeof value === "string" && value.startsWith(prefix) ? validInternalToken(value.slice(prefix.length), expected) : false;
-}
 function validInternalToken(value, expected) {
   if (typeof value !== "string") {
     return false;
@@ -12098,8 +12107,8 @@ var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
 var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
 var AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2147483647;
 async function configureOpenClawGateway(config2, options = {}) {
-  const raw2 = await fs.readFile(config2.openclawConfigPath, "utf8");
-  const openclawConfig = JSON.parse(raw2);
+  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
+  const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw2));
   const gateway = object(openclawConfig, "gateway");
   gateway.mode = "local";
   gateway.bind = "loopback";
@@ -12119,17 +12128,18 @@ async function configureOpenClawGateway(config2, options = {}) {
     allowedOrigins: config2.accessOrigins,
     embedSandbox: "scripts"
   };
-  configureOpenClawModels(openclawConfig, config2, Boolean(options.codexConfigured));
+  configureOpenClawModels(openclawConfig, config2, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
+  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
   configureBrokerKitPlugin(openclawConfig, config2);
-  await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
-  await fs.chmod(config2.openclawConfigPath, 384);
+  await fs2.chmod(config2.openclawConfigPath, 384);
   if (process.getuid?.() === 0) {
-    await fs.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
+    await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
 }
 function disableAutomaticSessionResets(openclawConfig) {
@@ -12213,7 +12223,7 @@ function configureBrokerKitPlugin(openclawConfig, config2) {
   };
 }
 async function managedMcpServerStatus(config2) {
-  const raw2 = JSON.parse(await fs.readFile(config2.openclawConfigPath, "utf8"));
+  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
   const servers = object(object(raw2, "mcp"), "servers");
   return [
     { id: "huggingface", name: "Hugging Face MCP" },
@@ -12238,34 +12248,44 @@ function configureManagedMcpServers(openclawConfig, config2) {
     };
   }
 }
-function configureOpenClawModels(openclawConfig, config2, codexConfigured) {
-  const routerChoices = config2.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
+function configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2) {
+  const routerChoices = config2.modelChoices;
   configureAgentModelChoices(
     object(object(openclawConfig, "agents"), "defaults"),
     config2,
     routerChoices,
-    codexConfigured
+    codexConfigured,
+    openAiConfigured2
   );
   const models = object(openclawConfig, "models");
   models.mode = "merge";
   const providers = object(models, "providers");
   configureHuggingFaceProvider(object(providers, "huggingface"), config2, routerChoices);
-  configureCodexProvider(providers, config2, codexConfigured);
+  configureNativeOpenAiProvider(providers);
 }
-function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured) {
+function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
   const existingModel = objectValue2(defaults.model) ?? {};
-  const visibleChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
-  const primary = config2.model === CODEX_MODEL_REF && !codexConfigured ? routerChoices[0]?.openclawModel : config2.model;
-  defaults.model = { ...existingModel, ...primary ? { primary } : {} };
-  defaults.models = Object.fromEntries(
-    visibleChoices.map((choice) => [
-      choice.openclawModel,
-      {
-        alias: aliasForChoice(choice),
-        ...choice.openclawModel === CODEX_MODEL_REF ? { agentRuntime: { id: "openclaw" } } : {}
-      }
-    ])
-  );
+  const openAiAvailable = codexConfigured || openAiConfigured2;
+  const primary = resolvePrimaryModel({
+    existing: existingModel.primary,
+    requested: replaceLegacyCodexModelRef(config2.model),
+    openAiAvailable,
+    ...routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}
+  });
+  defaults.model = {
+    ...existingModel,
+    ...primary ? { primary } : {}
+  };
+  defaults.models = {
+    ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
+    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}
+  };
+}
+function resolvePrimaryModel(params) {
+  const existing = typeof params.existing === "string" ? params.existing.trim() : void 0;
+  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
+  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
+  return params.requested;
 }
 function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
   huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
@@ -12274,33 +12294,48 @@ function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
   huggingface.api = "openai-completions";
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
 }
-function configureCodexProvider(providers, config2, configured) {
-  if (!configured) {
-    delete providers[CODEX_PROVIDER_ID];
-    return;
+function configureNativeOpenAiProvider(providers) {
+  delete providers["mlclaw-codex"];
+  const existing = objectValue2(providers.openai);
+  const params = objectValue2(existing?.params);
+  if (!params || !("codexProxyBaseUrl" in params)) return;
+  const nextParams = { ...params };
+  delete nextParams.codexProxyBaseUrl;
+  if (existing) {
+    if (Object.keys(nextParams).length > 0) existing.params = nextParams;
+    else delete existing.params;
   }
-  providers[CODEX_PROVIDER_ID] = {
-    baseUrl: `http://127.0.0.1:${config2.mcpPort}${CODEX_PROXY_BASE_PATH}`,
-    apiKey: deriveCodexProviderToken(config2.sessionSecret),
-    auth: "api-key",
-    api: "openai-chatgpt-responses",
-    models: [
-      {
-        id: CODEX_MODEL_ID,
-        name: CODEX_MODEL_CHOICE.label,
-        api: "openai-chatgpt-responses",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
-        contextWindow: 272e3,
-        maxTokens: 128e3,
-        thinkingLevelMap: { minimal: "low", xhigh: "xhigh" },
-        params: { transport: "sse" },
-        agentRuntime: { id: "openclaw" },
-        compat: { supportsTools: true, supportsStrictMode: true }
-      }
-    ]
-  };
+}
+function configureOpenAiAuthMetadata(openclawConfig, configured) {
+  const auth = object(openclawConfig, "auth");
+  const profiles = object(auth, "profiles");
+  const order = object(auth, "order");
+  const existingOrder = Array.isArray(order.openai) ? order.openai.filter((value) => typeof value === "string" && value !== OPENAI_OAUTH_PROFILE_ID) : [];
+  if (configured) {
+    profiles[OPENAI_OAUTH_PROFILE_ID] = {
+      provider: "openai",
+      mode: "oauth",
+      displayName: "MLClaw ChatGPT"
+    };
+    order.openai = [OPENAI_OAUTH_PROFILE_ID, ...existingOrder];
+  } else {
+    delete profiles[OPENAI_OAUTH_PROFILE_ID];
+    if (existingOrder.length > 0) order.openai = existingOrder;
+    else delete order.openai;
+  }
+  if (Object.keys(profiles).length === 0) delete auth.profiles;
+  if (Object.keys(order).length === 0) delete auth.order;
+}
+function replaceLegacyCodexModelRef(value) {
+  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : value;
+}
+function migrateLegacyCodexModelRefs(value) {
+  if (typeof value === "string") return replaceLegacyCodexModelRef(value);
+  if (Array.isArray(value)) return value.map(migrateLegacyCodexModelRefs);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [replaceLegacyCodexModelRef(key), migrateLegacyCodexModelRefs(entry)])
+  );
 }
 function modelDefinitionFromChoice(choice) {
   const providerModelId = providerModelIdFromChoice(choice);
@@ -12374,14 +12409,14 @@ function uniqueStrings(value, required) {
 
 // src/mlclaw-space-runtime/openai-credentials.ts
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes5 } from "node:crypto";
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
 function openAiConfigured(env = process.env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
 }
 async function loadOpenAiCredentialFile(file) {
   try {
-    const raw2 = await fs2.readFile(file, "utf8");
+    const raw2 = await fs3.readFile(file, "utf8");
     const match2 = raw2.match(/(?:^|\n)OPENAI_API_KEY=([^\n]+)/);
     return match2?.[1]?.trim() || void 0;
   } catch {
@@ -12389,10 +12424,10 @@ async function loadOpenAiCredentialFile(file) {
   }
 }
 async function writeEphemeralOpenAiCredential(file, apiKey) {
-  await fs2.mkdir(path2.dirname(file), { recursive: true, mode: 448 });
-  await fs2.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
+  await fs3.mkdir(path3.dirname(file), { recursive: true, mode: 448 });
+  await fs3.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
 `, { encoding: "utf8", mode: 384 });
-  await fs2.chmod(file, 384);
+  await fs3.chmod(file, 384);
 }
 var OpenAiCredentialStore = class {
   constructor(file, secret) {
@@ -12411,7 +12446,7 @@ var OpenAiCredentialStore = class {
   async load() {
     let raw2;
     try {
-      raw2 = await fs2.readFile(this.file, "utf8");
+      raw2 = await fs3.readFile(this.file, "utf8");
     } catch (err) {
       if (err instanceof Error && "code" in err && err.code === "ENOENT") {
         return void 0;
@@ -12452,17 +12487,17 @@ var OpenAiCredentialStore = class {
       tag: cipher.getAuthTag().toString("base64url"),
       ciphertext: ciphertext.toString("base64url")
     };
-    const directory = path2.dirname(this.file);
+    const directory = path3.dirname(this.file);
     const temporary = `${this.file}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
-    await fs2.mkdir(directory, { recursive: true, mode: 448 });
+    await fs3.mkdir(directory, { recursive: true, mode: 448 });
     try {
-      await fs2.writeFile(temporary, `${JSON.stringify(envelope)}
+      await fs3.writeFile(temporary, `${JSON.stringify(envelope)}
 `, { encoding: "utf8", mode: 384 });
-      await fs2.chmod(temporary, 384);
-      await fs2.rename(temporary, this.file);
-      await fs2.chmod(this.file, 384);
+      await fs3.chmod(temporary, 384);
+      await fs3.rename(temporary, this.file);
+      await fs3.chmod(this.file, 384);
     } finally {
-      await fs2.rm(temporary, { force: true });
+      await fs3.rm(temporary, { force: true });
     }
   }
 };
@@ -12796,7 +12831,7 @@ function positiveNumber2(value) {
 }
 
 // src/mlclaw-space-runtime/cookies.ts
-import { createHmac as createHmac6, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { createHmac as createHmac5, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 function createSignedCookie(options, payload) {
   const body = Buffer.from(JSON.stringify({
     ...payload,
@@ -12848,7 +12883,7 @@ function randomState() {
   return randomBytes6(24).toString("base64url");
 }
 function sign2(value, secret) {
-  return createHmac6("sha256", secret).update(value).digest("base64url");
+  return createHmac5("sha256", secret).update(value).digest("base64url");
 }
 function signatureMatches2(a, b) {
   const left = Buffer.from(a);
@@ -13273,15 +13308,15 @@ function createSpaceRuntimeApp(config2, controls) {
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get(
     "/assets/mlclaw.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/hf-logo.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/assistant-avatar.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
   app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
@@ -13361,7 +13396,7 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!safe) {
       return c.text("not found\n", 404);
     }
-    const file = path3.join(config2.assetsDir, "mlclaw-control-ui", safe);
+    const file = path4.join(config2.assetsDir, "mlclaw-control-ui", safe);
     return serveFile(file, contentType(file), true);
   });
   app.get("/mlclaw/openai", (c) => c.redirect("/mlclaw/credentials", 302));
@@ -13735,15 +13770,15 @@ async function controlUi(c, config2) {
   if (auth instanceof Response) {
     return auth;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
   const prefix = "/plugins/brokerkit/ui/";
   const requested = c.req.path.slice(prefix.length);
   const relative = requested ? safeRelativePath(requested) : "index.html";
   if (!relative) return c.text("not found\n", 404);
-  const uiDir = path3.join(config2.brokerKitPluginPath, "dist", "ui");
-  const file = path3.join(uiDir, relative);
+  const uiDir = path4.join(config2.brokerKitPluginPath, "dist", "ui");
+  const file = path4.join(uiDir, relative);
   if (relative === "index.html") {
     const destination = c.req.header("sec-fetch-dest");
     if (destination !== "iframe" && destination !== "document") return c.text("not found\n", 404);
@@ -13753,7 +13788,7 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
     try {
-      const template = await fs3.readFile(file, "utf8");
+      const template = await fs4.readFile(file, "utf8");
       const delegatedSession = destination === "document" || embeddedPopover;
       const marker = !delegatedSession ? '<meta name="brokerkit-delegated-top-level">' : `<meta name="brokerkit-delegated-session" content="${Buffer.from(
         JSON.stringify(
@@ -14104,8 +14139,8 @@ function recordValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 async function writeRuntimeSettingsFile(config2, model, choices) {
-  await fs3.mkdir(path3.dirname(config2.runtimeSettingsFile), { recursive: true });
-  await fs3.writeFile(
+  await fs4.mkdir(path4.dirname(config2.runtimeSettingsFile), { recursive: true });
+  await fs4.writeFile(
     config2.runtimeSettingsFile,
     `${JSON.stringify(
       {
@@ -14120,14 +14155,14 @@ async function writeRuntimeSettingsFile(config2, model, choices) {
 `,
     { encoding: "utf8", mode: 384 }
   );
-  await fs3.chmod(config2.runtimeSettingsFile, 384);
+  await fs4.chmod(config2.runtimeSettingsFile, 384);
   if (process.getuid?.() === 0) {
-    await fs3.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
+    await fs4.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
   }
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
-    const body = await fs3.readFile(file);
+    const body = await fs4.readFile(file);
     const headers = new Headers({ "content-type": contentTypeHeader });
     if (immutable) {
       headers.set("cache-control", "public, max-age=31536000, immutable");
@@ -14141,11 +14176,11 @@ async function serveFile(file, contentTypeHeader, immutable = false) {
   }
 }
 async function serveBrandAsset(config2, asset) {
-  const response = await serveFile(path3.join(config2.assetsDir, asset), contentType(asset));
+  const response = await serveFile(path4.join(config2.assetsDir, asset), contentType(asset));
   if (response.status !== 404 || asset === "mlclaw.svg") {
     return response;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
 }
 function safeRelativePath(value) {
   let decoded;
@@ -14154,7 +14189,7 @@ function safeRelativePath(value) {
   } catch {
     return void 0;
   }
-  const normalized = path3.posix.normalize(decoded).replace(/^\/+/, "");
+  const normalized = path4.posix.normalize(decoded).replace(/^\/+/, "");
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
     return void 0;
   }
@@ -14186,8 +14221,8 @@ function contentType(file) {
 }
 
 // src/mlclaw-space-runtime/codex-credentials.ts
-import fs5 from "node:fs/promises";
-import path5 from "node:path";
+import fs6 from "node:fs/promises";
+import path6 from "node:path";
 
 // src/vendor/hfjs-xet/error.ts
 async function createApiError(response, opts) {
@@ -18009,10 +18044,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path7, processedBytes]) => ({
-        path: path7,
-        progress: processedBytes / this.fileSize[path7],
-        lastSentProgress: ((this.fileUploadedBytes[path7] ?? 0) + (processedBytes - (this.fileUploadedBytes[path7] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path7]
+      files: Object.entries(this.fileProcessedBytes).map(([path9, processedBytes]) => ({
+        path: path9,
+        progress: processedBytes / this.fileSize[path9],
+        lastSentProgress: ((this.fileUploadedBytes[path9] ?? 0) + (processedBytes - (this.fileUploadedBytes[path9] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path9]
       }))
     };
   }
@@ -18885,7 +18920,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path7) => ({ type: "deleteFile", path: path7 })));
+    await this.batch(paths.map((path9) => ({ type: "deleteFile", path: path9 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -18901,8 +18936,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path7) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path7)}`;
+  async downloadFile(path9) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path9)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -18939,8 +18974,8 @@ var BucketClient = class {
 
 // src/mlclaw/codex-auth.ts
 import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes7 } from "node:crypto";
-import fs4 from "node:fs/promises";
-import path4 from "node:path";
+import fs5 from "node:fs/promises";
+import path5 from "node:path";
 var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
 var CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 function codexAuthObjectPath(statePrefix) {
@@ -19012,7 +19047,7 @@ function decryptCodexAuthDocument(params) {
 async function readEncryptedCodexAuthFile(params) {
   let encrypted;
   try {
-    encrypted = await fs4.readFile(params.file, "utf8");
+    encrypted = await fs5.readFile(params.file, "utf8");
   } catch (error) {
     if (isNotFound(error)) return void 0;
     throw new Error("Could not read encrypted Codex credentials");
@@ -19036,7 +19071,7 @@ async function writeEncryptedCodexAuthFile(params) {
   await writePrivateFile(params.file, encrypted);
 }
 async function deleteEncryptedCodexAuthFile(file) {
-  await fs4.rm(file, { force: true });
+  await fs5.rm(file, { force: true });
 }
 function decodeCodexAuthDocument(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -19086,15 +19121,15 @@ function contextAad(context) {
   return Buffer.from(JSON.stringify(compactContext(context)), "utf8");
 }
 async function writePrivateFile(file, content) {
-  await fs4.mkdir(path4.dirname(file), { recursive: true, mode: 448 });
+  await fs5.mkdir(path5.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${randomBytes7(6).toString("hex")}.tmp`;
   try {
-    await fs4.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs4.chmod(temporary, 384);
-    await fs4.rename(temporary, file);
-    await fs4.chmod(file, 384);
+    await fs5.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs5.chmod(temporary, 384);
+    await fs5.rename(temporary, file);
+    await fs5.chmod(file, 384);
   } finally {
-    await fs4.rm(temporary, { force: true });
+    await fs5.rm(temporary, { force: true });
   }
 }
 function isNotFound(error) {
@@ -19311,6 +19346,15 @@ var CodexCredentialStore = class {
   async configured() {
     return Boolean(await this.loadDocument());
   }
+  async credentialForImport() {
+    const source = await this.loadDocument();
+    return source ? openAICodexCredentialFromAuthJson(source.authJson) : void 0;
+  }
+  async credentialIsCurrent(expected) {
+    const source = await this.loadDocument();
+    if (!source) return false;
+    return stableJson(openAICodexCredentialFromAuthJson(source.authJson)) === stableJson(expected);
+  }
   async credential(options = {}) {
     return await this.serialized(async () => {
       const source = await this.loadDocument();
@@ -19386,7 +19430,7 @@ var CodexCredentialStore = class {
       context: this.expectedContext()
     });
     if (!this.config.stateMountDir && this.config.stateBucket && this.config.hfToken) {
-      const encrypted = await fs5.readFile(this.config.codexAuthStoreFile, "utf8");
+      const encrypted = await fs6.readFile(this.config.codexAuthStoreFile, "utf8");
       await this.bucketClient().uploadFiles([
         { path: codexAuthObjectPath(this.config.statePrefix), content: new Blob([encrypted]) }
       ]);
@@ -19394,7 +19438,7 @@ var CodexCredentialStore = class {
   }
   async hasRevocationMarker() {
     if (this.config.stateMountDir || !this.config.stateBucket || !this.config.hfToken) {
-      return await fileExists(path5.join(path5.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
+      return await fileExists(path6.join(path6.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
     }
     return Boolean(await this.bucketClient().downloadFile(codexAuthRevocationObjectPath(this.config.statePrefix)));
   }
@@ -19417,20 +19461,20 @@ var CodexCredentialStore = class {
   }
 };
 async function writePrivateRawFile(file, content) {
-  await fs5.mkdir(path5.dirname(file), { recursive: true, mode: 448 });
+  await fs6.mkdir(path6.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
-    await fs5.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs5.chmod(temporary, 384);
-    await fs5.rename(temporary, file);
-    await fs5.chmod(file, 384);
+    await fs6.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs6.chmod(temporary, 384);
+    await fs6.rename(temporary, file);
+    await fs6.chmod(file, 384);
   } finally {
-    await fs5.rm(temporary, { force: true });
+    await fs6.rm(temporary, { force: true });
   }
 }
 async function fileExists(file) {
   try {
-    await fs5.access(file);
+    await fs6.access(file);
     return true;
   } catch (error) {
     if (isNotFound2(error)) return false;
@@ -19446,8 +19490,8 @@ function stableJson(value) {
 
 // src/mlclaw-space-runtime/mcp-credentials.ts
 import { createCipheriv as createCipheriv3, createDecipheriv as createDecipheriv3, hkdfSync as hkdfSync3, randomBytes as randomBytes8 } from "node:crypto";
-import fs6 from "node:fs/promises";
-import path6 from "node:path";
+import fs7 from "node:fs/promises";
+import path7 from "node:path";
 var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
 var McpCredentialStore = class {
   constructor(options) {
@@ -19544,7 +19588,7 @@ var McpCredentialStore = class {
   async loadFromDisk() {
     let raw2;
     try {
-      raw2 = await fs6.readFile(this.options.file, "utf8");
+      raw2 = await fs7.readFile(this.options.file, "utf8");
     } catch (err) {
       if (isNotFound3(err)) {
         return;
@@ -19576,18 +19620,18 @@ var McpCredentialStore = class {
     return result;
   }
   async persist() {
-    const directory = path6.dirname(this.options.file);
-    await fs6.mkdir(directory, { recursive: true, mode: 448 });
+    const directory = path7.dirname(this.options.file);
+    await fs7.mkdir(directory, { recursive: true, mode: 448 });
     const temporary = `${this.options.file}.${process.pid}.${randomBytes8(6).toString("hex")}.tmp`;
     const encrypted = encryptDocument(this.document, this.key);
     try {
-      await fs6.writeFile(temporary, `${JSON.stringify(encrypted)}
+      await fs7.writeFile(temporary, `${JSON.stringify(encrypted)}
 `, { encoding: "utf8", mode: 384 });
-      await fs6.chmod(temporary, 384);
-      await fs6.rename(temporary, this.options.file);
-      await fs6.chmod(this.options.file, 384);
+      await fs7.chmod(temporary, 384);
+      await fs7.rename(temporary, this.options.file);
+      await fs7.chmod(this.options.file, 384);
     } finally {
-      await fs6.rm(temporary, { force: true });
+      await fs7.rm(temporary, { force: true });
     }
   }
   async refresh(slot, credential) {
@@ -19726,6 +19770,180 @@ function numberValue2(value) {
 }
 function isNotFound3(err) {
   return Boolean(err && typeof err === "object" && "code" in err && err.code === "ENOENT");
+}
+
+// src/mlclaw-space-runtime/openclaw-state-migration.ts
+import { existsSync } from "node:fs";
+import fs8 from "node:fs/promises";
+import path8 from "node:path";
+import { DatabaseSync } from "node:sqlite";
+var LEGACY_PROVIDER_ID = "mlclaw-codex";
+var NATIVE_PROVIDER_ID = "openai";
+var MAX_SESSION_STORE_BYTES = 64 * 1024 * 1024;
+async function migrateLegacyOpenAiSessionRefs(config2, now = Date.now) {
+  const stateDir = path8.dirname(config2.openclawConfigPath);
+  const agentsDir = path8.join(stateDir, "agents");
+  let changed = 0;
+  for (const agentId of await directoryNames(agentsDir)) {
+    const agentRoot = path8.join(agentsDir, agentId);
+    changed += await migrateJsonSessionStore(path8.join(agentRoot, "sessions", "sessions.json"), now);
+    changed += migrateSqliteSessionStore(path8.join(agentRoot, "agent", "openclaw-agent.sqlite"), now);
+  }
+  return changed;
+}
+function migrateSqliteSessionStore(file, now) {
+  if (!existsSync(file)) return 0;
+  const database = new DatabaseSync(file);
+  try {
+    if (!hasSessionEntriesTable(database)) return 0;
+    const updates = collectSqliteUpdates(database, now);
+    if (updates.length === 0) return 0;
+    applySqliteUpdates(database, updates);
+    return updates.length;
+  } finally {
+    database.close();
+  }
+}
+function hasSessionEntriesTable(database) {
+  return Boolean(
+    database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_entries'").get()
+  );
+}
+function collectSqliteUpdates(database, now) {
+  const rows = database.prepare("SELECT session_key, entry_json FROM session_entries").all();
+  return rows.flatMap((row) => {
+    const migrated = migrateSerializedEntry(row.entry_json, now);
+    return migrated ? [{ sessionKey: row.session_key, entryJson: migrated, updatedAt: now() }] : [];
+  });
+}
+function applySqliteUpdates(database, updates) {
+  const update = database.prepare("UPDATE session_entries SET entry_json = ?, updated_at = ? WHERE session_key = ?");
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    for (const item of updates) update.run(item.entryJson, item.updatedAt, item.sessionKey);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+async function migrateJsonSessionStore(file, now) {
+  const stat = await optionalStat(file);
+  if (!stat?.isFile()) return 0;
+  if (stat.size > MAX_SESSION_STORE_BYTES) {
+    throw new Error(`OpenClaw session store exceeds ${MAX_SESSION_STORE_BYTES} bytes: ${file}`);
+  }
+  const value = parseSessionStore(await fs8.readFile(file, "utf8"), file);
+  const result = migrateSessionStore(value, now);
+  if (result.changed === 0) return 0;
+  await writeJsonAtomic(file, result.value, {
+    mode: stat.mode & 511,
+    uid: stat.uid,
+    gid: stat.gid
+  });
+  return result.changed;
+}
+async function optionalStat(file) {
+  try {
+    return await fs8.stat(file);
+  } catch (error) {
+    if (isNotFound4(error)) return void 0;
+    throw error;
+  }
+}
+function parseSessionStore(raw2, file) {
+  const value = JSON.parse(raw2);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`OpenClaw session store must be a JSON object: ${file}`);
+  }
+  return value;
+}
+function migrateSessionStore(store, now) {
+  let changed = 0;
+  const value = Object.fromEntries(
+    Object.entries(store).map(([key, entry]) => {
+      const result = migrateValue(entry);
+      if (result.changed) changed += 1;
+      if (result.changed && isMutableRecord(result.value)) result.value.updatedAt = now();
+      return [key, result.value];
+    })
+  );
+  return { value, changed };
+}
+function migrateSerializedEntry(raw2, now) {
+  let value;
+  try {
+    value = JSON.parse(raw2);
+  } catch {
+    return void 0;
+  }
+  const result = migrateValue(value);
+  if (!result.changed) return void 0;
+  if (result.value && typeof result.value === "object" && !Array.isArray(result.value)) {
+    result.value.updatedAt = now();
+  }
+  return JSON.stringify(result.value);
+}
+function migrateValue(value) {
+  if (typeof value === "string") return migrateString(value);
+  if (Array.isArray(value)) return migrateArray(value);
+  if (isMutableRecord(value)) return migrateRecord(value);
+  return { value, changed: false };
+}
+function migrateString(value) {
+  if (value === LEGACY_CODEX_MODEL_REF) return { value: DEFAULT_OPENAI_MODEL_REF, changed: true };
+  if (value === LEGACY_PROVIDER_ID) return { value: NATIVE_PROVIDER_ID, changed: true };
+  return { value, changed: false };
+}
+function migrateArray(value) {
+  let changed = false;
+  const migrated = value.map((entry) => {
+    const result = migrateValue(entry);
+    changed ||= result.changed;
+    return result.value;
+  });
+  return { value: changed ? migrated : value, changed };
+}
+function migrateRecord(value) {
+  let changed = false;
+  const migrated = Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => {
+      const migratedKey = key === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : key;
+      const result = migrateValue(entry);
+      changed ||= migratedKey !== key || result.changed;
+      return [migratedKey, result.value];
+    })
+  );
+  return { value: changed ? migrated : value, changed };
+}
+function isMutableRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+async function directoryNames(directory) {
+  try {
+    return (await fs8.readdir(directory, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch (error) {
+    if (isNotFound4(error)) return [];
+    throw error;
+  }
+}
+async function writeJsonAtomic(file, value, ownership) {
+  const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+  try {
+    await fs8.writeFile(temporary, `${JSON.stringify(value, null, 2)}
+`, {
+      mode: ownership.mode,
+      flag: "wx"
+    });
+    if (process.getuid?.() === 0) await fs8.chown(temporary, ownership.uid, ownership.gid);
+    await fs8.rename(temporary, file);
+    await fs8.chmod(file, ownership.mode);
+  } finally {
+    await fs8.rm(temporary, { force: true });
+  }
+}
+function isNotFound4(error) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
 }
 
 // src/mlclaw-space-runtime/proxy.ts
@@ -19899,6 +20117,7 @@ var SpaceRuntimeServer = class {
   constructor(config2, options = {}) {
     this.config = config2;
     this.exitProcess = options.exitProcess ?? ((code) => process.exit(code));
+    this.syncOAuthProfile = options.syncOAuthProfile ?? syncOpenAiOAuthProfile;
     this.mcpCredentials = new McpCredentialStore({
       file: config2.mcpCredentialFile,
       secret: config2.credentialKey,
@@ -19908,7 +20127,7 @@ var SpaceRuntimeServer = class {
     });
     this.openAiCredentials = new OpenAiCredentialStore(config2.openaiCredentialStoreFile, config2.credentialKey);
     this.codexCredentials = new CodexCredentialStore(config2);
-    this.mcpIntegrations = new McpIntegrationServer(config2, this.mcpCredentials, this.codexCredentials);
+    this.mcpIntegrations = new McpIntegrationServer(config2, this.mcpCredentials);
     const credentialSlot = integrationCredentialSlot(config2);
     this.app = createSpaceRuntimeApp(config2, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
@@ -19935,6 +20154,7 @@ var SpaceRuntimeServer = class {
   openclawStopping = false;
   app;
   exitProcess;
+  syncOAuthProfile;
   mcpCredentials;
   mcpIntegrations;
   openAiCredentials;
@@ -20067,19 +20287,23 @@ var SpaceRuntimeServer = class {
     }
     this.openclawStarting = true;
     try {
-      const codexConfigured = await this.codexCredentials.configured().catch((error) => {
-        process.stderr.write(`[mlclaw] Codex credentials unavailable: ${formatError2(error)}
-`);
-        return false;
-      });
-      const routerChoices = this.config.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
-      this.config.modelChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
-      if (!codexConfigured && this.config.model === CODEX_MODEL_REF && routerChoices[0]) {
-        this.config.model = routerChoices[0].openclawModel;
-      }
-      await configureOpenClawGateway(this.config, { codexConfigured });
-      if (codexConfigured) process.stdout.write("[mlclaw] Codex provider enabled\n");
+      const candidateCredential = await this.codexCredentials.credentialForImport();
+      const codexCredential = candidateCredential && await this.codexCredentials.credentialIsCurrent(candidateCredential) ? candidateCredential : void 0;
+      const codexConfigured = Boolean(codexCredential);
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile) ?? process.env.OPENAI_API_KEY?.trim() ?? await this.openAiCredentials.load();
+      const migratedSessions = await migrateLegacyOpenAiSessionRefs(this.config);
+      if (migratedSessions > 0) {
+        process.stdout.write(`[mlclaw] Migrated ${migratedSessions} native OpenAI session route(s)
+`);
+      }
+      if (this.config.model === LEGACY_CODEX_MODEL_REF) {
+        this.config.model = codexConfigured || persistedOpenAiKey ? DEFAULT_OPENAI_MODEL_REF : this.config.modelChoices[0]?.openclawModel ?? this.config.model;
+      }
+      await configureOpenClawGateway(this.config, {
+        codexConfigured,
+        openAiConfigured: Boolean(persistedOpenAiKey)
+      });
+      if (codexConfigured) process.stdout.write("[mlclaw] Native OpenAI OAuth enabled\n");
       const env = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",
@@ -20094,7 +20318,19 @@ var SpaceRuntimeServer = class {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }
-      this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
+      const profileSynced = await this.syncOAuthProfile({
+        config: this.config,
+        ...codexCredential ? { credential: codexCredential } : {},
+        env
+      });
+      if (codexCredential && !profileSynced) {
+        throw new Error("OpenClaw command does not support native OAuth profile provisioning");
+      }
+      if (codexCredential && !await this.codexCredentials.credentialIsCurrent(codexCredential)) {
+        await this.syncOAuthProfile({ config: this.config, env });
+        throw new Error("OpenAI OAuth credentials were revoked during native profile provisioning");
+      }
+      this.openclaw = spawn2(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,
         ...process.getuid?.() === 0 ? { uid: this.config.openclawUid, gid: this.config.openclawGid } : {}
@@ -20279,7 +20515,7 @@ if (config.sessionSecretGenerated && config.mode === "app") {
 }
 var httpServer = await server.start();
 if (config.mode === "app") {
-  toolingSeeder = spawn2(
+  toolingSeeder = spawn3(
     process2.execPath,
     [process2.env.MLCLAW_HF_TOOLING_SEED_SCRIPT ?? "/app/hf-tooling-seed.js", "--wait-for-bootstrap"],
     {

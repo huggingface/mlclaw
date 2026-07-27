@@ -9,11 +9,7 @@ import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
-import {
-  CODEX_MODEL_REF,
-  CODEX_PROVIDER_ID,
-  deriveCodexProviderToken,
-} from "../src/mlclaw-space-runtime/codex-provider.js";
+import { DEFAULT_OPENAI_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "../src/mlclaw-space-runtime/openai-models.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import {
   BROKER_MCP_CONNECTION_TIMEOUT_MS,
@@ -24,6 +20,8 @@ import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
 import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 import { deriveLocalAccessToken } from "../src/mlclaw-space-runtime/local-access.js";
+import { codexAuthContext, encodeCodexAuthDocument, writeEncryptedCodexAuthFile } from "../src/mlclaw/codex-auth.js";
+import { codexAuthJsonFromOAuthCredential } from "../src/mlclaw/openai-codex-device-auth.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -1871,6 +1869,82 @@ describe("ML Claw Space runtime", () => {
     await expect(fs.readFile(envFile, "utf8")).resolves.toBe(JSON.stringify({ OPENAI_API_KEY: apiKey }));
   });
 
+  it("provisions native OpenAI OAuth without forwarding it through the child environment", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openai-oauth-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const envFile = path.join(root, "env.json");
+    const apiKey = `sk-${"q".repeat(32)}`;
+    const previous = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = apiKey;
+    cleanups.push(() => {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previous;
+    });
+    const config = await testConfig({
+      openclawArgs: [
+        "-e",
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({OPENAI_API_KEY:process.env.OPENAI_API_KEY,OPENAI_OAUTH_TOKEN:process.env.OPENAI_OAUTH_TOKEN}));setInterval(()=>undefined,100000)`,
+      ],
+    });
+    const now = new Date();
+    const expires = now.getTime() + 60 * 60_000;
+    const payload = Buffer.from(
+      JSON.stringify({
+        exp: Math.floor(expires / 1000),
+        "https://api.openai.com/auth": { chatgpt_account_id: "acct_runtime" },
+      }),
+      "utf8",
+    ).toString("base64url");
+    await writeEncryptedCodexAuthFile({
+      file: config.codexAuthStoreFile,
+      document: encodeCodexAuthDocument({
+        authJson: codexAuthJsonFromOAuthCredential(
+          {
+            access: `header.${payload}.signature`,
+            refresh: "refresh-runtime",
+            expires,
+            accountId: "acct_runtime",
+          },
+          now,
+        ),
+        now,
+      }),
+      secret: config.credentialKey,
+      context: codexAuthContext({
+        deploymentId: config.deploymentId ?? "",
+        bucket: config.stateBucket ?? "",
+      }),
+    });
+    let syncedCredential: { access: string; refresh: string; accountId: string } | undefined;
+    const runtime = new SpaceRuntimeServer(config, {
+      syncOAuthProfile: async ({ credential }) => {
+        syncedCredential = credential;
+        return true;
+      },
+    });
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(async () => fileExists(envFile));
+    const env = JSON.parse(await fs.readFile(envFile, "utf8")) as Record<string, string>;
+    expect(env.OPENAI_API_KEY).toBe(apiKey);
+    expect(env.OPENAI_OAUTH_TOKEN).toBeUndefined();
+    expect(syncedCredential).toMatchObject({
+      refresh: "refresh-runtime",
+      accountId: "acct_runtime",
+    });
+    const openclawConfig = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(openclawConfig.models.providers["mlclaw-codex"]).toBeUndefined();
+    expect(openclawConfig.models.providers.openai?.params?.codexProxyBaseUrl).toBeUndefined();
+    expect(openclawConfig.auth.profiles["openai:mlclaw"]).toMatchObject({
+      provider: "openai",
+      mode: "oauth",
+    });
+  });
+
   it("scrubs broad Hub tokens when no Router token exists", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-legacy-hub-token-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -2087,35 +2161,66 @@ describe("ML Claw Space runtime", () => {
     expect(JSON.stringify(rewritten.plugins)).not.toContain("operator-secret");
   });
 
-  it("automatically exposes configured Codex credentials through the trusted provider proxy", async () => {
-    const config = await testConfig();
+  it("configures native OpenAI OAuth without a custom provider or proxy", async () => {
+    const config = await testConfig({ model: LEGACY_CODEX_MODEL_REF });
+    await fs.writeFile(
+      config.openclawConfigPath,
+      JSON.stringify({
+        agents: {
+          defaults: {
+            model: { primary: LEGACY_CODEX_MODEL_REF, fallbacks: [LEGACY_CODEX_MODEL_REF] },
+          },
+        },
+        models: {
+          providers: {
+            "mlclaw-codex": { apiKey: "obsolete-capability", models: [{ id: "gpt-5.4" }] },
+            openai: { params: { keep: true } },
+          },
+        },
+      }),
+    );
 
     await configureOpenClawGateway(config, { codexConfigured: true });
 
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    expect(rewritten.models.providers[CODEX_PROVIDER_ID]).toMatchObject({
-      baseUrl: `http://127.0.0.1:${config.mcpPort}/backend-api/codex`,
-      apiKey: deriveCodexProviderToken(config.sessionSecret),
-      auth: "api-key",
-      api: "openai-chatgpt-responses",
-      models: [
-        expect.objectContaining({
-          id: "gpt-5.4",
-          agentRuntime: { id: "openclaw" },
-          params: { transport: "sse" },
-        }),
-      ],
+    expect(rewritten.models.providers["mlclaw-codex"]).toBeUndefined();
+    expect(rewritten.models.providers.openai).toEqual({ params: { keep: true } });
+    expect(rewritten.agents.defaults.model).toMatchObject({
+      primary: DEFAULT_OPENAI_MODEL_REF,
+      fallbacks: [DEFAULT_OPENAI_MODEL_REF],
     });
-    expect(rewritten.agents.defaults.models[CODEX_MODEL_REF]).toMatchObject({
-      alias: "gpt-5-4-mlclaw-codex",
+    expect(rewritten.agents.defaults.models["openai/*"]).toEqual({
       agentRuntime: { id: "openclaw" },
     });
+    expect(rewritten.agents.defaults.models[LEGACY_CODEX_MODEL_REF]).toBeUndefined();
+    expect(rewritten.auth.profiles["openai:mlclaw"]).toMatchObject({
+      provider: "openai",
+      mode: "oauth",
+    });
+    expect(rewritten.auth.order.openai[0]).toBe("openai:mlclaw");
+    expect(JSON.stringify(rewritten)).not.toContain("obsolete-capability");
+    expect(JSON.stringify(rewritten)).not.toContain("OPENAI_OAUTH_TOKEN");
     expect(JSON.stringify(rewritten)).not.toContain("refresh_token");
+    expect(JSON.stringify(rewritten)).not.toContain("backend-api/codex");
+
+    rewritten.agents.defaults.model.primary = "openai/gpt-5.6-sol";
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify(rewritten));
+    await configureOpenClawGateway(config, { codexConfigured: true });
+    const restarted = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(restarted.agents.defaults.model.primary).toBe("openai/gpt-5.6-sol");
 
     await configureOpenClawGateway(config, { codexConfigured: false });
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    expect(disconnected.models.providers[CODEX_PROVIDER_ID]).toBeUndefined();
-    expect(disconnected.agents.defaults.models[CODEX_MODEL_REF]).toBeUndefined();
+    expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
+    expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
+    expect(disconnected.auth.profiles?.["openai:mlclaw"]).toBeUndefined();
+
+    await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
+    const apiKeyOnly = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(apiKeyOnly.models.providers.openai).toEqual({ params: { keep: true } });
+    expect(apiKeyOnly.agents.defaults.models["openai/*"]).toEqual({
+      agentRuntime: { id: "openclaw" },
+    });
   });
 
   it("does not create a restrictive plugin allowlist", async () => {
