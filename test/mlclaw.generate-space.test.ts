@@ -107,6 +107,8 @@ describe("generated Space repository", () => {
     expect(dockerfile).toContain(`FROM ${OPENCLAW_BASE_IMAGE}`);
     expect(dockerfile).toContain(`ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}`);
     expect(dockerfile).toContain(`ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}`);
+    expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
+    expect(dockerfile).not.toContain("@openai/codex");
     expect(dockerfile).toContain(
       'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"',
     );

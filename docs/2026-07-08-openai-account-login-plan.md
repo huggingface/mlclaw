@@ -39,10 +39,10 @@ The key is:
 
 Follow-up plan: `docs/2026-07-09-codex-device-login-plan.md`.
 
-The next account-login direction is Codex device login, not a custom ML Claw
-OpenAI OAuth client. Codex already owns the OpenAI/ChatGPT device-code flow and
-token refresh behavior, so ML Claw should integrate with Codex's structured
-account API and persist Codex auth securely for the Space runtime.
+The account-login direction is OpenAI's Codex device-code protocol, not a
+Codex CLI dependency. ML Claw implements the small HTTPS flow directly, based
+on Pi's MIT-licensed implementation, and persists the resulting credential for
+one deployment without passing it to OpenClaw.
 
 ## Long-Term Account OAuth
 

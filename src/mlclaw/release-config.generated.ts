@@ -4,6 +4,5 @@ export const RELEASE_CONFIG = {
   "openclawVersion": "2026.7.1",
   "brokerkitVersion": "hf-broker/v0.6.2",
   "brokerkitPluginVersion": "0.4.1",
-  "codexCliVersion": "0.145.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 } as const;

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os from "node:os";
@@ -50,6 +49,11 @@ import {
   encodeCodexAuthDocument,
   encryptCodexAuthDocument,
 } from "./codex-auth.js";
+import {
+  codexAuthJsonFromOAuthCredential,
+  loginOpenAICodexDeviceCode,
+  type OpenAICodexDeviceVerification,
+} from "./openai-codex-device-auth.js";
 import { DEFAULT_MODEL as DEFAULT_ROUTER_MODEL } from "../mlclaw-space-runtime/model-default.js";
 import { deriveLocalAccessToken } from "../mlclaw-space-runtime/local-access.js";
 import {
@@ -134,7 +138,6 @@ type HostedSpaceVisibility = Exclude<SpaceVisibility, "private">;
 const STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 const SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 const DEFAULT_CANONICAL_TEMPLATE_SPACE = "osolmaz/mlclaw";
-const CODEX_CLI_INSTALL_COMMAND = "npm install --global @openai/codex@0.145.0";
 const PAID_HARDWARE_COST_NOTE =
   "Paid Hugging Face Space hardware costs money while allocated. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 
@@ -184,10 +187,6 @@ type DoctorOptions = {
 
 type CredentialRepairOptions = {
   brokerHfTokenFile?: string;
-};
-
-type CodexCredentialOptions = {
-  authJsonFile?: string;
 };
 
 type SettingsOptions = {
@@ -288,7 +287,7 @@ type CliRuntime = {
   dockerRunner?: ContainerRunner;
   podmanRunner?: ContainerRunner;
   tailscaleRunner?: TailscaleRunner;
-  codexDeviceLogin?: (codexHome: string) => Promise<void>;
+  codexDeviceLogin?: typeof loginOpenAICodexDeviceCode;
   configRoot?: string;
   now?: () => Date;
   sleep?: (milliseconds: number) => Promise<unknown>;
@@ -336,7 +335,7 @@ function createRuntime(overrides: CliRuntime = {}): Required<CliRuntime> {
     dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
     podmanRunner: overrides.podmanRunner ?? new CliPodmanRunner(),
     tailscaleRunner: overrides.tailscaleRunner ?? new CliTailscaleRunner(),
-    codexDeviceLogin: overrides.codexDeviceLogin ?? (async (codexHome) => await runCodexDeviceLogin(codexHome)),
+    codexDeviceLogin: overrides.codexDeviceLogin ?? loginOpenAICodexDeviceCode,
     configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process.env),
     now: overrides.now ?? (() => new Date()),
     sleep: overrides.sleep ?? delay,
@@ -469,9 +468,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .command("login")
     .description("Connect a Codex ChatGPT account to one ML Claw deployment")
     .argument("[agent]", "Agent name; inferred when exactly one deployment exists")
-    .option("--auth-json-file <path>", "Advanced: import a Codex auth.json file for this deployment")
-    .action(async (agent: string | undefined, opts: CodexCredentialOptions) => {
-      await codexCredentialsLogin(agent, opts, runtime);
+    .action(async (agent?: string) => {
+      await codexCredentialsLogin(agent, runtime);
     });
 
   codexCredentials
@@ -4601,20 +4599,14 @@ async function readOptionalRouterTokenFile(file: string | undefined): Promise<st
   return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
 }
 
-async function codexCredentialsLogin(
-  requestedAgent: string | undefined,
-  opts: CodexCredentialOptions,
-  runtime: Required<CliRuntime>,
-): Promise<void> {
+async function codexCredentialsLogin(requestedAgent: string | undefined, runtime: Required<CliRuntime>): Promise<void> {
   const manifest = await credentialManifest(requestedAgent, runtime);
   await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
     const current = await readManifest(runtime.configRoot, manifest.agent);
     const secrets = await readSecretEnv(runtime.configRoot, current.agent);
     const credentialKey = await verifiedDeploymentCredentialKey(current, secrets, runtime);
     const statePrefix = persistedBucketPrefix(secrets);
-    const authJson = opts.authJsonFile
-      ? await readCodexAuthJsonFile(opts.authJsonFile)
-      : await runTemporaryCodexDeviceLogin(current, runtime);
+    const authJson = await runDirectCodexDeviceLogin(current, runtime);
     const document = encodeCodexAuthDocument({ authJson, now: runtime.now() });
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
@@ -4644,10 +4636,6 @@ async function codexCredentialsLogin(
       await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
       await assertLease();
       await deleteCodexRevocationMarker(hub, current.bucket, statePrefix);
-      await assertLease();
-      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
-      await assertLease();
-      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
     } finally {
       clearInterval(renewalTimer);
       await renewal;
@@ -4705,10 +4693,6 @@ async function codexCredentialsLogout(
       await writeCodexRevocationMarker(hub, current, statePrefix, runtime.now());
       await assertControlLease(control, lease, runtime.now());
       await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
-      await assertControlLease(control, lease, runtime.now());
-      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
-        await assertControlLease(control, lease, runtime.now());
-      });
     } finally {
       await releaseControlLease(control, lease);
     }
@@ -4865,38 +4849,24 @@ async function verifiedDeploymentCredentialKey(
   return credentialKey;
 }
 
-async function readCodexAuthJsonFile(file: string): Promise<Record<string, unknown>> {
-  const parsed = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Codex auth JSON file must contain an object");
-  }
-  return parsed as Record<string, unknown>;
-}
-
-async function runTemporaryCodexDeviceLogin(
+async function runDirectCodexDeviceLogin(
   manifest: DeploymentManifest,
   runtime: Required<CliRuntime>,
 ): Promise<Record<string, unknown>> {
-  if (!runtime.prompt.isInteractive()) {
-    throw new Error("Codex device login requires an interactive terminal or --auth-json-file");
-  }
-  await assertCodexCliAvailable();
-  const parent = await fs.mkdtemp(path.join(os.tmpdir(), `mlclaw-codex-${manifest.agent}-`));
-  try {
-    await fs.writeFile(
-      path.join(parent, "config.toml"),
-      'cli_auth_credentials_store = "file"\nforced_login_method = "chatgpt"\n',
-      { encoding: "utf8", mode: 0o600 },
-    );
-    runtime.prompt.note(
-      `ML Claw will start Codex device login for deployment ${manifest.agent}. Complete the OpenAI login shown by Codex; the resulting auth file is encrypted into this deployment only.`,
-      "Codex login",
-    );
-    await runtime.codexDeviceLogin(parent);
-    return await readCodexAuthJsonFile(path.join(parent, "auth.json"));
-  } finally {
-    await fs.rm(parent, { recursive: true, force: true });
-  }
+  runtime.stdout.log(`Connecting a ChatGPT account to deployment ${manifest.agent}.`);
+  const credential = await runtime.codexDeviceLogin({
+    onVerification: (verification) => printCodexDeviceVerification(verification, runtime),
+  });
+  return codexAuthJsonFromOAuthCredential(credential, runtime.now());
+}
+
+function printCodexDeviceVerification(
+  verification: OpenAICodexDeviceVerification,
+  runtime: Required<CliRuntime>,
+): void {
+  runtime.stdout.log(`Open: ${verification.verificationUrl}`);
+  runtime.stdout.log(`Code: ${verification.userCode}`);
+  runtime.stdout.log("Waiting for OpenAI authorization...");
 }
 
 function codexContextForManifest(manifest: DeploymentManifest, statePrefix: string | undefined) {
@@ -4966,48 +4936,6 @@ async function deleteCodexRevocationMarker(
   statePrefix: string | undefined,
 ): Promise<void> {
   await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
-}
-
-async function ensureRuntimeDeploymentId(
-  manifest: DeploymentManifest,
-  secrets: Record<string, string>,
-  hub: HubApi,
-  runtime: Required<CliRuntime>,
-  assertLease: () => Promise<void>,
-): Promise<void> {
-  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
-  if (manifest.gatewayLocation === "space") {
-    await assertLease();
-    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
-    return;
-  }
-  await assertLease();
-  await writeSecretEnv(runtime.configRoot, manifest.agent, {
-    ...secrets,
-    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
-  });
-}
-
-async function restartDeploymentForCredentialChange(
-  manifest: DeploymentManifest,
-  runtime: Required<CliRuntime>,
-  hub: HubApi,
-  assertLease: () => Promise<void>,
-): Promise<void> {
-  if (manifest.gatewayLocation === "space") {
-    await assertLease();
-    await hub.restartSpace(manifest.space, true);
-    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
-    return;
-  }
-  const runner = localRunnerFor(manifest, runtime);
-  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
-  if (!existing?.running) {
-    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
-    return;
-  }
-  await assertLease();
-  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 
 async function credentialManifest(
@@ -5400,59 +5328,6 @@ function parseInteger(value: string): number {
 function parseTailscaleMode(value: string): TailscaleMode {
   if (value === "off" || value === "direct" || value === "serve") return value;
   throw new InvalidArgumentError(`expected tailscale mode off, direct, or serve; got ${value}`);
-}
-
-async function assertCodexCliAvailable(): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("codex", ["--version"], { stdio: "ignore", env: codexLoginEnvironment(os.tmpdir()) });
-    child.once("error", () => {
-      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
-    });
-    child.once("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
-    });
-  });
-}
-
-async function runCodexDeviceLogin(codexHome: string): Promise<void> {
-  await assertCodexCliAvailable();
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("codex", ["login", "--device-auth"], {
-      stdio: "inherit",
-      env: codexLoginEnvironment(codexHome),
-    });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(`codex login failed${signal ? ` with signal ${signal}` : ` with exit code ${code ?? "unknown"}`}`),
-      );
-    });
-  });
-}
-
-function codexLoginEnvironment(codexHome: string): NodeJS.ProcessEnv {
-  return {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME ?? os.homedir(),
-    USER: process.env.USER,
-    LOGNAME: process.env.LOGNAME,
-    TERM: process.env.TERM,
-    COLORTERM: process.env.COLORTERM,
-    LANG: process.env.LANG,
-    LC_ALL: process.env.LC_ALL,
-    SSL_CERT_FILE: process.env.SSL_CERT_FILE,
-    SSL_CERT_DIR: process.env.SSL_CERT_DIR,
-    NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS,
-    CODEX_HOME: codexHome,
-  };
 }
 
 function parseLocalPort(value: string): number {

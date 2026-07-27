@@ -372,10 +372,8 @@ OpenAI credential, or stored as plaintext in the state bucket. App Spaces do
 not keep broad Hugging Face authority in the web control process.
 
 To connect an OpenAI/ChatGPT account through Codex device login instead of an
-API key, target the specific deployment. Host-side device login requires the
-Codex CLI on the machine running `mlclaw`; install it with
-`npm install --global @openai/codex@0.145.0` if `codex --version` is not
-available.
+API key, target the specific deployment. ML Claw performs the device-code flow
+directly over HTTPS. It does not install, invoke, or depend on the Codex CLI.
 
 ```bash
 mlclaw credentials codex login mlclaw
@@ -383,16 +381,12 @@ mlclaw credentials codex status mlclaw
 mlclaw credentials codex logout mlclaw
 ```
 
-`login` creates a temporary Codex home, runs Codex device authentication, then
-encrypts the resulting Codex `auth.json` into the deployment's private state
-bucket. ML Claw restores it into a trusted wrapper-owned `CODEX_HOME` at
-runtime and keeps refreshed Codex auth state synced back to the encrypted
-bucket object. OpenClaw can use the account only through ML Claw's managed
-Codex MCP helper, which invokes Codex with local shell, browser, user-config,
-project-rule, and workspace access disabled and with wrapper-enforced request
-bounds. Raw Codex tokens are never printed, stored in the Space repo, exposed
-to the untrusted OpenClaw process, or included in the OpenClaw workspace
-snapshot.
+`login` requests a one-time device code from OpenAI, prints the verification
+URL and code, polls for approval, and exchanges the approved code for OAuth
+credentials. ML Claw encrypts those credentials into the selected deployment's
+private state bucket. `status` and `logout` inspect or revoke that deployment-
+scoped login without exposing tokens. Raw tokens are never printed, stored in
+the Space repo, passed to OpenClaw, or included in workspace snapshots.
 
 ## How State Works
 

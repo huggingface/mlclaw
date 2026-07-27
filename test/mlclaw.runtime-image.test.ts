@@ -34,6 +34,8 @@ describe("runtime image Dockerfile", () => {
       'test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
     );
     expect(dockerfile).toContain(`"openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"`);
+    expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
+    expect(dockerfile).not.toContain("@openai/codex");
     expect(dockerfile).not.toContain("brokerkit-plugin-build");
     expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json");
     expect(dockerfile).toContain(
@@ -100,6 +102,8 @@ describe("runtime image Dockerfile", () => {
     expect(verifyImage).toBeGreaterThan(buildImage);
     expect(publishNpm).toBeGreaterThan(verifyImage);
     expect(workflow.slice(verifyImage, publishNpm)).toContain("inputs.publish_npm == 'true'");
+    expect(workflow).not.toContain("codex_cli_version");
+    expect(workflow).not.toContain("CODEX_CLI_VERSION");
   });
 
   it("leaves workspace tooling seeding to the bootstrap-aware runtime", async () => {
