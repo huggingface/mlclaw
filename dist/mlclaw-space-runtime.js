@@ -12223,7 +12223,19 @@ function configureCodexRuntimePlugin(openclawConfig, enabled) {
   if (plugins.allow !== void 0) {
     plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
   }
-  entries.codex = { ...existing, enabled: true };
+  const existingConfig = objectValue2(existing?.config);
+  const existingAppServer = objectValue2(existingConfig?.appServer);
+  entries.codex = {
+    ...existing,
+    enabled: true,
+    config: {
+      ...existingConfig,
+      appServer: {
+        ...existingAppServer,
+        clearEnv: uniqueStrings(existingAppServer?.clearEnv, "OPENCLAW_GATEWAY_PASSWORD")
+      }
+    }
+  };
 }
 function configureBrokerKitPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");

@@ -2223,7 +2223,10 @@ describe("ML Claw Space runtime", () => {
     expect(rewritten.agents.defaults.models["openai/*"]).toEqual({
       agentRuntime: { id: "codex" },
     });
-    expect(rewritten.plugins.entries.codex).toEqual({ enabled: true });
+    expect(rewritten.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
     expect(rewritten.plugins.allow).toBeUndefined();
     expect(rewritten.agents.defaults.models[LEGACY_CODEX_MODEL_REF]).toBeUndefined();
     expect(rewritten.auth.profiles["openai:mlclaw"]).toMatchObject({
@@ -2246,7 +2249,10 @@ describe("ML Claw Space runtime", () => {
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
     expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
-    expect(disconnected.plugins.entries.codex).toEqual({ enabled: false });
+    expect(disconnected.plugins.entries.codex).toEqual({
+      enabled: false,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
     expect(disconnected.auth.profiles?.["openai:mlclaw"]).toBeUndefined();
 
     await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
@@ -2255,7 +2261,10 @@ describe("ML Claw Space runtime", () => {
     expect(apiKeyOnly.agents.defaults.models["openai/*"]).toEqual({
       agentRuntime: { id: "codex" },
     });
-    expect(apiKeyOnly.plugins.entries.codex).toEqual({ enabled: true });
+    expect(apiKeyOnly.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
   });
 
   it("preserves Codex plugin settings and extends an existing allowlist", async () => {
@@ -2268,7 +2277,12 @@ describe("ML Claw Space runtime", () => {
           entries: {
             codex: {
               enabled: false,
-              config: { appServer: { homeScope: "agent" } },
+              config: {
+                appServer: {
+                  homeScope: "agent",
+                  clearEnv: ["CUSTOM_SECRET"],
+                },
+              },
             },
           },
         },
@@ -2281,7 +2295,12 @@ describe("ML Claw Space runtime", () => {
     expect(rewritten.plugins.allow).toEqual(["custom", "openai", "codex", "brokerkit"]);
     expect(rewritten.plugins.entries.codex).toEqual({
       enabled: true,
-      config: { appServer: { homeScope: "agent" } },
+      config: {
+        appServer: {
+          homeScope: "agent",
+          clearEnv: ["CUSTOM_SECRET", "OPENCLAW_GATEWAY_PASSWORD"],
+        },
+      },
     });
   });
 
