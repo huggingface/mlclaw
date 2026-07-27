@@ -127,6 +127,21 @@ export function openClawAuthProfilePlan(options: ManagedAuthProfileOptions): Rec
   };
 }
 
+export async function repairOpenClawState(params: {
+  config: SpaceRuntimeConfig;
+  env: NodeJS.ProcessEnv;
+}): Promise<boolean> {
+  const invocation = openClawCliInvocation(params.config);
+  if (!invocation) return false;
+  await runOpenClawCli({
+    command: invocation.command,
+    args: [...invocation.prefixArgs, "doctor", "--fix", "--yes"],
+    env: params.env,
+    ...(process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}),
+  });
+  return true;
+}
+
 export async function provisionOpenClawAuthProfiles(params: {
   config: SpaceRuntimeConfig;
   options: ManagedAuthProfileOptions;

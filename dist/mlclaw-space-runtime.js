@@ -11453,6 +11453,17 @@ function openClawAuthProfilePlan(options) {
     }
   };
 }
+async function repairOpenClawState(params) {
+  const invocation = openClawCliInvocation(params.config);
+  if (!invocation) return false;
+  await runOpenClawCli({
+    command: invocation.command,
+    args: [...invocation.prefixArgs, "doctor", "--fix", "--yes"],
+    env: params.env,
+    ...process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}
+  });
+  return true;
+}
 async function provisionOpenClawAuthProfiles(params) {
   if (!params.options.codexConfigured && !params.options.openAiConfigured) return false;
   const invocation = openClawCliInvocation(params.config);
@@ -20252,6 +20263,7 @@ var SpaceRuntimeServer = class {
         options: { codexConfigured, openAiConfigured: Boolean(persistedOpenAiKey) },
         env
       });
+      await repairOpenClawState({ config: this.config, env });
       this.openclaw = spawn2(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,

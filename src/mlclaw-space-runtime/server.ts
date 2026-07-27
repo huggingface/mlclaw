@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { createSpaceRuntimeApp } from "./app.js";
 import { CodexCredentialStore } from "./codex-credentials.js";
-import { CODEX_PROXY_TOKEN_ENV, provisionOpenClawAuthProfiles } from "./openclaw-auth-profiles.js";
+import { CODEX_PROXY_TOKEN_ENV, provisionOpenClawAuthProfiles, repairOpenClawState } from "./openclaw-auth-profiles.js";
 import { DEFAULT_CODEX_MODEL_REF, LEGACY_CODEX_MODEL_REF, generateCodexProxyCapability } from "./codex-proxy.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import { McpCredentialStore } from "./mcp-credentials.js";
@@ -277,6 +277,7 @@ export class SpaceRuntimeServer {
         options: { codexConfigured, openAiConfigured: Boolean(persistedOpenAiKey) },
         env,
       });
+      await repairOpenClawState({ config: this.config, env });
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,

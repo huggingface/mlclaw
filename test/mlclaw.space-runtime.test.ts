@@ -15,6 +15,8 @@ import {
   MLCLAW_SECRET_PROVIDER_ID,
   OPENAI_API_KEY_PROFILE_ID,
   openClawAuthProfilePlan,
+  provisionOpenClawAuthProfiles,
+  repairOpenClawState,
 } from "../src/mlclaw-space-runtime/openclaw-auth-profiles.js";
 import { DEFAULT_CODEX_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "../src/mlclaw-space-runtime/codex-proxy.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
@@ -1900,6 +1902,54 @@ describe("ML Claw Space runtime", () => {
         scrubLegacyAuthJson: false,
       },
     });
+  });
+
+  it("uses supported OpenClaw commands for profile provisioning and session repair", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openclaw-state-repair-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const captureFile = path.join(root, "capture.jsonl");
+    const cli = path.join(root, "openclaw");
+    await fs.writeFile(
+      cli,
+      `#!/usr/bin/env node\nconst fs=require("node:fs");const args=process.argv.slice(2);const row={args};if(args[0]==="secrets")row.plan=JSON.parse(fs.readFileSync(args[3],"utf8"));fs.appendFileSync(process.env.CAPTURE_FILE,JSON.stringify(row)+"\\n");\n`,
+      { mode: 0o700 },
+    );
+    const config = await testConfig({
+      openclawCommand: cli,
+      openclawArgs: [],
+      openclawUid: process.getuid?.() ?? 1_000,
+      openclawGid: process.getgid?.() ?? 1_000,
+    });
+    const env = {
+      ...process.env,
+      CAPTURE_FILE: captureFile,
+      [CODEX_PROXY_TOKEN_ENV]: "opaque-test-capability",
+      OPENAI_API_KEY: `sk-${"a".repeat(32)}`,
+    };
+
+    await expect(
+      provisionOpenClawAuthProfiles({
+        config,
+        options: { codexConfigured: true, openAiConfigured: true },
+        env,
+      }),
+    ).resolves.toBe(true);
+    await expect(repairOpenClawState({ config, env })).resolves.toBe(true);
+
+    const capture = await fs.readFile(captureFile, "utf8");
+    const rows = capture
+      .trim()
+      .split("\n")
+      .map((row) => JSON.parse(row) as { args: string[]; plan?: Record<string, unknown> });
+    expect(rows.map((row) => row.args.slice(0, 3))).toEqual([
+      ["secrets", "apply", "--from"],
+      ["doctor", "--fix", "--yes"],
+    ]);
+    const expectedPlan = openClawAuthProfilePlan({ codexConfigured: true, openAiConfigured: true });
+    delete expectedPlan.generatedAt;
+    expect(rows[0]?.plan).toMatchObject(expectedPlan);
+    expect(capture).not.toContain("opaque-test-capability");
+    expect(capture).not.toContain(env.OPENAI_API_KEY);
   });
 
   it("passes an ephemeral Codex capability alongside a normal OpenAI API key", async () => {
