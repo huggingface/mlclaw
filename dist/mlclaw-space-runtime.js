@@ -12128,8 +12128,11 @@ async function configureOpenClawGateway(config2, options = {}) {
     allowedOrigins: config2.accessOrigins,
     embedSandbox: "scripts"
   };
-  configureOpenClawModels(openclawConfig, config2, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
-  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured2 = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2);
+  configureOpenAiAuthMetadata(openclawConfig, codexConfigured);
+  configureCodexRuntimePlugin(openclawConfig, codexConfigured || openAiConfigured2);
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
@@ -12208,6 +12211,19 @@ function brokerAgentScope(value) {
 function brokerApprovalMode(value) {
   return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
 }
+function configureCodexRuntimePlugin(openclawConfig, enabled) {
+  const plugins = object(openclawConfig, "plugins");
+  const entries = object(plugins, "entries");
+  const existing = objectValue2(entries.codex);
+  if (!enabled) {
+    if (existing) entries.codex = { ...existing, enabled: false };
+    return;
+  }
+  if (plugins.allow !== void 0) {
+    plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
+  }
+  entries.codex = { ...existing, enabled: true };
+}
 function configureBrokerKitPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
@@ -12278,7 +12294,7 @@ function configureAgentModelChoices(defaults, config2, routerChoices, codexConfi
   };
   defaults.models = {
     ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
-    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}
+    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "codex" } } } : {}
   };
 }
 function resolvePrimaryModel(params) {

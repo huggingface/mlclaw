@@ -389,13 +389,21 @@ native `openai/*` provider. For example, an entitled account may expose
 `openai/gpt-5.6-sol` alongside the other live Codex models.
 
 At startup, ML Claw imports the encrypted login into a managed native OpenClaw
-OAuth profile. OpenClaw then contacts OpenAI directly for model discovery,
-Responses requests, and token refresh; ML Claw is not in the inference path.
-OpenClaw keeps its own model names, metadata, transport, and refreshed
-credential, and a normal `OPENAI_API_KEY` profile can coexist with the ChatGPT
-route. `status` and `logout` inspect or revoke the deployment-scoped login
-without exposing tokens. Raw OAuth tokens are never printed, stored in the
-Space repository or model configuration, or included in workspace files.
+OAuth profile and enables OpenClaw's bundled Codex app-server harness for
+`openai/*` agent models. Codex owns the low-level model loop, native thread
+state, tool continuation, and compaction; OpenClaw continues to own channels,
+approvals, dynamic tools, model selection, and the visible transcript mirror.
+OpenClaw manages its compatible app-server binary, so ML Claw still does not
+install or invoke a Codex CLI from `PATH`.
+
+OpenClaw contacts OpenAI directly for model discovery, inference, and token
+refresh; ML Claw is not in the inference path. OpenClaw keeps its own model
+names, metadata, transport, and refreshed credential, and a normal
+`OPENAI_API_KEY` profile can coexist with the ChatGPT route. OpenAI agent models
+also use the Codex harness with API-key auth. `status` and `logout` inspect or
+revoke the deployment-scoped login without exposing tokens. Raw OAuth tokens
+are never printed, stored in the Space repository or model configuration, or
+included in workspace files.
 
 ## How State Works
 

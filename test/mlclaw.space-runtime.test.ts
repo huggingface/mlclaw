@@ -2190,8 +2190,10 @@ describe("ML Claw Space runtime", () => {
       fallbacks: [DEFAULT_OPENAI_MODEL_REF],
     });
     expect(rewritten.agents.defaults.models["openai/*"]).toEqual({
-      agentRuntime: { id: "openclaw" },
+      agentRuntime: { id: "codex" },
     });
+    expect(rewritten.plugins.entries.codex).toEqual({ enabled: true });
+    expect(rewritten.plugins.allow).toBeUndefined();
     expect(rewritten.agents.defaults.models[LEGACY_CODEX_MODEL_REF]).toBeUndefined();
     expect(rewritten.auth.profiles["openai:mlclaw"]).toMatchObject({
       provider: "openai",
@@ -2213,13 +2215,42 @@ describe("ML Claw Space runtime", () => {
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
     expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
+    expect(disconnected.plugins.entries.codex).toEqual({ enabled: false });
     expect(disconnected.auth.profiles?.["openai:mlclaw"]).toBeUndefined();
 
     await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
     const apiKeyOnly = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(apiKeyOnly.models.providers.openai).toEqual({ params: { keep: true } });
     expect(apiKeyOnly.agents.defaults.models["openai/*"]).toEqual({
-      agentRuntime: { id: "openclaw" },
+      agentRuntime: { id: "codex" },
+    });
+    expect(apiKeyOnly.plugins.entries.codex).toEqual({ enabled: true });
+  });
+
+  it("preserves Codex plugin settings and extends an existing allowlist", async () => {
+    const config = await testConfig();
+    await fs.writeFile(
+      config.openclawConfigPath,
+      JSON.stringify({
+        plugins: {
+          allow: ["custom"],
+          entries: {
+            codex: {
+              enabled: false,
+              config: { appServer: { homeScope: "agent" } },
+            },
+          },
+        },
+      }),
+    );
+
+    await configureOpenClawGateway(config, { codexConfigured: true });
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.plugins.allow).toEqual(["custom", "openai", "codex", "brokerkit"]);
+    expect(rewritten.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: { appServer: { homeScope: "agent" } },
     });
   });
 

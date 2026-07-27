@@ -15383,7 +15383,7 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.6.0",
+  "packageVersion": "0.6.1",
   "openclawVersion": "2026.7.1",
   "brokerkitVersion": "hf-broker/v0.6.2",
   "brokerkitPluginVersion": "0.4.1",
