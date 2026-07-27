@@ -12265,9 +12265,13 @@ function configureOpenClawModels(openclawConfig, config2, codexConfigured, openA
 }
 function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
   const existingModel = objectValue2(defaults.model) ?? {};
-  const requestedPrimary = replaceLegacyCodexModelRef(config2.model);
   const openAiAvailable = codexConfigured || openAiConfigured2;
-  const primary = requestedPrimary.startsWith("openai/") && !openAiAvailable ? routerChoices[0]?.openclawModel : requestedPrimary;
+  const primary = resolvePrimaryModel({
+    existing: existingModel.primary,
+    requested: replaceLegacyCodexModelRef(config2.model),
+    openAiAvailable,
+    ...routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}
+  });
   defaults.model = {
     ...existingModel,
     ...primary ? { primary } : {}
@@ -12276,6 +12280,12 @@ function configureAgentModelChoices(defaults, config2, routerChoices, codexConfi
     ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
     ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}
   };
+}
+function resolvePrimaryModel(params) {
+  const existing = typeof params.existing === "string" ? params.existing.trim() : void 0;
+  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
+  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
+  return params.requested;
 }
 function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
   huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
@@ -20277,11 +20287,7 @@ var SpaceRuntimeServer = class {
     }
     this.openclawStarting = true;
     try {
-      const candidateCredential = await this.codexCredentials.credentialForImport().catch((error) => {
-        process.stderr.write(`[mlclaw] OpenAI OAuth credentials unavailable: ${formatError2(error)}
-`);
-        return void 0;
-      });
+      const candidateCredential = await this.codexCredentials.credentialForImport();
       const codexCredential = candidateCredential && await this.codexCredentials.credentialIsCurrent(candidateCredential) ? candidateCredential : void 0;
       const codexConfigured = Boolean(codexCredential);
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile) ?? process.env.OPENAI_API_KEY?.trim() ?? await this.openAiCredentials.load();

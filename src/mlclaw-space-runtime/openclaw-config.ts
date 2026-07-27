@@ -212,10 +212,13 @@ function configureAgentModelChoices(
   openAiConfigured: boolean,
 ): void {
   const existingModel = objectValue(defaults.model) ?? {};
-  const requestedPrimary = replaceLegacyCodexModelRef(config.model);
   const openAiAvailable = codexConfigured || openAiConfigured;
-  const primary =
-    requestedPrimary.startsWith("openai/") && !openAiAvailable ? routerChoices[0]?.openclawModel : requestedPrimary;
+  const primary = resolvePrimaryModel({
+    existing: existingModel.primary,
+    requested: replaceLegacyCodexModelRef(config.model),
+    openAiAvailable,
+    ...(routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}),
+  });
   defaults.model = {
     ...existingModel,
     ...(primary ? { primary } : {}),
@@ -224,6 +227,18 @@ function configureAgentModelChoices(
     ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
     ...(openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}),
   };
+}
+
+function resolvePrimaryModel(params: {
+  existing: unknown;
+  requested: string;
+  openAiAvailable: boolean;
+  fallback?: string;
+}): string | undefined {
+  const existing = typeof params.existing === "string" ? params.existing.trim() : undefined;
+  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
+  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
+  return params.requested;
 }
 
 function configureHuggingFaceProvider(

@@ -236,10 +236,7 @@ export class SpaceRuntimeServer {
     }
     this.openclawStarting = true;
     try {
-      const candidateCredential = await this.codexCredentials.credentialForImport().catch((error) => {
-        process.stderr.write(`[mlclaw] OpenAI OAuth credentials unavailable: ${formatError(error)}\n`);
-        return undefined;
-      });
+      const candidateCredential = await this.codexCredentials.credentialForImport();
       const codexCredential =
         candidateCredential && (await this.codexCredentials.credentialIsCurrent(candidateCredential))
           ? candidateCredential

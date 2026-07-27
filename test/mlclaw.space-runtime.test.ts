@@ -2203,6 +2203,12 @@ describe("ML Claw Space runtime", () => {
     expect(JSON.stringify(rewritten)).not.toContain("refresh_token");
     expect(JSON.stringify(rewritten)).not.toContain("backend-api/codex");
 
+    rewritten.agents.defaults.model.primary = "openai/gpt-5.6-sol";
+    await fs.writeFile(config.openclawConfigPath, JSON.stringify(rewritten));
+    await configureOpenClawGateway(config, { codexConfigured: true });
+    const restarted = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(restarted.agents.defaults.model.primary).toBe("openai/gpt-5.6-sol");
+
     await configureOpenClawGateway(config, { codexConfigured: false });
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
