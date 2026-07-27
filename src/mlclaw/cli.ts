@@ -4636,6 +4636,10 @@ async function codexCredentialsLogin(requestedAgent: string | undefined, runtime
       await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
       await assertLease();
       await deleteCodexRevocationMarker(hub, current.bucket, statePrefix);
+      await assertLease();
+      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
+      await assertLease();
+      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
     } finally {
       clearInterval(renewalTimer);
       await renewal;
@@ -4693,6 +4697,10 @@ async function codexCredentialsLogout(
       await writeCodexRevocationMarker(hub, current, statePrefix, runtime.now());
       await assertControlLease(control, lease, runtime.now());
       await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
+      await assertControlLease(control, lease, runtime.now());
+      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
+        await assertControlLease(control, lease, runtime.now());
+      });
     } finally {
       await releaseControlLease(control, lease);
     }
@@ -4936,6 +4944,48 @@ async function deleteCodexRevocationMarker(
   statePrefix: string | undefined,
 ): Promise<void> {
   await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
+}
+
+async function ensureRuntimeDeploymentId(
+  manifest: DeploymentManifest,
+  secrets: Record<string, string>,
+  hub: HubApi,
+  runtime: Required<CliRuntime>,
+  assertLease: () => Promise<void>,
+): Promise<void> {
+  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    return;
+  }
+  await assertLease();
+  await writeSecretEnv(runtime.configRoot, manifest.agent, {
+    ...secrets,
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+  });
+}
+
+async function restartDeploymentForCredentialChange(
+  manifest: DeploymentManifest,
+  runtime: Required<CliRuntime>,
+  hub: HubApi,
+  assertLease: () => Promise<void>,
+): Promise<void> {
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.restartSpace(manifest.space, true);
+    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
+    return;
+  }
+  const runner = localRunnerFor(manifest, runtime);
+  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
+  if (!existing?.running) {
+    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
+    return;
+  }
+  await assertLease();
+  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 
 async function credentialManifest(

@@ -80,9 +80,62 @@ export function codexAuthJsonFromOAuthCredential(
       access_token: credential.access,
       refresh_token: credential.refresh,
       account_id: credential.accountId,
+      expires_at: credential.expires,
     },
     last_refresh: now.toISOString(),
   };
+}
+
+export function openAICodexCredentialFromAuthJson(value: unknown): OpenAICodexOAuthCredential {
+  const auth = objectValue(value, "Codex auth document");
+  if (auth.auth_mode !== "chatgpt") {
+    throw new Error("Codex auth document is not a ChatGPT login");
+  }
+  const tokens = objectValue(auth.tokens, "Codex auth tokens");
+  const access = nonEmptyString(tokens.access_token);
+  const refresh = nonEmptyString(tokens.refresh_token);
+  const storedAccountId = nonEmptyString(tokens.account_id);
+  if (!access || !refresh || !storedAccountId) {
+    throw new Error("Codex auth document was missing OAuth credential fields");
+  }
+  const claims = accessTokenClaims(access);
+  if (claims.accountId !== storedAccountId) {
+    throw new Error("Codex auth account identity did not match the access token");
+  }
+  const storedExpires = finiteNonNegativeNumber(tokens.expires_at);
+  const idToken = nonEmptyString(tokens.id_token);
+  return {
+    access,
+    refresh,
+    expires: storedExpires ?? claims.expires,
+    accountId: claims.accountId,
+    ...(idToken ? { idToken } : {}),
+  };
+}
+
+export async function refreshOpenAICodexCredential(options: {
+  refreshToken: string;
+  fetchFn?: typeof fetch;
+  signal?: AbortSignal;
+  now?: () => number;
+}): Promise<OpenAICodexOAuthCredential> {
+  throwIfAborted(options.signal);
+  const fetchFn = options.fetchFn ?? fetch;
+  const response = await fetchFn(`${OPENAI_AUTH_BASE_URL}/oauth/token`, {
+    method: "POST",
+    headers: requestHeaders("application/x-www-form-urlencoded"),
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: options.refreshToken,
+      client_id: OPENAI_CODEX_CLIENT_ID,
+    }),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  const body = await readJsonObject(response);
+  if (!response.ok) {
+    throw responseError("OpenAI token refresh failed", response, body);
+  }
+  return credentialFromTokenResponse(body, options.now ?? Date.now);
 }
 
 async function requestDeviceCode(fetchFn: typeof fetch, signal?: AbortSignal): Promise<DeviceCode> {
@@ -178,21 +231,7 @@ async function exchangeDeviceAuthorization(
   if (!response.ok) {
     throw responseError("OpenAI device token exchange failed", response, body);
   }
-  const access = nonEmptyString(body.access_token);
-  const refresh = nonEmptyString(body.refresh_token);
-  const expiresInMs = secondsToSafeMilliseconds(body.expires_in);
-  if (!access || !refresh || expiresInMs === undefined) {
-    throw new Error("OpenAI token exchange response was missing required fields");
-  }
-  const accountId = accountIdFromAccessToken(access);
-  const idToken = nonEmptyString(body.id_token);
-  return {
-    access,
-    refresh,
-    expires: now() + expiresInMs,
-    accountId,
-    ...(idToken ? { idToken } : {}),
-  };
+  return credentialFromTokenResponse(body, now);
 }
 
 function requestHeaders(contentType: string): Record<string, string> {
@@ -274,33 +313,64 @@ function sanitizeErrorText(value: string): string {
     .slice(0, 500);
 }
 
-function accountIdFromAccessToken(accessToken: string): string {
+function credentialFromTokenResponse(body: Record<string, unknown>, now: () => number): OpenAICodexOAuthCredential {
+  const access = nonEmptyString(body.access_token);
+  const refresh = nonEmptyString(body.refresh_token);
+  const expiresInMs = secondsToSafeMilliseconds(body.expires_in);
+  if (!access || !refresh || expiresInMs === undefined) {
+    throw new Error("OpenAI token response was missing required fields");
+  }
+  const claims = accessTokenClaims(access);
+  const idToken = nonEmptyString(body.id_token);
+  return {
+    access,
+    refresh,
+    expires: now() + expiresInMs,
+    accountId: claims.accountId,
+    ...(idToken ? { idToken } : {}),
+  };
+}
+
+function accessTokenClaims(accessToken: string): { accountId: string; expires: number } {
   const parts = accessToken.split(".");
   if (parts.length !== 3 || !parts[1]) {
     throw new Error("OpenAI access token was not a JWT");
   }
-  let payload: unknown;
+  let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    payload = objectValue(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")), "access token JWT payload");
   } catch {
     throw new Error("OpenAI access token JWT was invalid");
   }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("OpenAI access token JWT payload was invalid");
-  }
-  const claim = (payload as Record<string, unknown>)[JWT_AUTH_CLAIM];
+  const claim = payload[JWT_AUTH_CLAIM];
   const accountId =
     claim && typeof claim === "object" && !Array.isArray(claim)
       ? nonEmptyString((claim as Record<string, unknown>).chatgpt_account_id)
       : undefined;
+  const expiresSeconds = finiteNonNegativeNumber(payload.exp);
   if (!accountId) {
     throw new Error("OpenAI access token did not contain a ChatGPT account ID");
   }
-  return accountId;
+  if (expiresSeconds === undefined || !Number.isSafeInteger(expiresSeconds * 1_000)) {
+    throw new Error("OpenAI access token did not contain a valid expiry");
+  }
+  return { accountId, expires: expiresSeconds * 1_000 };
 }
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was not an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function finiteNonNegativeNumber(value: unknown): number | undefined {
+  const number = typeof value === "string" && value.trim() ? Number(value) : value;
+  return typeof number === "number" && Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 
 function secondsToSafeMilliseconds(value: unknown): number | undefined {

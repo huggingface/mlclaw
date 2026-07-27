@@ -4,6 +4,8 @@ import type net from "node:net";
 import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { createSpaceRuntimeApp } from "./app.js";
+import { CodexCredentialStore } from "./codex-credentials.js";
+import { CODEX_MODEL_CHOICE, CODEX_MODEL_REF, CODEX_PROVIDER_ID } from "./codex-provider.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import { McpCredentialStore } from "./mcp-credentials.js";
 import { McpIntegrationServer } from "./mcp-integrations.js";
@@ -26,6 +28,7 @@ export class SpaceRuntimeServer {
   private readonly mcpCredentials: McpCredentialStore;
   private readonly mcpIntegrations: McpIntegrationServer;
   private readonly openAiCredentials: OpenAiCredentialStore;
+  private readonly codexCredentials: CodexCredentialStore;
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
@@ -40,7 +43,8 @@ export class SpaceRuntimeServer {
       ...(config.oauthClientSecret ? { clientSecret: config.oauthClientSecret } : {}),
     });
     this.openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
-    this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials);
+    this.codexCredentials = new CodexCredentialStore(config);
+    this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials, this.codexCredentials);
     const credentialSlot = integrationCredentialSlot(config);
     this.app = createSpaceRuntimeApp(config, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
@@ -227,7 +231,17 @@ export class SpaceRuntimeServer {
     }
     this.openclawStarting = true;
     try {
-      await configureOpenClawGateway(this.config);
+      const codexConfigured = await this.codexCredentials.configured().catch((error) => {
+        process.stderr.write(`[mlclaw] Codex credentials unavailable: ${formatError(error)}\n`);
+        return false;
+      });
+      const routerChoices = this.config.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
+      this.config.modelChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
+      if (!codexConfigured && this.config.model === CODEX_MODEL_REF && routerChoices[0]) {
+        this.config.model = routerChoices[0].openclawModel;
+      }
+      await configureOpenClawGateway(this.config, { codexConfigured });
+      if (codexConfigured) process.stdout.write("[mlclaw] Codex provider enabled\n");
       const persistedOpenAiKey =
         (await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ??
         process.env.OPENAI_API_KEY?.trim() ??

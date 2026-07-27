@@ -68,6 +68,7 @@ export type SpaceRuntimeConfig = {
   runtimeId: string | undefined;
   deploymentId: string | undefined;
   templateRev: string | undefined;
+  codexAuthStoreFile: string;
   assetsDir: string;
   branding: RuntimeBranding;
 };
@@ -125,6 +126,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const openaiCredentialStoreFile =
     trim(env.MLCLAW_OPENAI_CREDENTIAL_STORE_FILE) ??
     (mountedControlDir ? `${mountedControlDir}/openai-api-key.enc` : `${protectedControlDir}/openai-api-key.enc`);
+  const codexAuthStoreFile =
+    trim(env.MLCLAW_CODEX_AUTH_STORE_FILE) ??
+    (mountedControlDir ? `${mountedControlDir}/codex-auth.enc` : `${protectedControlDir}/codex-auth.enc`);
   const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
@@ -196,6 +200,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     runtimeId: trim(env.MLCLAW_RUNTIME_ID),
     deploymentId: trim(env.MLCLAW_DEPLOYMENT_ID),
     templateRev: trim(env.MLCLAW_TEMPLATE_REV),
+    codexAuthStoreFile,
     assetsDir: trim(env.MLCLAW_ASSETS_DIR) ?? "/app/assets",
     branding: resolveBranding(env, agentName),
   };

@@ -4823,10 +4823,15 @@ describe("mlclaw CLI", () => {
         access_token: "opaque-access",
         refresh_token: "opaque-refresh",
         account_id: "acct_123",
+        expires_at: Date.parse("2026-06-16T01:00:00.000Z"),
       },
       last_refresh: "2026-06-16T00:00:00.000Z",
     });
-    expect(hub.calls).not.toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceVariable",
+      args: ["alice/research", "MLCLAW_DEPLOYMENT_ID", "22222222-2222-4222-8222-222222222222"],
+    });
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
     expect(stdout).toEqual(
       expect.arrayContaining([
         "Open: https://auth.openai.com/codex/device",
@@ -4852,7 +4857,7 @@ describe("mlclaw CLI", () => {
     expect(hub.bucketObjects.has(codexAuthObjectPath())).toBe(false);
     expect(hub.bucketObjects.has(codexAuthRevocationObjectPath())).toBe(true);
     expect(hub.calls).toContainEqual({ name: "bucket.deleteFiles", args: [[codexAuthObjectPath()]] });
-    expect(hub.calls).not.toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
 
     await expect(main(["credentials", "codex", "status", "research"], runtime)).resolves.toBe(0);
     expect(stdout.join("\n")).toContain("Codex account: not configured");
