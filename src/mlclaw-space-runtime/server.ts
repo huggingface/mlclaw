@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 import type net from "node:net";
 import { Readable } from "node:stream";
@@ -24,6 +25,7 @@ type SpaceRuntimeServerOptions = {
 
 export class SpaceRuntimeServer {
   private openclaw: ChildProcess | undefined;
+  private readonly openclawGatewayPassword = randomBytes(48).toString("base64url");
   private openclawStarting = false;
   private openclawStopping = false;
   private readonly app: Hono;
@@ -287,6 +289,8 @@ export class SpaceRuntimeServer {
         await this.syncOAuthProfile({ config: this.config, env });
         throw new Error("OpenAI OAuth credentials were revoked during native profile provisioning");
       }
+      // Trusted-proxy authenticates browsers; internal loopback tools use this process-private fallback.
+      env.OPENCLAW_GATEWAY_PASSWORD = this.openclawGatewayPassword;
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,

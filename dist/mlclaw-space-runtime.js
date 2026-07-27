@@ -4571,6 +4571,7 @@ function readRuntimeSettings(file) {
 
 // src/mlclaw-space-runtime/server.ts
 import { spawn as spawn2 } from "node:child_process";
+import { randomBytes as randomBytes9 } from "node:crypto";
 import http3 from "node:http";
 import { Readable as Readable2 } from "node:stream";
 
@@ -20166,6 +20167,7 @@ var SpaceRuntimeServer = class {
     });
   }
   openclaw;
+  openclawGatewayPassword = randomBytes9(48).toString("base64url");
   openclawStarting = false;
   openclawStopping = false;
   app;
@@ -20346,6 +20348,7 @@ var SpaceRuntimeServer = class {
         await this.syncOAuthProfile({ config: this.config, env });
         throw new Error("OpenAI OAuth credentials were revoked during native profile provisioning");
       }
+      env.OPENCLAW_GATEWAY_PASSWORD = this.openclawGatewayPassword;
       this.openclaw = spawn2(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,
