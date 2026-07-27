@@ -35,6 +35,11 @@ export class CodexCredentialStore {
     return Boolean(await this.loadDocument());
   }
 
+  async credentialForImport(): Promise<OpenAICodexOAuthCredential | undefined> {
+    const source = await this.loadDocument();
+    return source ? openAICodexCredentialFromAuthJson(source.authJson) : undefined;
+  }
+
   async credential(
     options: { forceRefresh?: boolean; signal?: AbortSignal } = {},
   ): Promise<OpenAICodexOAuthCredential> {

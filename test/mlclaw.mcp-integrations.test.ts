@@ -4,8 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
-import type { CodexCredentialStore } from "../src/mlclaw-space-runtime/codex-credentials.js";
-import { CODEX_MODELS_URL, generateCodexProxyCapability } from "../src/mlclaw-space-runtime/codex-proxy.js";
 import { McpCredentialStore } from "../src/mlclaw-space-runtime/mcp-credentials.js";
 import { deriveInternalToken, McpIntegrationServer } from "../src/mlclaw-space-runtime/mcp-integrations.js";
 import { authorizeUrl, HF_LOGIN_OAUTH_SCOPES, HF_MCP_OAUTH_SCOPES } from "../src/mlclaw-space-runtime/oauth.js";
@@ -19,14 +17,6 @@ afterEach(async () => {
 });
 
 describe("automatic MCP integrations", () => {
-  it("mints a new high-entropy Codex proxy capability for each runtime", () => {
-    const first = generateCodexProxyCapability();
-    const second = generateCodexProxyCapability();
-    expect(first).toMatch(/^[A-Za-z0-9_-]{64}$/u);
-    expect(second).toMatch(/^[A-Za-z0-9_-]{64}$/u);
-    expect(second).not.toBe(first);
-  });
-
   it("separates ordinary login scopes from integration authorization", () => {
     const settings = {
       clientId: "client",
@@ -888,137 +878,6 @@ describe("automatic MCP integrations", () => {
     expect(calls).toEqual(["research", "abc_start_research"]);
   });
 
-  it("proxies the account-filtered native Codex model catalog without parsing it", async () => {
-    const credentialCalls: Array<{ forceRefresh?: boolean }> = [];
-    const codexCredentials = {
-      credential: async (options: { forceRefresh?: boolean } = {}) => {
-        credentialCalls.push(options);
-        return {
-          access: options.forceRefresh ? "access-new" : "access-old",
-          refresh: "refresh",
-          expires: Date.now() + 60_000,
-          accountId: "acct_123",
-        };
-      },
-    } as CodexCredentialStore;
-    const catalog = {
-      models: [
-        { slug: "gpt-5.6-sol", display_name: "GPT-5.6 Sol", visibility: "list" },
-        { slug: "gpt-5.4", display_name: "GPT-5.4", visibility: "list" },
-      ],
-    };
-    const upstream: Array<{ url: string; init: RequestInit }> = [];
-    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
-      upstream.push({ url: String(input), init: init ?? {} });
-      if (upstream.length === 1) return new Response("unauthorized", { status: 401 });
-      return Response.json(catalog);
-    };
-    const fixture = await integrationFixture({}, { codexCredentials, fetchFn });
-    const response = await fetch(
-      `http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/models?client_version=0.145.0&ignored=1`,
-      { headers: { authorization: `Bearer ${fixture.codexCapability}` } },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(catalog);
-    expect(credentialCalls).toEqual([
-      { forceRefresh: false, signal: expect.any(AbortSignal) },
-      { forceRefresh: true, signal: expect.any(AbortSignal) },
-    ]);
-    expect(upstream).toHaveLength(2);
-    expect(upstream[1]?.url).toBe(`${CODEX_MODELS_URL}?client_version=0.145.0`);
-    const headers = new Headers(upstream[1]?.init.headers);
-    expect(headers.get("authorization")).toBe("Bearer access-new");
-    expect(headers.get("chatgpt-account-id")).toBe("acct_123");
-    expect(headers.get("accept")).toBe("application/json");
-
-    const unauthorized = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/models`, {
-      headers: { authorization: "Bearer wrong" },
-    });
-    expect(unauthorized.status).toBe(401);
-    expect(upstream).toHaveLength(2);
-  });
-
-  it("proxies native Codex Responses for live account models and retries once after a 401", async () => {
-    const credentialCalls: Array<{ forceRefresh?: boolean }> = [];
-    const codexCredentials = {
-      credential: async (options: { forceRefresh?: boolean } = {}) => {
-        credentialCalls.push(options);
-        return {
-          access: options.forceRefresh ? "access-new" : "access-old",
-          refresh: "refresh",
-          expires: Date.now() + 60_000,
-          accountId: "acct_123",
-        };
-      },
-    } as CodexCredentialStore;
-    const upstream: Array<{ url: string; init: RequestInit }> = [];
-    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
-      upstream.push({ url: String(input), init: init ?? {} });
-      if (upstream.length === 1) return new Response("unauthorized", { status: 401 });
-      return new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n\n', {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      });
-    };
-    const fixture = await integrationFixture({}, { codexCredentials, fetchFn });
-    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${fixture.codexCapability}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-5.6-sol",
-        stream: false,
-        store: true,
-        instructions: "Follow the system instruction.",
-        input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
-        reasoning: { effort: "xhigh", summary: "auto" },
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("text/event-stream");
-    expect(await response.text()).toContain("response.completed");
-    expect(credentialCalls).toEqual([
-      { forceRefresh: false, signal: expect.any(AbortSignal) },
-      { forceRefresh: true, signal: expect.any(AbortSignal) },
-    ]);
-    expect(upstream).toHaveLength(2);
-    expect(upstream[1]?.url).toBe("https://chatgpt.com/backend-api/codex/responses");
-    expect(new Headers(upstream[1]?.init.headers).get("authorization")).toBe("Bearer access-new");
-    expect(new Headers(upstream[1]?.init.headers).get("chatgpt-account-id")).toBe("acct_123");
-    const forwarded = JSON.parse(String(upstream[1]?.init.body)) as Record<string, unknown>;
-    expect(forwarded).toMatchObject({
-      model: "gpt-5.6-sol",
-      stream: true,
-      store: false,
-      instructions: "Follow the system instruction.",
-      input: [{ role: "user", content: [{ type: "input_text", text: "Hello" }] }],
-      reasoning: { effort: "xhigh", summary: "auto" },
-    });
-
-    const unauthorized = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: { authorization: "Bearer wrong", "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-5.6-sol", input: [] }),
-    });
-    expect(unauthorized.status).toBe(401);
-
-    const missingModel = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${fixture.codexCapability}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ input: [] }),
-    });
-    expect(missingModel.status).toBe(400);
-    expect(await missingModel.json()).toMatchObject({ error: { message: "Codex model is required" } });
-    expect(upstream).toHaveLength(2);
-  });
-
   it("aborts active upstream requests during shutdown", async () => {
     let requestStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -1056,15 +915,11 @@ async function integrationFixture(
   options: {
     skipCredential?: boolean;
     createStore?: (config: SpaceRuntimeConfig) => McpCredentialStore;
-    codexCredentials?: CodexCredentialStore;
-    codexCapability?: string;
-    fetchFn?: typeof fetch;
   } = {},
 ): Promise<{
   config: SpaceRuntimeConfig;
   store: McpCredentialStore;
   server: McpIntegrationServer;
-  codexCapability: string;
 }> {
   const root = await temporaryDirectory();
   const mcpPort = await freePort();
@@ -1093,11 +948,10 @@ async function integrationFixture(
       scope: ["openid", "profile", "read-mcp"],
     });
   }
-  const codexCapability = options.codexCapability ?? generateCodexProxyCapability();
-  const server = new McpIntegrationServer(config, store, options.codexCredentials, codexCapability, options.fetchFn);
+  const server = new McpIntegrationServer(config, store);
   await server.start();
   cleanups.push(() => server.stop());
-  return { config, store, server, codexCapability };
+  return { config, store, server };
 }
 
 async function temporaryDirectory(): Promise<string> {

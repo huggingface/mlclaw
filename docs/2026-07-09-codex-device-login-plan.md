@@ -52,14 +52,14 @@ Logout first writes:
 <state-prefix>/.mlclaw/codex-auth.revoked
 ```
 
-In the target design, the encrypted object is a one-time staging format. On startup, MLClaw validates and imports it into a managed native OpenClaw OAuth profile such as `openai:mlclaw`. After the native profile is durably written, MLClaw removes the staging object. OpenClaw's private auth profile becomes the canonical credential and owns refresh-token rotation.
+On startup, MLClaw validates and imports the encrypted deployment credential into a managed native OpenClaw OAuth profile such as `openai:mlclaw`. OpenClaw's private auth profile becomes the canonical runtime credential and owns refresh-token rotation. The encrypted object remains the deployment control record used by CLI status, logout, bucket adoption, and recovery; startup never overwrites a newer matching native profile with an older encrypted record.
 
 Migration must:
 
 - preserve unrelated auth profiles and profile ordering;
 - atomically write the managed profile with restrictive permissions and the OpenClaw runtime uid/gid;
 - refuse to overwrite a newer valid native profile with an older staged credential;
-- delete staging data only after a verified native-profile write;
+- keep the encrypted control record out of the runtime request path after import;
 - keep the revocation marker authoritative if logout races with import;
 - import `goept`'s existing encrypted credential without requiring another login;
 - preserve deployment and bucket adoption behavior.

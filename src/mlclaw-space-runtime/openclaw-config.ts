@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SpaceRuntimeConfig } from "./config.js";
-import { CODEX_PROXY_BASE_PATH, DEFAULT_CODEX_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "./codex-proxy.js";
+import { DEFAULT_OPENAI_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "./openai-models.js";
+import { OPENAI_OAUTH_PROFILE_ID } from "./openclaw-oauth-profile.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
@@ -36,6 +37,7 @@ export async function configureOpenClawGateway(
     embedSandbox: "scripts",
   };
   configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
+  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
@@ -199,7 +201,7 @@ function configureOpenClawModels(
   models.mode = "merge";
   const providers = object(models, "providers");
   configureHuggingFaceProvider(object(providers, "huggingface"), config, routerChoices);
-  configureNativeOpenAiProvider(providers, config, codexConfigured);
+  configureNativeOpenAiProvider(providers);
 }
 
 function configureAgentModelChoices(
@@ -238,36 +240,44 @@ function configureHuggingFaceProvider(
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
 }
 
-function configureNativeOpenAiProvider(
-  providers: Record<string, unknown>,
-  config: SpaceRuntimeConfig,
-  configured: boolean,
-): void {
+function configureNativeOpenAiProvider(providers: Record<string, unknown>): void {
   delete providers["mlclaw-codex"];
   const existing = objectValue(providers.openai);
-  if (!configured) {
-    const params = objectValue(existing?.params);
-    if (params && "codexProxyBaseUrl" in params) {
-      const nextParams = { ...params };
-      delete nextParams.codexProxyBaseUrl;
-      if (existing) {
-        if (Object.keys(nextParams).length > 0) existing.params = nextParams;
-        else delete existing.params;
-      }
-    }
-    return;
+  const params = objectValue(existing?.params);
+  if (!params || !("codexProxyBaseUrl" in params)) return;
+  const nextParams = { ...params };
+  delete nextParams.codexProxyBaseUrl;
+  if (existing) {
+    if (Object.keys(nextParams).length > 0) existing.params = nextParams;
+    else delete existing.params;
   }
-  providers.openai = {
-    ...existing,
-    params: {
-      ...objectValue(existing?.params),
-      codexProxyBaseUrl: `http://127.0.0.1:${config.mcpPort}${CODEX_PROXY_BASE_PATH}`,
-    },
-  };
+}
+
+function configureOpenAiAuthMetadata(openclawConfig: Record<string, unknown>, configured: boolean): void {
+  const auth = object(openclawConfig, "auth");
+  const profiles = object(auth, "profiles");
+  const order = object(auth, "order");
+  const existingOrder = Array.isArray(order.openai)
+    ? order.openai.filter((value): value is string => typeof value === "string" && value !== OPENAI_OAUTH_PROFILE_ID)
+    : [];
+  if (configured) {
+    profiles[OPENAI_OAUTH_PROFILE_ID] = {
+      provider: "openai",
+      mode: "oauth",
+      displayName: "MLClaw ChatGPT",
+    };
+    order.openai = [OPENAI_OAUTH_PROFILE_ID, ...existingOrder];
+  } else {
+    delete profiles[OPENAI_OAUTH_PROFILE_ID];
+    if (existingOrder.length > 0) order.openai = existingOrder;
+    else delete order.openai;
+  }
+  if (Object.keys(profiles).length === 0) delete auth.profiles;
+  if (Object.keys(order).length === 0) delete auth.order;
 }
 
 function replaceLegacyCodexModelRef(value: string): string {
-  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_CODEX_MODEL_REF : value;
+  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : value;
 }
 
 function migrateLegacyCodexModelRefs(value: unknown): unknown {

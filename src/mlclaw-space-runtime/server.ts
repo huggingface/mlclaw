@@ -5,16 +5,13 @@ import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { createSpaceRuntimeApp } from "./app.js";
 import { CodexCredentialStore } from "./codex-credentials.js";
-import {
-  CODEX_PROXY_TOKEN_ENV,
-  DEFAULT_CODEX_MODEL_REF,
-  LEGACY_CODEX_MODEL_REF,
-  generateCodexProxyCapability,
-} from "./codex-proxy.js";
+import { DEFAULT_OPENAI_MODEL_REF, LEGACY_CODEX_MODEL_REF } from "./openai-models.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import { McpCredentialStore } from "./mcp-credentials.js";
 import { McpIntegrationServer } from "./mcp-integrations.js";
 import { configureOpenClawGateway, managedMcpServerStatus } from "./openclaw-config.js";
+import { syncOpenAiOAuthProfile } from "./openclaw-oauth-profile.js";
+import { migrateLegacyOpenAiSessionRefs } from "./openclaw-state-migration.js";
 import { loadOpenAiCredentialFile, openAiConfigured, OpenAiCredentialStore } from "./openai-credentials.js";
 import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
 import { proxyHttp, proxyWebSocket, rejectWebSocket } from "./proxy.js";
@@ -22,6 +19,7 @@ import { normalizeNext, readSession } from "./session.js";
 
 type SpaceRuntimeServerOptions = {
   exitProcess?: (code: number) => void;
+  syncOAuthProfile?: typeof syncOpenAiOAuthProfile;
 };
 
 export class SpaceRuntimeServer {
@@ -30,17 +28,18 @@ export class SpaceRuntimeServer {
   private openclawStopping = false;
   private readonly app: Hono;
   private readonly exitProcess: (code: number) => void;
+  private readonly syncOAuthProfile: typeof syncOpenAiOAuthProfile;
   private readonly mcpCredentials: McpCredentialStore;
   private readonly mcpIntegrations: McpIntegrationServer;
   private readonly openAiCredentials: OpenAiCredentialStore;
   private readonly codexCredentials: CodexCredentialStore;
-  private readonly codexProxyCapability = generateCodexProxyCapability();
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
     options: SpaceRuntimeServerOptions = {},
   ) {
     this.exitProcess = options.exitProcess ?? ((code) => process.exit(code));
+    this.syncOAuthProfile = options.syncOAuthProfile ?? syncOpenAiOAuthProfile;
     this.mcpCredentials = new McpCredentialStore({
       file: config.mcpCredentialFile,
       secret: config.credentialKey,
@@ -50,12 +49,7 @@ export class SpaceRuntimeServer {
     });
     this.openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
     this.codexCredentials = new CodexCredentialStore(config);
-    this.mcpIntegrations = new McpIntegrationServer(
-      config,
-      this.mcpCredentials,
-      this.codexCredentials,
-      this.codexProxyCapability,
-    );
+    this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials);
     const credentialSlot = integrationCredentialSlot(config);
     this.app = createSpaceRuntimeApp(config, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
@@ -242,25 +236,30 @@ export class SpaceRuntimeServer {
     }
     this.openclawStarting = true;
     try {
-      const codexConfigured = await this.codexCredentials.configured().catch((error) => {
-        process.stderr.write(`[mlclaw] Codex credentials unavailable: ${formatError(error)}\n`);
-        return false;
+      const codexCredential = await this.codexCredentials.credentialForImport().catch((error) => {
+        process.stderr.write(`[mlclaw] OpenAI OAuth credentials unavailable: ${formatError(error)}\n`);
+        return undefined;
       });
+      const codexConfigured = Boolean(codexCredential);
       const persistedOpenAiKey =
         (await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ??
         process.env.OPENAI_API_KEY?.trim() ??
         (await this.openAiCredentials.load());
+      const migratedSessions = await migrateLegacyOpenAiSessionRefs(this.config);
+      if (migratedSessions > 0) {
+        process.stdout.write(`[mlclaw] Migrated ${migratedSessions} native OpenAI session route(s)\n`);
+      }
       if (this.config.model === LEGACY_CODEX_MODEL_REF) {
         this.config.model =
           codexConfigured || persistedOpenAiKey
-            ? DEFAULT_CODEX_MODEL_REF
+            ? DEFAULT_OPENAI_MODEL_REF
             : (this.config.modelChoices[0]?.openclawModel ?? this.config.model);
       }
       await configureOpenClawGateway(this.config, {
         codexConfigured,
         openAiConfigured: Boolean(persistedOpenAiKey),
       });
-      if (codexConfigured) process.stdout.write("[mlclaw] Native OpenAI Codex routing enabled\n");
+      if (codexConfigured) process.stdout.write("[mlclaw] Native OpenAI OAuth enabled\n");
       const env: NodeJS.ProcessEnv = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",
@@ -269,12 +268,19 @@ export class SpaceRuntimeServer {
         OPENCLAW_GATEWAY_PORT: String(this.config.openclawPort),
         OPENCLAW_MODEL: this.config.model,
         ...(persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {}),
-        ...(codexConfigured ? { [CODEX_PROXY_TOKEN_ENV]: this.codexProxyCapability } : {}),
         ...extraEnv,
       };
       if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
+      }
+      const profileSynced = await this.syncOAuthProfile({
+        config: this.config,
+        ...(codexCredential ? { credential: codexCredential } : {}),
+        env,
+      });
+      if (codexCredential && !profileSynced) {
+        throw new Error("OpenClaw command does not support native OAuth profile provisioning");
       }
       this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
