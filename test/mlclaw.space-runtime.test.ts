@@ -2094,7 +2094,7 @@ describe("ML Claw Space runtime", () => {
 
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(rewritten.models.providers[CODEX_PROVIDER_ID]).toMatchObject({
-      baseUrl: `http://127.0.0.1:${config.mcpPort}/backend-api`,
+      baseUrl: `http://127.0.0.1:${config.mcpPort}/backend-api/codex`,
       apiKey: deriveCodexProviderToken(config.sessionSecret),
       auth: "api-key",
       api: "openai-chatgpt-responses",

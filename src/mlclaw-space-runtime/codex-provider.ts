@@ -4,8 +4,8 @@ import type { ModelChoice } from "./model-choices.js";
 export const CODEX_PROVIDER_ID = "mlclaw-codex";
 export const CODEX_MODEL_ID = "gpt-5.4";
 export const CODEX_MODEL_REF = `${CODEX_PROVIDER_ID}/${CODEX_MODEL_ID}`;
-export const CODEX_PROXY_BASE_PATH = "/backend-api";
-export const CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/codex/responses`;
+export const CODEX_PROXY_BASE_PATH = "/backend-api/codex";
+export const CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/responses`;
 export const CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 
 export const CODEX_MODEL_CHOICE: ModelChoice = Object.freeze({

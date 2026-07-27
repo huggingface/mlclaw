@@ -11367,8 +11367,8 @@ import { createHmac as createHmac4 } from "node:crypto";
 var CODEX_PROVIDER_ID = "mlclaw-codex";
 var CODEX_MODEL_ID = "gpt-5.4";
 var CODEX_MODEL_REF = `${CODEX_PROVIDER_ID}/${CODEX_MODEL_ID}`;
-var CODEX_PROXY_BASE_PATH = "/backend-api";
-var CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/codex/responses`;
+var CODEX_PROXY_BASE_PATH = "/backend-api/codex";
+var CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/responses`;
 var CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 var CODEX_MODEL_CHOICE = Object.freeze({
   key: CODEX_MODEL_REF,
