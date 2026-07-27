@@ -306,7 +306,7 @@ var require_ucs2length = __commonJS({
 });
 
 // src/mlclaw-space-runtime/cli.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 import process2 from "node:process";
 
 // src/mlclaw-space-runtime/config.ts
@@ -4570,13 +4570,13 @@ function readRuntimeSettings(file) {
 }
 
 // src/mlclaw-space-runtime/server.ts
-import { spawn } from "node:child_process";
+import { spawn as spawn2 } from "node:child_process";
 import http3 from "node:http";
 import { Readable as Readable2 } from "node:stream";
 
 // src/mlclaw-space-runtime/app.ts
-import fs3 from "node:fs/promises";
-import path3 from "node:path";
+import fs4 from "node:fs/promises";
+import path4 from "node:path";
 
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -4717,26 +4717,26 @@ var handleParsingNestedValues = (form, key, value) => {
 };
 
 // node_modules/hono/dist/utils/url.js
-var splitPath = (path7) => {
-  const paths = path7.split("/");
+var splitPath = (path8) => {
+  const paths = path8.split("/");
   if (paths[0] === "") {
     paths.shift();
   }
   return paths;
 };
 var splitRoutingPath = (routePath) => {
-  const { groups, path: path7 } = extractGroupsFromPath(routePath);
-  const paths = splitPath(path7);
+  const { groups, path: path8 } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path8);
   return replaceGroupMarks(paths, groups);
 };
-var extractGroupsFromPath = (path7) => {
+var extractGroupsFromPath = (path8) => {
   const groups = [];
-  path7 = path7.replace(/\{[^}]+\}/g, (match2, index) => {
+  path8 = path8.replace(/\{[^}]+\}/g, (match2, index) => {
     const mark = `@${index}`;
     groups.push([mark, match2]);
     return mark;
   });
-  return { groups, path: path7 };
+  return { groups, path: path8 };
 };
 var replaceGroupMarks = (paths, groups) => {
   for (let i = groups.length - 1; i >= 0; i--) {
@@ -4793,8 +4793,8 @@ var getPath = (request) => {
       const queryIndex = url.indexOf("?", i);
       const hashIndex = url.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
-      const path7 = url.slice(start, end);
-      return tryDecodeURI(path7.includes("%25") ? path7.replace(/%25/g, "%2525") : path7);
+      const path8 = url.slice(start, end);
+      return tryDecodeURI(path8.includes("%25") ? path8.replace(/%25/g, "%2525") : path8);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -4811,11 +4811,11 @@ var mergePath = (base, sub, ...rest) => {
   }
   return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
 };
-var checkOptionalParameter = (path7) => {
-  if (path7.charCodeAt(path7.length - 1) !== 63 || !path7.includes(":")) {
+var checkOptionalParameter = (path8) => {
+  if (path8.charCodeAt(path8.length - 1) !== 63 || !path8.includes(":")) {
     return null;
   }
-  const segments = path7.split("/");
+  const segments = path8.split("/");
   const results = [];
   let basePath = "";
   segments.forEach((segment) => {
@@ -4956,9 +4956,9 @@ var HonoRequest = class {
    */
   path;
   bodyCache = {};
-  constructor(request, path7 = "/", matchResult = [[]]) {
+  constructor(request, path8 = "/", matchResult = [[]]) {
     this.raw = request;
-    this.path = path7;
+    this.path = path8;
     this.#matchResult = matchResult;
     this.#validatedData = {};
   }
@@ -5598,9 +5598,9 @@ var Context = class {
    * })
    * ```
    */
-  json = (object2, arg, headers) => {
+  json = (object3, arg, headers) => {
     return this.#newResponse(
-      JSON.stringify(object2),
+      JSON.stringify(object3),
       arg,
       setDefaultContentType("application/json", headers)
     );
@@ -5710,8 +5710,8 @@ var Hono = class _Hono {
         return this;
       };
     });
-    this.on = (method, path7, ...handlers) => {
-      for (const p of [path7].flat()) {
+    this.on = (method, path8, ...handlers) => {
+      for (const p of [path8].flat()) {
         this.#path = p;
         for (const m of [method].flat()) {
           handlers.map((handler) => {
@@ -5768,8 +5768,8 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path7, app) {
-    const subApp = this.basePath(path7);
+  route(path8, app) {
+    const subApp = this.basePath(path8);
     app.routes.map((r) => {
       let handler;
       if (app.errorHandler === errorHandler) {
@@ -5795,9 +5795,9 @@ var Hono = class _Hono {
    * const api = new Hono().basePath('/api')
    * ```
    */
-  basePath(path7) {
+  basePath(path8) {
     const subApp = this.#clone();
-    subApp._basePath = mergePath(this._basePath, path7);
+    subApp._basePath = mergePath(this._basePath, path8);
     return subApp;
   }
   /**
@@ -5871,7 +5871,7 @@ var Hono = class _Hono {
    * })
    * ```
    */
-  mount(path7, applicationHandler, options) {
+  mount(path8, applicationHandler, options) {
     let replaceRequest;
     let optionHandler;
     if (options) {
@@ -5898,7 +5898,7 @@ var Hono = class _Hono {
       return [c.env, executionContext];
     };
     replaceRequest ||= (() => {
-      const mergedPath = mergePath(this._basePath, path7);
+      const mergedPath = mergePath(this._basePath, path8);
       const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
       return (request) => {
         const url = new URL(request.url);
@@ -5913,19 +5913,19 @@ var Hono = class _Hono {
       }
       await next();
     };
-    this.#addRoute(METHOD_NAME_ALL, mergePath(path7, "*"), handler);
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path8, "*"), handler);
     return this;
   }
-  #addRoute(method, path7, handler, baseRoutePath) {
+  #addRoute(method, path8, handler, baseRoutePath) {
     method = method.toUpperCase();
-    path7 = mergePath(this._basePath, path7);
+    path8 = mergePath(this._basePath, path8);
     const r = {
       basePath: baseRoutePath !== void 0 ? mergePath(this._basePath, baseRoutePath) : this._basePath,
-      path: path7,
+      path: path8,
       method,
       handler
     };
-    this.router.add(method, path7, [handler, r]);
+    this.router.add(method, path8, [handler, r]);
     this.routes.push(r);
   }
   #handleError(err, c) {
@@ -5938,10 +5938,10 @@ var Hono = class _Hono {
     if (method === "HEAD") {
       return (async () => new Response(null, await this.#dispatch(request, executionCtx, env, "GET")))();
     }
-    const path7 = this.getPath(request, { env });
-    const matchResult = this.router.match(method, path7);
+    const path8 = this.getPath(request, { env });
+    const matchResult = this.router.match(method, path8);
     const c = new Context(request, {
-      path: path7,
+      path: path8,
       matchResult,
       env,
       executionCtx,
@@ -6041,7 +6041,7 @@ var Hono = class _Hono {
 
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
-function match(method, path7) {
+function match(method, path8) {
   const matchers = this.buildAllMatchers();
   const match2 = ((method2, path22) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
@@ -6057,7 +6057,7 @@ function match(method, path7) {
     return [matcher[1][index], match3];
   });
   this.match = match2;
-  return match2(method, path7);
+  return match2(method, path8);
 }
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
@@ -6172,12 +6172,12 @@ var Node = class _Node {
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
-  insert(path7, index, pathErrorCheckOnly) {
+  insert(path8, index, pathErrorCheckOnly) {
     const paramAssoc = [];
     const groups = [];
     for (let i = 0; ; ) {
       let replaced = false;
-      path7 = path7.replace(/\{[^}]+\}/g, (m) => {
+      path8 = path8.replace(/\{[^}]+\}/g, (m) => {
         const mark = `@\\${i}`;
         groups[i] = [mark, m];
         i++;
@@ -6188,7 +6188,7 @@ var Trie = class {
         break;
       }
     }
-    const tokens = path7.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    const tokens = path8.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
     for (let i = groups.length - 1; i >= 0; i--) {
       const [mark] = groups[i];
       for (let j = tokens.length - 1; j >= 0; j--) {
@@ -6227,9 +6227,9 @@ var Trie = class {
 // node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
-function buildWildcardRegExp(path7) {
-  return wildcardRegExpCache[path7] ??= new RegExp(
-    path7 === "*" ? "" : `^${path7.replace(
+function buildWildcardRegExp(path8) {
+  return wildcardRegExpCache[path8] ??= new RegExp(
+    path8 === "*" ? "" : `^${path8.replace(
       /\/\*$|([.\\+*[^\]$()])/g,
       (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)"
     )}$`
@@ -6251,17 +6251,17 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   );
   const staticMap = /* @__PURE__ */ Object.create(null);
   for (let i = 0, j = -1, len = routesWithStaticPathFlag.length; i < len; i++) {
-    const [pathErrorCheckOnly, path7, handlers] = routesWithStaticPathFlag[i];
+    const [pathErrorCheckOnly, path8, handlers] = routesWithStaticPathFlag[i];
     if (pathErrorCheckOnly) {
-      staticMap[path7] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+      staticMap[path8] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
     } else {
       j++;
     }
     let paramAssoc;
     try {
-      paramAssoc = trie.insert(path7, j, pathErrorCheckOnly);
+      paramAssoc = trie.insert(path8, j, pathErrorCheckOnly);
     } catch (e) {
-      throw e === PATH_ERROR ? new UnsupportedPathError(path7) : e;
+      throw e === PATH_ERROR ? new UnsupportedPathError(path8) : e;
     }
     if (pathErrorCheckOnly) {
       continue;
@@ -6295,12 +6295,12 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware, path7) {
+function findMiddleware(middleware, path8) {
   if (!middleware) {
     return void 0;
   }
   for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
-    if (buildWildcardRegExp(k).test(path7)) {
+    if (buildWildcardRegExp(k).test(path8)) {
       return [...middleware[k]];
     }
   }
@@ -6314,7 +6314,7 @@ var RegExpRouter = class {
     this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
-  add(method, path7, handler) {
+  add(method, path8, handler) {
     const middleware = this.#middleware;
     const routes = this.#routes;
     if (!middleware || !routes) {
@@ -6329,18 +6329,18 @@ var RegExpRouter = class {
         });
       });
     }
-    if (path7 === "/*") {
-      path7 = "*";
+    if (path8 === "/*") {
+      path8 = "*";
     }
-    const paramCount = (path7.match(/\/:/g) || []).length;
-    if (/\*$/.test(path7)) {
-      const re = buildWildcardRegExp(path7);
+    const paramCount = (path8.match(/\/:/g) || []).length;
+    if (/\*$/.test(path8)) {
+      const re = buildWildcardRegExp(path8);
       if (method === METHOD_NAME_ALL) {
         Object.keys(middleware).forEach((m) => {
-          middleware[m][path7] ||= findMiddleware(middleware[m], path7) || findMiddleware(middleware[METHOD_NAME_ALL], path7) || [];
+          middleware[m][path8] ||= findMiddleware(middleware[m], path8) || findMiddleware(middleware[METHOD_NAME_ALL], path8) || [];
         });
       } else {
-        middleware[method][path7] ||= findMiddleware(middleware[method], path7) || findMiddleware(middleware[METHOD_NAME_ALL], path7) || [];
+        middleware[method][path8] ||= findMiddleware(middleware[method], path8) || findMiddleware(middleware[METHOD_NAME_ALL], path8) || [];
       }
       Object.keys(middleware).forEach((m) => {
         if (method === METHOD_NAME_ALL || method === m) {
@@ -6358,7 +6358,7 @@ var RegExpRouter = class {
       });
       return;
     }
-    const paths = checkOptionalParameter(path7) || [path7];
+    const paths = checkOptionalParameter(path8) || [path8];
     for (let i = 0, len = paths.length; i < len; i++) {
       const path22 = paths[i];
       Object.keys(routes).forEach((m) => {
@@ -6385,13 +6385,13 @@ var RegExpRouter = class {
     const routes = [];
     let hasOwnRoute = method === METHOD_NAME_ALL;
     [this.#middleware, this.#routes].forEach((r) => {
-      const ownRoute = r[method] ? Object.keys(r[method]).map((path7) => [path7, r[method][path7]]) : [];
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path8) => [path8, r[method][path8]]) : [];
       if (ownRoute.length !== 0) {
         hasOwnRoute ||= true;
         routes.push(...ownRoute);
       } else if (method !== METHOD_NAME_ALL) {
         routes.push(
-          ...Object.keys(r[METHOD_NAME_ALL]).map((path7) => [path7, r[METHOD_NAME_ALL][path7]])
+          ...Object.keys(r[METHOD_NAME_ALL]).map((path8) => [path8, r[METHOD_NAME_ALL][path8]])
         );
       }
     });
@@ -6411,13 +6411,13 @@ var SmartRouter = class {
   constructor(init) {
     this.#routers = init.routers;
   }
-  add(method, path7, handler) {
+  add(method, path8, handler) {
     if (!this.#routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    this.#routes.push([method, path7, handler]);
+    this.#routes.push([method, path8, handler]);
   }
-  match(method, path7) {
+  match(method, path8) {
     if (!this.#routes) {
       throw new Error("Fatal error");
     }
@@ -6432,7 +6432,7 @@ var SmartRouter = class {
         for (let i2 = 0, len2 = routes.length; i2 < len2; i2++) {
           router.add(...routes[i2]);
         }
-        res = router.match(method, path7);
+        res = router.match(method, path8);
       } catch (e) {
         if (e instanceof UnsupportedPathError) {
           continue;
@@ -6482,10 +6482,10 @@ var Node2 = class _Node2 {
     }
     this.#patterns = [];
   }
-  insert(method, path7, handler) {
+  insert(method, path8, handler) {
     this.#order = ++this.#order;
     let curNode = this;
-    const parts = splitRoutingPath(path7);
+    const parts = splitRoutingPath(path8);
     const possibleKeys = [];
     for (let i = 0, len = parts.length; i < len; i++) {
       const p = parts[i];
@@ -6534,12 +6534,12 @@ var Node2 = class _Node2 {
       }
     }
   }
-  search(method, path7) {
+  search(method, path8) {
     const handlerSets = [];
     this.#params = emptyParams;
     const curNode = this;
     let curNodes = [curNode];
-    const parts = splitPath(path7);
+    const parts = splitPath(path8);
     const curNodesQueue = [];
     const len = parts.length;
     let partOffsets = null;
@@ -6581,13 +6581,13 @@ var Node2 = class _Node2 {
           if (matcher instanceof RegExp) {
             if (partOffsets === null) {
               partOffsets = new Array(len);
-              let offset = path7[0] === "/" ? 1 : 0;
+              let offset = path8[0] === "/" ? 1 : 0;
               for (let p = 0; p < len; p++) {
                 partOffsets[p] = offset;
                 offset += parts[p].length + 1;
               }
             }
-            const restPathString = path7.substring(partOffsets[i]);
+            const restPathString = path8.substring(partOffsets[i]);
             const m = matcher.exec(restPathString);
             if (m) {
               params[name] = m[0];
@@ -6640,18 +6640,18 @@ var TrieRouter = class {
   constructor() {
     this.#node = new Node2();
   }
-  add(method, path7, handler) {
-    const results = checkOptionalParameter(path7);
+  add(method, path8, handler) {
+    const results = checkOptionalParameter(path8);
     if (results) {
       for (let i = 0, len = results.length; i < len; i++) {
         this.#node.insert(method, results[i], handler);
       }
       return;
     }
-    this.#node.insert(method, path7, handler);
+    this.#node.insert(method, path8, handler);
   }
-  match(method, path7) {
-    return this.#node.search(method, path7);
+  match(method, path8) {
+    return this.#node.search(method, path8);
   }
 };
 
@@ -7223,8 +7223,8 @@ async function restartCurrentSpace(config2) {
   });
   return true;
 }
-async function hubRequest(config2, path7, init) {
-  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path7}`, {
+async function hubRequest(config2, path8, init) {
+  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path8}`, {
     ...init,
     headers: {
       authorization: `Bearer ${config2.hfToken}`,
@@ -7381,10 +7381,10 @@ var util;
       return obj[e];
     });
   };
-  util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object2) => {
+  util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object3) => {
     const keys = [];
-    for (const key in object2) {
-      if (Object.prototype.hasOwnProperty.call(object2, key)) {
+    for (const key in object3) {
+      if (Object.prototype.hasOwnProperty.call(object3, key)) {
         keys.push(key);
       }
     }
@@ -7715,8 +7715,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path7, errorMaps, issueData } = params;
-  const fullPath = [...path7, ...issueData.path || []];
+  const { data, path: path8, errorMaps, issueData } = params;
+  const fullPath = [...path8, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7832,11 +7832,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path7, key) {
+  constructor(parent, value, path8, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path7;
+    this._path = path8;
     this._key = key;
   }
   get path() {
@@ -11359,57 +11359,200 @@ function normalizeScope(value) {
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
-import fs from "node:fs/promises";
-import path from "node:path";
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
 
-// src/mlclaw-space-runtime/codex-provider.ts
-import { createHmac as createHmac4 } from "node:crypto";
-var CODEX_PROVIDER_ID = "mlclaw-codex";
-var CODEX_MODEL_ID = "gpt-5.4";
-var CODEX_MODEL_REF = `${CODEX_PROVIDER_ID}/${CODEX_MODEL_ID}`;
+// src/mlclaw-space-runtime/openclaw-auth-profiles.ts
+import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+var CODEX_PROXY_TOKEN_ENV = "MLCLAW_CODEX_PROXY_TOKEN";
+var CODEX_AUTH_PROFILE_ID = "openai:mlclaw";
+var OPENAI_API_KEY_PROFILE_ID = "openai:mlclaw-api-key";
+var MLCLAW_SECRET_PROVIDER_ID = "mlclaw-runtime";
+function configureManagedOpenClawAuthProfiles(openclawConfig, options) {
+  const secrets = object(openclawConfig, "secrets");
+  const secretProviders = object(secrets, "providers");
+  const allowedSecrets = [
+    ...options.codexConfigured ? [CODEX_PROXY_TOKEN_ENV] : [],
+    ...options.openAiConfigured ? ["OPENAI_API_KEY"] : []
+  ];
+  if (allowedSecrets.length > 0) {
+    secretProviders[MLCLAW_SECRET_PROVIDER_ID] = {
+      source: "env",
+      allowlist: allowedSecrets
+    };
+  } else {
+    delete secretProviders[MLCLAW_SECRET_PROVIDER_ID];
+  }
+  const auth = object(openclawConfig, "auth");
+  const profiles = object(auth, "profiles");
+  if (options.codexConfigured) {
+    profiles[CODEX_AUTH_PROFILE_ID] = {
+      provider: "openai",
+      mode: "token",
+      displayName: "ChatGPT"
+    };
+  } else {
+    delete profiles[CODEX_AUTH_PROFILE_ID];
+  }
+  if (options.openAiConfigured) {
+    profiles[OPENAI_API_KEY_PROFILE_ID] = {
+      provider: "openai",
+      mode: "api_key",
+      displayName: "OpenAI API key"
+    };
+  } else {
+    delete profiles[OPENAI_API_KEY_PROFILE_ID];
+  }
+  const order = object(auth, "order");
+  const existing = Array.isArray(order.openai) ? order.openai.filter((profileId) => typeof profileId === "string") : [];
+  const unmanaged = existing.filter(
+    (profileId) => profileId !== CODEX_AUTH_PROFILE_ID && profileId !== OPENAI_API_KEY_PROFILE_ID
+  );
+  const managed = [
+    ...options.codexConfigured ? [CODEX_AUTH_PROFILE_ID] : [],
+    ...options.openAiConfigured ? [OPENAI_API_KEY_PROFILE_ID] : []
+  ];
+  if (managed.length > 0 || unmanaged.length > 0) order.openai = [...managed, ...unmanaged];
+  else delete order.openai;
+}
+function openClawAuthProfilePlan(options) {
+  const targets = [];
+  if (options.codexConfigured) {
+    targets.push(
+      authProfileTarget({
+        type: "auth-profiles.token.token",
+        profileId: CODEX_AUTH_PROFILE_ID,
+        field: "token",
+        env: CODEX_PROXY_TOKEN_ENV
+      })
+    );
+  }
+  if (options.openAiConfigured) {
+    targets.push(
+      authProfileTarget({
+        type: "auth-profiles.api_key.key",
+        profileId: OPENAI_API_KEY_PROFILE_ID,
+        field: "key",
+        env: "OPENAI_API_KEY"
+      })
+    );
+  }
+  return {
+    version: 1,
+    protocolVersion: 1,
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    generatedBy: "mlclaw",
+    targets,
+    options: {
+      scrubEnv: false,
+      scrubAuthProfilesForProviderTargets: false,
+      scrubLegacyAuthJson: false
+    }
+  };
+}
+async function provisionOpenClawAuthProfiles(params) {
+  if (!params.options.codexConfigured && !params.options.openAiConfigured) return false;
+  const invocation = openClawCliInvocation(params.config);
+  if (!invocation) return false;
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openclaw-auth-"));
+  const planFile = path.join(directory, "plan.json");
+  try {
+    await fs.writeFile(planFile, `${JSON.stringify(openClawAuthProfilePlan(params.options))}
+`, {
+      mode: 384
+    });
+    if (process.getuid?.() === 0) {
+      await fs.chown(directory, params.config.openclawUid, params.config.openclawGid);
+      await fs.chown(planFile, params.config.openclawUid, params.config.openclawGid);
+    }
+    await runOpenClawCli({
+      command: invocation.command,
+      args: [...invocation.prefixArgs, "secrets", "apply", "--from", planFile],
+      env: params.env,
+      ...process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}
+    });
+    return true;
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}
+function authProfileTarget(params) {
+  return {
+    type: params.type,
+    path: `profiles.${params.profileId}.${params.field}`,
+    pathSegments: ["profiles", params.profileId, params.field],
+    agentId: "main",
+    authProfileProvider: "openai",
+    ref: { source: "env", provider: MLCLAW_SECRET_PROVIDER_ID, id: params.env }
+  };
+}
+function openClawCliInvocation(config2) {
+  const executable = path.basename(config2.openclawCommand).toLowerCase();
+  if (executable.includes("openclaw")) {
+    return { command: config2.openclawCommand, prefixArgs: [] };
+  }
+  if (["node", "node.exe", "bun", "bun.exe"].includes(executable)) {
+    const script = config2.openclawArgs[0];
+    if (script && /(?:^|[/\\])openclaw\.(?:mjs|cjs|js)$/iu.test(script)) {
+      return { command: config2.openclawCommand, prefixArgs: [script] };
+    }
+  }
+  return void 0;
+}
+async function runOpenClawCli(params) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(params.command, params.args, {
+      env: params.env,
+      stdio: "ignore",
+      ...params.uid !== void 0 ? { uid: params.uid } : {},
+      ...params.gid !== void 0 ? { gid: params.gid } : {}
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`OpenClaw auth profile provisioning failed (${code ?? signal ?? "unknown"})`));
+    });
+  });
+}
+function object(parent, key) {
+  const value = parent[key];
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  const created = {};
+  parent[key] = created;
+  return created;
+}
+
+// src/mlclaw-space-runtime/codex-proxy.ts
+import { randomBytes as randomBytes5 } from "node:crypto";
 var CODEX_PROXY_BASE_PATH = "/backend-api/codex";
+var CODEX_MODELS_PATH = `${CODEX_PROXY_BASE_PATH}/models`;
 var CODEX_RESPONSES_PATH = `${CODEX_PROXY_BASE_PATH}/responses`;
+var CODEX_MODELS_URL = "https://chatgpt.com/backend-api/codex/models";
 var CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
-var CODEX_MODEL_CHOICE = Object.freeze({
-  key: CODEX_MODEL_REF,
-  modelId: CODEX_MODEL_ID,
-  provider: CODEX_PROVIDER_ID,
-  openclawModel: CODEX_MODEL_REF,
-  label: "GPT-5.4 (Codex)",
-  note: "Connected ChatGPT account",
-  contextLength: 272e3,
-  pricing: { input: 2.5, output: 15 },
-  supportsTools: true,
-  supportsStructuredOutput: true,
-  status: "live",
-  inputModalities: ["text", "image"],
-  outputModalities: ["text"]
-});
-function deriveCodexProviderToken(secret) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" }), "utf8").toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({
-      iss: "mlclaw",
-      "https://api.openai.com/auth": { chatgpt_account_id: "mlclaw-proxy" }
-    }),
-    "utf8"
-  ).toString("base64url");
-  const signature = createHmac4("sha256", secret).update(`${header}.${payload}`).digest("base64url");
-  return `${header}.${payload}.${signature}`;
+var LEGACY_CODEX_MODEL_REF = "mlclaw-codex/gpt-5.4";
+var DEFAULT_CODEX_MODEL_REF = "openai/gpt-5.4";
+function generateCodexProxyCapability() {
+  return randomBytes5(48).toString("base64url");
 }
 
 // src/mlclaw-space-runtime/mcp-integrations.ts
-import { createHmac as createHmac5, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 var MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 var UPSTREAM_TIMEOUT_MS = 12e4;
 var INTERNAL_HEADER = "x-mlclaw-mcp-key";
 var McpIntegrationServer = class {
-  constructor(config2, credentials, codexCredentials, fetchFn = fetch) {
+  constructor(config2, credentials, codexCredentials, codexCapability, fetchFn = fetch) {
     this.config = config2;
     this.credentials = credentials;
     this.codexCredentials = codexCredentials;
+    this.codexCapability = codexCapability;
     this.fetchFn = fetchFn;
     this.internalToken = deriveInternalToken(config2.sessionSecret);
   }
@@ -11473,9 +11616,13 @@ var McpIntegrationServer = class {
   }
   async handle(req, res, signal) {
     const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (pathname === CODEX_RESPONSES_PATH) {
-      if (!validBearerToken(req.headers.authorization, deriveCodexProviderToken(this.config.sessionSecret))) {
+    if (pathname === CODEX_MODELS_PATH || pathname === CODEX_RESPONSES_PATH) {
+      if (!this.codexCapability || !validBearerToken(req.headers.authorization, this.codexCapability)) {
         writeJson(res, 401, { error: { message: "Unauthorized", type: "authentication_error" } });
+        return;
+      }
+      if (pathname === CODEX_MODELS_PATH) {
+        await this.handleCodexModels(req, res, signal);
         return;
       }
       const body2 = await readBody(req, MAX_REQUEST_BYTES);
@@ -11514,6 +11661,34 @@ var McpIntegrationServer = class {
       signal
     });
   }
+  async handleCodexModels(req, res, signal) {
+    if (req.method !== "GET") {
+      writeJson(res, 405, { error: { message: "Method not allowed", type: "invalid_request_error" } });
+      return;
+    }
+    if (!this.codexCredentials) {
+      writeJson(res, 503, { error: { message: "Codex is not configured", type: "authentication_error" } });
+      return;
+    }
+    const requestUrl = new URL(req.url ?? CODEX_MODELS_PATH, "http://127.0.0.1");
+    const upstreamUrl = new URL(CODEX_MODELS_URL);
+    const clientVersion = requestUrl.searchParams.get("client_version")?.trim();
+    if (clientVersion && /^[0-9A-Za-z._-]{1,64}$/u.test(clientVersion)) {
+      upstreamUrl.searchParams.set("client_version", clientVersion);
+    }
+    const upstream = await this.fetchCodexUpstream(
+      upstreamUrl,
+      { method: "GET", headers: { accept: "application/json" } },
+      signal,
+      false
+    );
+    res.writeHead(upstream.status, responseHeaders(upstream.headers));
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+    await pipeResponseBody(upstream.body, res);
+  }
   async handleCodexResponses(req, res, body, signal) {
     if (req.method !== "POST") {
       writeJson(res, 405, { error: { message: "Method not allowed", type: "invalid_request_error" } });
@@ -11528,12 +11703,13 @@ var McpIntegrationServer = class {
       writeJson(res, 400, { error: { message: "Invalid JSON request", type: "invalid_request_error" } });
       return;
     }
-    if (request.model !== CODEX_MODEL_ID) {
-      writeJson(res, 400, { error: { message: "Unsupported Codex model", type: "invalid_request_error" } });
+    if (typeof request.model !== "string" || !request.model.trim()) {
+      writeJson(res, 400, { error: { message: "Codex model is required", type: "invalid_request_error" } });
       return;
     }
-    normalizeCodexRequest(request);
-    const upstream = await this.fetchCodexResponse(request, signal, false);
+    request.store = false;
+    request.stream = true;
+    const upstream = await this.fetchCodexResponse(request, signal);
     res.writeHead(upstream.status, responseHeaders(upstream.headers));
     if (!upstream.body) {
       res.end();
@@ -11541,30 +11717,42 @@ var McpIntegrationServer = class {
     }
     await pipeResponseBody(upstream.body, res);
   }
-  async fetchCodexResponse(request, signal, refreshed) {
+  async fetchCodexResponse(request, signal) {
+    return await this.fetchCodexUpstream(
+      new URL(CODEX_RESPONSES_URL),
+      {
+        method: "POST",
+        headers: {
+          accept: "text/event-stream",
+          "content-type": "application/json",
+          "openai-beta": "responses=experimental"
+        },
+        body: JSON.stringify(request)
+      },
+      signal,
+      false
+    );
+  }
+  async fetchCodexUpstream(url, request, signal, refreshed) {
     const credential = await this.codexCredentials?.credential({
       forceRefresh: refreshed,
       signal
     });
     if (!credential) throw new Error("Codex is not configured");
-    const response = await this.fetchFn(CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential.access}`,
-        "chatgpt-account-id": credential.accountId,
-        originator: "mlclaw",
-        "user-agent": "mlclaw",
-        "openai-beta": "responses=experimental",
-        accept: "text/event-stream",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(request),
+    const headers = new Headers(request.headers);
+    headers.set("authorization", `Bearer ${credential.access}`);
+    headers.set("chatgpt-account-id", credential.accountId);
+    headers.set("originator", "mlclaw");
+    headers.set("user-agent", "mlclaw");
+    const response = await this.fetchFn(url, {
+      ...request,
+      headers,
       redirect: "error",
       signal
     });
     if (response.status === 401 && !refreshed) {
       await response.body?.cancel().catch(() => void 0);
-      return await this.fetchCodexResponse(request, signal, true);
+      return await this.fetchCodexUpstream(url, request, signal, true);
     }
     return response;
   }
@@ -11732,7 +11920,7 @@ var ResearchRpcError = class extends Error {
   }
 };
 function deriveInternalToken(secret) {
-  return createHmac5("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
+  return createHmac4("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
 }
 function managedMcpServerConfig(config2) {
   const headers = { [INTERNAL_HEADER]: deriveInternalToken(config2.sessionSecret) };
@@ -11847,58 +12035,6 @@ function parseJsonObject(body) {
   } catch {
     return void 0;
   }
-}
-function normalizeCodexRequest(request) {
-  const instructions = codexInstructions(request.input);
-  const existingInstructions = stringValue2(request.instructions);
-  const combinedInstructions = [existingInstructions, ...instructions.text].filter(
-    (value) => Boolean(value)
-  );
-  if (combinedInstructions.length > 0) request.instructions = combinedInstructions.join("\n\n");
-  if (instructions.input) request.input = instructions.input;
-  for (const key of [
-    "max_output_tokens",
-    "metadata",
-    "prompt_cache_retention",
-    "service_tier",
-    "temperature",
-    "top_p"
-  ]) {
-    delete request[key];
-  }
-  const text = objectValue(request.text);
-  if (text) {
-    const sanitized = { ...text };
-    delete sanitized.format;
-    if (Object.keys(sanitized).length > 0) request.text = sanitized;
-    else delete request.text;
-  }
-  request.store = false;
-  request.stream = true;
-}
-function codexInstructions(input) {
-  if (!Array.isArray(input)) return { text: [] };
-  const remaining = [];
-  const text = [];
-  for (const item of input) {
-    const message = objectValue(item);
-    if (message?.role !== "system" && message?.role !== "developer") {
-      remaining.push(item);
-      continue;
-    }
-    const instruction = responseMessageText(message.content);
-    if (instruction) text.push(instruction);
-  }
-  if (remaining.length === 0 && text.length > 0) {
-    remaining.push({ role: "user", content: [{ type: "input_text", text: " " }] });
-  }
-  return { input: remaining, text };
-}
-function responseMessageText(content) {
-  if (typeof content === "string") return stringValue2(content);
-  if (!Array.isArray(content)) return void 0;
-  const text = content.map((item) => stringValue2(objectValue(item)?.text)).filter((value) => Boolean(value)).join("\n").trim();
-  return text || void 0;
 }
 function parseJsonRpc(body) {
   try {
@@ -12098,9 +12234,9 @@ var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
 var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
 var AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2147483647;
 async function configureOpenClawGateway(config2, options = {}) {
-  const raw2 = await fs.readFile(config2.openclawConfigPath, "utf8");
-  const openclawConfig = JSON.parse(raw2);
-  const gateway = object(openclawConfig, "gateway");
+  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
+  const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw2));
+  const gateway = object2(openclawConfig, "gateway");
   gateway.mode = "local";
   gateway.bind = "loopback";
   gateway.port = config2.openclawPort;
@@ -12119,21 +12255,24 @@ async function configureOpenClawGateway(config2, options = {}) {
     allowedOrigins: config2.accessOrigins,
     embedSandbox: "scripts"
   };
-  configureOpenClawModels(openclawConfig, config2, Boolean(options.codexConfigured));
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured2 = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2);
+  configureManagedOpenClawAuthProfiles(openclawConfig, { codexConfigured, openAiConfigured: openAiConfigured2 });
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
   configureBrokerKitPlugin(openclawConfig, config2);
-  await fs.mkdir(path.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
-  await fs.chmod(config2.openclawConfigPath, 384);
+  await fs2.chmod(config2.openclawConfigPath, 384);
   if (process.getuid?.() === 0) {
-    await fs.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
+    await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
 }
 function disableAutomaticSessionResets(openclawConfig) {
-  const session = object(openclawConfig, "session");
+  const session = object2(openclawConfig, "session");
   session.reset = {
     mode: "idle",
     idleMinutes: AUTOMATIC_SESSION_RESET_DISABLED_MINUTES
@@ -12141,11 +12280,11 @@ function disableAutomaticSessionResets(openclawConfig) {
   delete session.idleMinutes;
   delete session.resetByType;
   delete session.resetByChannel;
-  const maintenance = object(session, "maintenance");
+  const maintenance = object2(session, "maintenance");
   maintenance.resetArchiveRetention = false;
 }
 function configureBrokerMcpServer(openclawConfig, config2) {
-  const servers = object(object(openclawConfig, "mcp"), "servers");
+  const servers = object2(object2(openclawConfig, "mcp"), "servers");
   if (!config2.brokerAgentUrl || !config2.brokerAgentSecretFile) {
     delete servers["huggingface-broker"];
     return;
@@ -12199,11 +12338,11 @@ function brokerApprovalMode(value) {
   return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
 }
 function configureBrokerKitPlugin(openclawConfig, config2) {
-  const plugins = object(openclawConfig, "plugins");
-  const load = object(plugins, "load");
+  const plugins = object2(openclawConfig, "plugins");
+  const load = object2(plugins, "load");
   load.paths = uniqueStrings(load.paths, config2.brokerKitPluginPath);
   if (plugins.allow !== void 0) plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
-  const entries = object(plugins, "entries");
+  const entries = object2(plugins, "entries");
   entries.brokerkit = {
     enabled: true,
     config: {
@@ -12213,8 +12352,8 @@ function configureBrokerKitPlugin(openclawConfig, config2) {
   };
 }
 async function managedMcpServerStatus(config2) {
-  const raw2 = JSON.parse(await fs.readFile(config2.openclawConfigPath, "utf8"));
-  const servers = object(object(raw2, "mcp"), "servers");
+  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
+  const servers = object2(object2(raw2, "mcp"), "servers");
   return [
     { id: "huggingface", name: "Hugging Face MCP" },
     { id: "research-agent", name: "Research Agent" }
@@ -12224,8 +12363,8 @@ async function managedMcpServerStatus(config2) {
   }));
 }
 function configureManagedMcpServers(openclawConfig, config2) {
-  const mcp = object(openclawConfig, "mcp");
-  const servers = object(mcp, "servers");
+  const mcp = object2(openclawConfig, "mcp");
+  const servers = object2(mcp, "servers");
   delete servers.codex;
   for (const [name, managed] of Object.entries(managedMcpServerConfig(config2))) {
     const existing = servers[name];
@@ -12238,34 +12377,34 @@ function configureManagedMcpServers(openclawConfig, config2) {
     };
   }
 }
-function configureOpenClawModels(openclawConfig, config2, codexConfigured) {
-  const routerChoices = config2.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
+function configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2) {
+  const routerChoices = config2.modelChoices;
   configureAgentModelChoices(
-    object(object(openclawConfig, "agents"), "defaults"),
+    object2(object2(openclawConfig, "agents"), "defaults"),
     config2,
     routerChoices,
-    codexConfigured
+    codexConfigured,
+    openAiConfigured2
   );
-  const models = object(openclawConfig, "models");
+  const models = object2(openclawConfig, "models");
   models.mode = "merge";
-  const providers = object(models, "providers");
-  configureHuggingFaceProvider(object(providers, "huggingface"), config2, routerChoices);
-  configureCodexProvider(providers, config2, codexConfigured);
+  const providers = object2(models, "providers");
+  configureHuggingFaceProvider(object2(providers, "huggingface"), config2, routerChoices);
+  configureNativeOpenAiProvider(providers, config2, codexConfigured);
 }
-function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured) {
+function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
   const existingModel = objectValue2(defaults.model) ?? {};
-  const visibleChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
-  const primary = config2.model === CODEX_MODEL_REF && !codexConfigured ? routerChoices[0]?.openclawModel : config2.model;
-  defaults.model = { ...existingModel, ...primary ? { primary } : {} };
-  defaults.models = Object.fromEntries(
-    visibleChoices.map((choice) => [
-      choice.openclawModel,
-      {
-        alias: aliasForChoice(choice),
-        ...choice.openclawModel === CODEX_MODEL_REF ? { agentRuntime: { id: "openclaw" } } : {}
-      }
-    ])
-  );
+  const requestedPrimary = replaceLegacyCodexModelRef(config2.model);
+  const openAiAvailable = codexConfigured || openAiConfigured2;
+  const primary = requestedPrimary.startsWith("openai/") && !openAiAvailable ? routerChoices[0]?.openclawModel : requestedPrimary;
+  defaults.model = {
+    ...existingModel,
+    ...primary ? { primary } : {}
+  };
+  defaults.models = {
+    ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
+    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}
+  };
 }
 function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
   huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
@@ -12274,33 +12413,39 @@ function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
   huggingface.api = "openai-completions";
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
 }
-function configureCodexProvider(providers, config2, configured) {
+function configureNativeOpenAiProvider(providers, config2, configured) {
+  delete providers["mlclaw-codex"];
+  const existing = objectValue2(providers.openai);
   if (!configured) {
-    delete providers[CODEX_PROVIDER_ID];
+    const params = objectValue2(existing?.params);
+    if (params && "codexProxyBaseUrl" in params) {
+      const nextParams = { ...params };
+      delete nextParams.codexProxyBaseUrl;
+      if (existing) {
+        if (Object.keys(nextParams).length > 0) existing.params = nextParams;
+        else delete existing.params;
+      }
+    }
     return;
   }
-  providers[CODEX_PROVIDER_ID] = {
-    baseUrl: `http://127.0.0.1:${config2.mcpPort}${CODEX_PROXY_BASE_PATH}`,
-    apiKey: deriveCodexProviderToken(config2.sessionSecret),
-    auth: "api-key",
-    api: "openai-chatgpt-responses",
-    models: [
-      {
-        id: CODEX_MODEL_ID,
-        name: CODEX_MODEL_CHOICE.label,
-        api: "openai-chatgpt-responses",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
-        contextWindow: 272e3,
-        maxTokens: 128e3,
-        thinkingLevelMap: { minimal: "low", xhigh: "xhigh" },
-        params: { transport: "sse" },
-        agentRuntime: { id: "openclaw" },
-        compat: { supportsTools: true, supportsStrictMode: true }
-      }
-    ]
+  providers.openai = {
+    ...existing,
+    params: {
+      ...objectValue2(existing?.params),
+      codexProxyBaseUrl: `http://127.0.0.1:${config2.mcpPort}${CODEX_PROXY_BASE_PATH}`
+    }
   };
+}
+function replaceLegacyCodexModelRef(value) {
+  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_CODEX_MODEL_REF : value;
+}
+function migrateLegacyCodexModelRefs(value) {
+  if (typeof value === "string") return replaceLegacyCodexModelRef(value);
+  if (Array.isArray(value)) return value.map(migrateLegacyCodexModelRefs);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [replaceLegacyCodexModelRef(key), migrateLegacyCodexModelRefs(entry)])
+  );
 }
 function modelDefinitionFromChoice(choice) {
   const providerModelId = providerModelIdFromChoice(choice);
@@ -12355,7 +12500,7 @@ function contextWindowForModel(id) {
 function isReasoningModel(id) {
   return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
 }
-function object(parent, key) {
+function object2(parent, key) {
   const value = parent[key];
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value;
@@ -12373,15 +12518,15 @@ function uniqueStrings(value, required) {
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes5 } from "node:crypto";
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes6 } from "node:crypto";
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
 function openAiConfigured(env = process.env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
 }
 async function loadOpenAiCredentialFile(file) {
   try {
-    const raw2 = await fs2.readFile(file, "utf8");
+    const raw2 = await fs3.readFile(file, "utf8");
     const match2 = raw2.match(/(?:^|\n)OPENAI_API_KEY=([^\n]+)/);
     return match2?.[1]?.trim() || void 0;
   } catch {
@@ -12389,10 +12534,10 @@ async function loadOpenAiCredentialFile(file) {
   }
 }
 async function writeEphemeralOpenAiCredential(file, apiKey) {
-  await fs2.mkdir(path2.dirname(file), { recursive: true, mode: 448 });
-  await fs2.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
+  await fs3.mkdir(path3.dirname(file), { recursive: true, mode: 448 });
+  await fs3.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
 `, { encoding: "utf8", mode: 384 });
-  await fs2.chmod(file, 384);
+  await fs3.chmod(file, 384);
 }
 var OpenAiCredentialStore = class {
   constructor(file, secret) {
@@ -12411,7 +12556,7 @@ var OpenAiCredentialStore = class {
   async load() {
     let raw2;
     try {
-      raw2 = await fs2.readFile(this.file, "utf8");
+      raw2 = await fs3.readFile(this.file, "utf8");
     } catch (err) {
       if (err instanceof Error && "code" in err && err.code === "ENOENT") {
         return void 0;
@@ -12442,7 +12587,7 @@ var OpenAiCredentialStore = class {
     if (!normalized) {
       throw new Error("valid OpenAI API key is required");
     }
-    const iv = randomBytes5(12);
+    const iv = randomBytes6(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
     const ciphertext = Buffer.concat([cipher.update(normalized, "utf8"), cipher.final()]);
     const envelope = {
@@ -12452,17 +12597,17 @@ var OpenAiCredentialStore = class {
       tag: cipher.getAuthTag().toString("base64url"),
       ciphertext: ciphertext.toString("base64url")
     };
-    const directory = path2.dirname(this.file);
-    const temporary = `${this.file}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
-    await fs2.mkdir(directory, { recursive: true, mode: 448 });
+    const directory = path3.dirname(this.file);
+    const temporary = `${this.file}.${process.pid}.${randomBytes6(6).toString("hex")}.tmp`;
+    await fs3.mkdir(directory, { recursive: true, mode: 448 });
     try {
-      await fs2.writeFile(temporary, `${JSON.stringify(envelope)}
+      await fs3.writeFile(temporary, `${JSON.stringify(envelope)}
 `, { encoding: "utf8", mode: 384 });
-      await fs2.chmod(temporary, 384);
-      await fs2.rename(temporary, this.file);
-      await fs2.chmod(this.file, 384);
+      await fs3.chmod(temporary, 384);
+      await fs3.rename(temporary, this.file);
+      await fs3.chmod(this.file, 384);
     } finally {
-      await fs2.rm(temporary, { force: true });
+      await fs3.rm(temporary, { force: true });
     }
   }
 };
@@ -12796,7 +12941,7 @@ function positiveNumber2(value) {
 }
 
 // src/mlclaw-space-runtime/cookies.ts
-import { createHmac as createHmac6, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { createHmac as createHmac5, randomBytes as randomBytes7, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 function createSignedCookie(options, payload) {
   const body = Buffer.from(JSON.stringify({
     ...payload,
@@ -12845,10 +12990,10 @@ function clearCookie(name, secure) {
   });
 }
 function randomState() {
-  return randomBytes6(24).toString("base64url");
+  return randomBytes7(24).toString("base64url");
 }
 function sign2(value, secret) {
-  return createHmac6("sha256", secret).update(value).digest("base64url");
+  return createHmac5("sha256", secret).update(value).digest("base64url");
 }
 function signatureMatches2(a, b) {
   const left = Buffer.from(a);
@@ -13273,15 +13418,15 @@ function createSpaceRuntimeApp(config2, controls) {
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get(
     "/assets/mlclaw.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/hf-logo.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/assistant-avatar.svg",
-    async () => serveFile(path3.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path4.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
   app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
@@ -13361,7 +13506,7 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!safe) {
       return c.text("not found\n", 404);
     }
-    const file = path3.join(config2.assetsDir, "mlclaw-control-ui", safe);
+    const file = path4.join(config2.assetsDir, "mlclaw-control-ui", safe);
     return serveFile(file, contentType(file), true);
   });
   app.get("/mlclaw/openai", (c) => c.redirect("/mlclaw/credentials", 302));
@@ -13735,15 +13880,15 @@ async function controlUi(c, config2) {
   if (auth instanceof Response) {
     return auth;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
   const prefix = "/plugins/brokerkit/ui/";
   const requested = c.req.path.slice(prefix.length);
   const relative = requested ? safeRelativePath(requested) : "index.html";
   if (!relative) return c.text("not found\n", 404);
-  const uiDir = path3.join(config2.brokerKitPluginPath, "dist", "ui");
-  const file = path3.join(uiDir, relative);
+  const uiDir = path4.join(config2.brokerKitPluginPath, "dist", "ui");
+  const file = path4.join(uiDir, relative);
   if (relative === "index.html") {
     const destination = c.req.header("sec-fetch-dest");
     if (destination !== "iframe" && destination !== "document") return c.text("not found\n", 404);
@@ -13753,7 +13898,7 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
     try {
-      const template = await fs3.readFile(file, "utf8");
+      const template = await fs4.readFile(file, "utf8");
       const delegatedSession = destination === "document" || embeddedPopover;
       const marker = !delegatedSession ? '<meta name="brokerkit-delegated-top-level">' : `<meta name="brokerkit-delegated-session" content="${Buffer.from(
         JSON.stringify(
@@ -14104,8 +14249,8 @@ function recordValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 async function writeRuntimeSettingsFile(config2, model, choices) {
-  await fs3.mkdir(path3.dirname(config2.runtimeSettingsFile), { recursive: true });
-  await fs3.writeFile(
+  await fs4.mkdir(path4.dirname(config2.runtimeSettingsFile), { recursive: true });
+  await fs4.writeFile(
     config2.runtimeSettingsFile,
     `${JSON.stringify(
       {
@@ -14120,14 +14265,14 @@ async function writeRuntimeSettingsFile(config2, model, choices) {
 `,
     { encoding: "utf8", mode: 384 }
   );
-  await fs3.chmod(config2.runtimeSettingsFile, 384);
+  await fs4.chmod(config2.runtimeSettingsFile, 384);
   if (process.getuid?.() === 0) {
-    await fs3.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
+    await fs4.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
   }
 }
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
-    const body = await fs3.readFile(file);
+    const body = await fs4.readFile(file);
     const headers = new Headers({ "content-type": contentTypeHeader });
     if (immutable) {
       headers.set("cache-control", "public, max-age=31536000, immutable");
@@ -14141,11 +14286,11 @@ async function serveFile(file, contentTypeHeader, immutable = false) {
   }
 }
 async function serveBrandAsset(config2, asset) {
-  const response = await serveFile(path3.join(config2.assetsDir, asset), contentType(asset));
+  const response = await serveFile(path4.join(config2.assetsDir, asset), contentType(asset));
   if (response.status !== 404 || asset === "mlclaw.svg") {
     return response;
   }
-  return serveFile(path3.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
+  return serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
 }
 function safeRelativePath(value) {
   let decoded;
@@ -14154,7 +14299,7 @@ function safeRelativePath(value) {
   } catch {
     return void 0;
   }
-  const normalized = path3.posix.normalize(decoded).replace(/^\/+/, "");
+  const normalized = path4.posix.normalize(decoded).replace(/^\/+/, "");
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
     return void 0;
   }
@@ -14186,8 +14331,8 @@ function contentType(file) {
 }
 
 // src/mlclaw-space-runtime/codex-credentials.ts
-import fs5 from "node:fs/promises";
-import path5 from "node:path";
+import fs6 from "node:fs/promises";
+import path6 from "node:path";
 
 // src/vendor/hfjs-xet/error.ts
 async function createApiError(response, opts) {
@@ -18009,10 +18154,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path7, processedBytes]) => ({
-        path: path7,
-        progress: processedBytes / this.fileSize[path7],
-        lastSentProgress: ((this.fileUploadedBytes[path7] ?? 0) + (processedBytes - (this.fileUploadedBytes[path7] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path7]
+      files: Object.entries(this.fileProcessedBytes).map(([path8, processedBytes]) => ({
+        path: path8,
+        progress: processedBytes / this.fileSize[path8],
+        lastSentProgress: ((this.fileUploadedBytes[path8] ?? 0) + (processedBytes - (this.fileUploadedBytes[path8] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path8]
       }))
     };
   }
@@ -18885,7 +19030,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path7) => ({ type: "deleteFile", path: path7 })));
+    await this.batch(paths.map((path8) => ({ type: "deleteFile", path: path8 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -18901,8 +19046,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path7) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path7)}`;
+  async downloadFile(path8) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path8)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -18938,9 +19083,9 @@ var BucketClient = class {
 };
 
 // src/mlclaw/codex-auth.ts
-import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes7 } from "node:crypto";
-import fs4 from "node:fs/promises";
-import path4 from "node:path";
+import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes8 } from "node:crypto";
+import fs5 from "node:fs/promises";
+import path5 from "node:path";
 var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
 var CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 function codexAuthObjectPath(statePrefix) {
@@ -18978,7 +19123,7 @@ function encodeCodexAuthDocument(params) {
 function encryptCodexAuthDocument(params) {
   const context = compactContext(params.context);
   const key = deriveCodexAuthKey(params.secret);
-  const iv = randomBytes7(12);
+  const iv = randomBytes8(12);
   const cipher = createCipheriv2("aes-256-gcm", key, iv);
   cipher.setAAD(contextAad(context));
   const plaintext = Buffer.from(JSON.stringify(params.document), "utf8");
@@ -19012,7 +19157,7 @@ function decryptCodexAuthDocument(params) {
 async function readEncryptedCodexAuthFile(params) {
   let encrypted;
   try {
-    encrypted = await fs4.readFile(params.file, "utf8");
+    encrypted = await fs5.readFile(params.file, "utf8");
   } catch (error) {
     if (isNotFound(error)) return void 0;
     throw new Error("Could not read encrypted Codex credentials");
@@ -19036,7 +19181,7 @@ async function writeEncryptedCodexAuthFile(params) {
   await writePrivateFile(params.file, encrypted);
 }
 async function deleteEncryptedCodexAuthFile(file) {
-  await fs4.rm(file, { force: true });
+  await fs5.rm(file, { force: true });
 }
 function decodeCodexAuthDocument(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -19086,15 +19231,15 @@ function contextAad(context) {
   return Buffer.from(JSON.stringify(compactContext(context)), "utf8");
 }
 async function writePrivateFile(file, content) {
-  await fs4.mkdir(path4.dirname(file), { recursive: true, mode: 448 });
-  const temporary = `${file}.${process.pid}.${randomBytes7(6).toString("hex")}.tmp`;
+  await fs5.mkdir(path5.dirname(file), { recursive: true, mode: 448 });
+  const temporary = `${file}.${process.pid}.${randomBytes8(6).toString("hex")}.tmp`;
   try {
-    await fs4.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs4.chmod(temporary, 384);
-    await fs4.rename(temporary, file);
-    await fs4.chmod(file, 384);
+    await fs5.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs5.chmod(temporary, 384);
+    await fs5.rename(temporary, file);
+    await fs5.chmod(file, 384);
   } finally {
-    await fs4.rm(temporary, { force: true });
+    await fs5.rm(temporary, { force: true });
   }
 }
 function isNotFound(error) {
@@ -19386,7 +19531,7 @@ var CodexCredentialStore = class {
       context: this.expectedContext()
     });
     if (!this.config.stateMountDir && this.config.stateBucket && this.config.hfToken) {
-      const encrypted = await fs5.readFile(this.config.codexAuthStoreFile, "utf8");
+      const encrypted = await fs6.readFile(this.config.codexAuthStoreFile, "utf8");
       await this.bucketClient().uploadFiles([
         { path: codexAuthObjectPath(this.config.statePrefix), content: new Blob([encrypted]) }
       ]);
@@ -19394,7 +19539,7 @@ var CodexCredentialStore = class {
   }
   async hasRevocationMarker() {
     if (this.config.stateMountDir || !this.config.stateBucket || !this.config.hfToken) {
-      return await fileExists(path5.join(path5.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
+      return await fileExists(path6.join(path6.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
     }
     return Boolean(await this.bucketClient().downloadFile(codexAuthRevocationObjectPath(this.config.statePrefix)));
   }
@@ -19417,20 +19562,20 @@ var CodexCredentialStore = class {
   }
 };
 async function writePrivateRawFile(file, content) {
-  await fs5.mkdir(path5.dirname(file), { recursive: true, mode: 448 });
+  await fs6.mkdir(path6.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
-    await fs5.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs5.chmod(temporary, 384);
-    await fs5.rename(temporary, file);
-    await fs5.chmod(file, 384);
+    await fs6.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs6.chmod(temporary, 384);
+    await fs6.rename(temporary, file);
+    await fs6.chmod(file, 384);
   } finally {
-    await fs5.rm(temporary, { force: true });
+    await fs6.rm(temporary, { force: true });
   }
 }
 async function fileExists(file) {
   try {
-    await fs5.access(file);
+    await fs6.access(file);
     return true;
   } catch (error) {
     if (isNotFound2(error)) return false;
@@ -19445,9 +19590,9 @@ function stableJson(value) {
 }
 
 // src/mlclaw-space-runtime/mcp-credentials.ts
-import { createCipheriv as createCipheriv3, createDecipheriv as createDecipheriv3, hkdfSync as hkdfSync3, randomBytes as randomBytes8 } from "node:crypto";
-import fs6 from "node:fs/promises";
-import path6 from "node:path";
+import { createCipheriv as createCipheriv3, createDecipheriv as createDecipheriv3, hkdfSync as hkdfSync3, randomBytes as randomBytes9 } from "node:crypto";
+import fs7 from "node:fs/promises";
+import path7 from "node:path";
 var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
 var McpCredentialStore = class {
   constructor(options) {
@@ -19544,7 +19689,7 @@ var McpCredentialStore = class {
   async loadFromDisk() {
     let raw2;
     try {
-      raw2 = await fs6.readFile(this.options.file, "utf8");
+      raw2 = await fs7.readFile(this.options.file, "utf8");
     } catch (err) {
       if (isNotFound3(err)) {
         return;
@@ -19576,18 +19721,18 @@ var McpCredentialStore = class {
     return result;
   }
   async persist() {
-    const directory = path6.dirname(this.options.file);
-    await fs6.mkdir(directory, { recursive: true, mode: 448 });
-    const temporary = `${this.options.file}.${process.pid}.${randomBytes8(6).toString("hex")}.tmp`;
+    const directory = path7.dirname(this.options.file);
+    await fs7.mkdir(directory, { recursive: true, mode: 448 });
+    const temporary = `${this.options.file}.${process.pid}.${randomBytes9(6).toString("hex")}.tmp`;
     const encrypted = encryptDocument(this.document, this.key);
     try {
-      await fs6.writeFile(temporary, `${JSON.stringify(encrypted)}
+      await fs7.writeFile(temporary, `${JSON.stringify(encrypted)}
 `, { encoding: "utf8", mode: 384 });
-      await fs6.chmod(temporary, 384);
-      await fs6.rename(temporary, this.options.file);
-      await fs6.chmod(this.options.file, 384);
+      await fs7.chmod(temporary, 384);
+      await fs7.rename(temporary, this.options.file);
+      await fs7.chmod(this.options.file, 384);
     } finally {
-      await fs6.rm(temporary, { force: true });
+      await fs7.rm(temporary, { force: true });
     }
   }
   async refresh(slot, credential) {
@@ -19656,7 +19801,7 @@ var InvalidCredentialFileError = class extends Error {
   }
 };
 function encryptDocument(document, key) {
-  const iv = randomBytes8(12);
+  const iv = randomBytes9(12);
   const cipher = createCipheriv3("aes-256-gcm", key, iv);
   const plaintext = Buffer.from(JSON.stringify(document), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
@@ -19908,7 +20053,12 @@ var SpaceRuntimeServer = class {
     });
     this.openAiCredentials = new OpenAiCredentialStore(config2.openaiCredentialStoreFile, config2.credentialKey);
     this.codexCredentials = new CodexCredentialStore(config2);
-    this.mcpIntegrations = new McpIntegrationServer(config2, this.mcpCredentials, this.codexCredentials);
+    this.mcpIntegrations = new McpIntegrationServer(
+      config2,
+      this.mcpCredentials,
+      this.codexCredentials,
+      this.codexProxyCapability
+    );
     const credentialSlot = integrationCredentialSlot(config2);
     this.app = createSpaceRuntimeApp(config2, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
@@ -19939,6 +20089,7 @@ var SpaceRuntimeServer = class {
   mcpIntegrations;
   openAiCredentials;
   codexCredentials;
+  codexProxyCapability = generateCodexProxyCapability();
   async start() {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
@@ -20072,14 +20223,15 @@ var SpaceRuntimeServer = class {
 `);
         return false;
       });
-      const routerChoices = this.config.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
-      this.config.modelChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
-      if (!codexConfigured && this.config.model === CODEX_MODEL_REF && routerChoices[0]) {
-        this.config.model = routerChoices[0].openclawModel;
-      }
-      await configureOpenClawGateway(this.config, { codexConfigured });
-      if (codexConfigured) process.stdout.write("[mlclaw] Codex provider enabled\n");
       const persistedOpenAiKey = await loadOpenAiCredentialFile(this.config.openaiCredentialFile) ?? process.env.OPENAI_API_KEY?.trim() ?? await this.openAiCredentials.load();
+      if (this.config.model === LEGACY_CODEX_MODEL_REF) {
+        this.config.model = codexConfigured || persistedOpenAiKey ? DEFAULT_CODEX_MODEL_REF : this.config.modelChoices[0]?.openclawModel ?? this.config.model;
+      }
+      await configureOpenClawGateway(this.config, {
+        codexConfigured,
+        openAiConfigured: Boolean(persistedOpenAiKey)
+      });
+      if (codexConfigured) process.stdout.write("[mlclaw] Native OpenAI Codex routing enabled\n");
       const env = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",
@@ -20088,13 +20240,19 @@ var SpaceRuntimeServer = class {
         OPENCLAW_GATEWAY_PORT: String(this.config.openclawPort),
         OPENCLAW_MODEL: this.config.model,
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
+        ...codexConfigured ? { [CODEX_PROXY_TOKEN_ENV]: this.codexProxyCapability } : {},
         ...extraEnv
       };
       if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }
-      this.openclaw = spawn(this.config.openclawCommand, this.config.openclawArgs, {
+      await provisionOpenClawAuthProfiles({
+        config: this.config,
+        options: { codexConfigured, openAiConfigured: Boolean(persistedOpenAiKey) },
+        env
+      });
+      this.openclaw = spawn2(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,
         ...process.getuid?.() === 0 ? { uid: this.config.openclawUid, gid: this.config.openclawGid } : {}
@@ -20279,7 +20437,7 @@ if (config.sessionSecretGenerated && config.mode === "app") {
 }
 var httpServer = await server.start();
 if (config.mode === "app") {
-  toolingSeeder = spawn2(
+  toolingSeeder = spawn3(
     process2.execPath,
     [process2.env.MLCLAW_HF_TOOLING_SEED_SCRIPT ?? "/app/hf-tooling-seed.js", "--wait-for-bootstrap"],
     {
