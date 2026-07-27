@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
+import type { CodexCredentialStore } from "../src/mlclaw-space-runtime/codex-credentials.js";
+import { deriveCodexProviderToken } from "../src/mlclaw-space-runtime/codex-provider.js";
 import { McpCredentialStore } from "../src/mlclaw-space-runtime/mcp-credentials.js";
 import { deriveInternalToken, McpIntegrationServer } from "../src/mlclaw-space-runtime/mcp-integrations.js";
 import {
@@ -847,6 +849,72 @@ describe("automatic MCP integrations", () => {
     expect(calls).toEqual(["research", "abc_start_research"]);
   });
 
+  it("proxies Codex Responses with trusted OAuth and retries once after a 401", async () => {
+    const credentialCalls: Array<{ forceRefresh?: boolean }> = [];
+    const codexCredentials = {
+      credential: async (options: { forceRefresh?: boolean } = {}) => {
+        credentialCalls.push(options);
+        return {
+          access: options.forceRefresh ? "access-new" : "access-old",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          accountId: "acct_123",
+        };
+      },
+    } as CodexCredentialStore;
+    const upstream: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
+      upstream.push({ url: String(input), init: init ?? {} });
+      if (upstream.length === 1) return new Response("unauthorized", { status: 401 });
+      return new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+    const fixture = await integrationFixture({}, { codexCredentials, fetchFn });
+    const response = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${deriveCodexProviderToken(fixture.config.sessionSecret)}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: "gpt-5.4", stream: false, store: true, input: [] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    expect(await response.text()).toContain("response.completed");
+    expect(credentialCalls).toEqual([{ forceRefresh: false, signal: expect.any(AbortSignal) }, { forceRefresh: true, signal: expect.any(AbortSignal) }]);
+    expect(upstream).toHaveLength(2);
+    expect(upstream[1]?.url).toBe("https://chatgpt.com/backend-api/codex/responses");
+    expect(new Headers(upstream[1]?.init.headers).get("authorization")).toBe("Bearer access-new");
+    expect(new Headers(upstream[1]?.init.headers).get("chatgpt-account-id")).toBe("acct_123");
+    expect(JSON.parse(String(upstream[1]?.init.body))).toMatchObject({
+      model: "gpt-5.4",
+      stream: true,
+      store: false,
+    });
+
+    const unauthorized = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
+      method: "POST",
+      headers: { authorization: "Bearer wrong", "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.4", input: [] }),
+    });
+    expect(unauthorized.status).toBe(401);
+
+    const unsupported = await fetch(`http://127.0.0.1:${fixture.config.mcpPort}/backend-api/codex/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${deriveCodexProviderToken(fixture.config.sessionSecret)}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: "gpt-5.4-admin", input: [] }),
+    });
+    expect(unsupported.status).toBe(400);
+    expect(await unsupported.json()).toMatchObject({ error: { message: "Unsupported Codex model" } });
+    expect(upstream).toHaveLength(2);
+  });
+
   it("aborts active upstream requests during shutdown", async () => {
     let requestStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -884,6 +952,8 @@ async function integrationFixture(
   options: {
     skipCredential?: boolean;
     createStore?: (config: SpaceRuntimeConfig) => McpCredentialStore;
+    codexCredentials?: CodexCredentialStore;
+    fetchFn?: typeof fetch;
   } = {},
 ): Promise<{
   config: SpaceRuntimeConfig;
@@ -915,7 +985,7 @@ async function integrationFixture(
       scope: ["openid", "profile", "read-mcp"],
     });
   }
-  const server = new McpIntegrationServer(config, store);
+  const server = new McpIntegrationServer(config, store, options.codexCredentials, options.fetchFn);
   await server.start();
   cleanups.push(() => server.stop());
   return { config, store, server };

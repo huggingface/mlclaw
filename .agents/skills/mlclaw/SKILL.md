@@ -290,6 +290,18 @@ settings to set a Space Secret; do not put the user's broad Hub token into the
 Space just so the browser app can mutate secrets. The key must never be logged
 or returned to the browser.
 
+Deployment-scoped ChatGPT login uses OpenAI's Codex device-code protocol
+directly and does not require the Codex CLI:
+
+```bash
+mlclaw credentials codex login <agent>
+```
+
+After login, `mlclaw-codex/gpt-5.4` appears automatically in OpenClaw. The
+trusted ML Claw wrapper keeps the OAuth credential encrypted, refreshes it,
+and proxies loopback model requests. OpenClaw receives only an internal
+provider capability, never the OAuth credential or deployment encryption key.
+
 ## Branding
 
 ML Claw white-labels the browser gateway at the proxy layer. App Spaces default

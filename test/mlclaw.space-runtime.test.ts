@@ -9,6 +9,11 @@ import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
+import {
+  CODEX_MODEL_REF,
+  CODEX_PROVIDER_ID,
+  deriveCodexProviderToken,
+} from "../src/mlclaw-space-runtime/codex-provider.js";
 import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
 import {
   BROKER_MCP_CONNECTION_TIMEOUT_MS,
@@ -2082,6 +2087,37 @@ describe("ML Claw Space runtime", () => {
     expect(JSON.stringify(rewritten.plugins)).not.toContain("operator-secret");
   });
 
+  it("automatically exposes configured Codex credentials through the trusted provider proxy", async () => {
+    const config = await testConfig();
+
+    await configureOpenClawGateway(config, { codexConfigured: true });
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.models.providers[CODEX_PROVIDER_ID]).toMatchObject({
+      baseUrl: `http://127.0.0.1:${config.mcpPort}/backend-api`,
+      apiKey: deriveCodexProviderToken(config.sessionSecret),
+      auth: "api-key",
+      api: "openai-chatgpt-responses",
+      models: [
+        expect.objectContaining({
+          id: "gpt-5.4",
+          agentRuntime: { id: "openclaw" },
+          params: { transport: "sse" },
+        }),
+      ],
+    });
+    expect(rewritten.agents.defaults.models[CODEX_MODEL_REF]).toMatchObject({
+      alias: "gpt-5-4-mlclaw-codex",
+      agentRuntime: { id: "openclaw" },
+    });
+    expect(JSON.stringify(rewritten)).not.toContain("refresh_token");
+
+    await configureOpenClawGateway(config, { codexConfigured: false });
+    const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(disconnected.models.providers[CODEX_PROVIDER_ID]).toBeUndefined();
+    expect(disconnected.agents.defaults.models[CODEX_MODEL_REF]).toBeUndefined();
+  });
+
   it("does not create a restrictive plugin allowlist", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openclaw-plugins-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -2463,6 +2499,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     runtimeId: "test-runtime",
     deploymentId: "00000000-0000-4000-8000-000000000001",
     templateRev: "test-rev",
+    codexAuthStoreFile: path.join(root, "durable", "codex-auth.enc"),
     assetsDir: path.resolve("assets"),
     branding: resolveBranding({}, "research"),
     ...overrides,

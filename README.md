@@ -382,11 +382,17 @@ mlclaw credentials codex logout mlclaw
 ```
 
 `login` requests a one-time device code from OpenAI, prints the verification
-URL and code, polls for approval, and exchanges the approved code for OAuth
-credentials. ML Claw encrypts those credentials into the selected deployment's
-private state bucket. `status` and `logout` inspect or revoke that deployment-
-scoped login without exposing tokens. Raw tokens are never printed, stored in
-the Space repo, passed to OpenClaw, or included in workspace snapshots.
+URL and code, polls for approval, encrypts the OAuth credential into the
+selected deployment's private state bucket, and restarts the deployment. The
+`mlclaw-codex/gpt-5.4` model then appears automatically in OpenClaw.
+
+OpenClaw sends model requests to a loopback-only ML Claw proxy using an
+internal capability. The trusted wrapper decrypts and refreshes the OAuth
+credential, adds it only to the upstream OpenAI request, and persists token
+rotation back to the encrypted bucket object. `status` and `logout` inspect or
+revoke the deployment-scoped login without exposing tokens. Raw tokens are
+never printed, stored in the Space repo, passed to OpenClaw, or included in
+workspace snapshots.
 
 ## How State Works
 

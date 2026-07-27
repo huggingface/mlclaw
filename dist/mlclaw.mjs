@@ -15858,7 +15858,8 @@ function codexAuthJsonFromOAuthCredential(credential, now) {
       ...credential.idToken ? { id_token: credential.idToken } : {},
       access_token: credential.access,
       refresh_token: credential.refresh,
-      account_id: credential.accountId
+      account_id: credential.accountId,
+      expires_at: credential.expires
     },
     last_refresh: now.toISOString()
   };
@@ -15943,21 +15944,7 @@ async function exchangeDeviceAuthorization(fetchFn, authorization, now, signal) 
   if (!response.ok) {
     throw responseError("OpenAI device token exchange failed", response, body);
   }
-  const access = nonEmptyString(body.access_token);
-  const refresh = nonEmptyString(body.refresh_token);
-  const expiresInMs = secondsToSafeMilliseconds(body.expires_in);
-  if (!access || !refresh || expiresInMs === void 0) {
-    throw new Error("OpenAI token exchange response was missing required fields");
-  }
-  const accountId = accountIdFromAccessToken(access);
-  const idToken = nonEmptyString(body.id_token);
-  return {
-    access,
-    refresh,
-    expires: now() + expiresInMs,
-    accountId,
-    ...idToken ? { idToken } : {}
-  };
+  return credentialFromTokenResponse(body, now);
 }
 function requestHeaders(contentType) {
   return {
@@ -16028,29 +16015,57 @@ function oauthErrorCode(body) {
 function sanitizeErrorText(value) {
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 500);
 }
-function accountIdFromAccessToken(accessToken) {
+function credentialFromTokenResponse(body, now) {
+  const access = nonEmptyString(body.access_token);
+  const refresh = nonEmptyString(body.refresh_token);
+  const expiresInMs = secondsToSafeMilliseconds(body.expires_in);
+  if (!access || !refresh || expiresInMs === void 0) {
+    throw new Error("OpenAI token response was missing required fields");
+  }
+  const claims = accessTokenClaims(access);
+  const idToken = nonEmptyString(body.id_token);
+  return {
+    access,
+    refresh,
+    expires: now() + expiresInMs,
+    accountId: claims.accountId,
+    ...idToken ? { idToken } : {}
+  };
+}
+function accessTokenClaims(accessToken) {
   const parts = accessToken.split(".");
   if (parts.length !== 3 || !parts[1]) {
     throw new Error("OpenAI access token was not a JWT");
   }
   let payload;
   try {
-    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    payload = objectValue(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")), "access token JWT payload");
   } catch {
     throw new Error("OpenAI access token JWT was invalid");
   }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("OpenAI access token JWT payload was invalid");
-  }
   const claim = payload[JWT_AUTH_CLAIM];
   const accountId = claim && typeof claim === "object" && !Array.isArray(claim) ? nonEmptyString(claim.chatgpt_account_id) : void 0;
+  const expiresSeconds = finiteNonNegativeNumber(payload.exp);
   if (!accountId) {
     throw new Error("OpenAI access token did not contain a ChatGPT account ID");
   }
-  return accountId;
+  if (expiresSeconds === void 0 || !Number.isSafeInteger(expiresSeconds * 1e3)) {
+    throw new Error("OpenAI access token did not contain a valid expiry");
+  }
+  return { accountId, expires: expiresSeconds * 1e3 };
 }
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function objectValue(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was not an object`);
+  }
+  return value;
+}
+function finiteNonNegativeNumber(value) {
+  const number = typeof value === "string" && value.trim() ? Number(value) : value;
+  return typeof number === "number" && Number.isFinite(number) && number >= 0 ? number : void 0;
 }
 function secondsToSafeMilliseconds(value) {
   const seconds = typeof value === "string" && value.trim() ? Number(value) : value;
@@ -24410,6 +24425,10 @@ async function codexCredentialsLogin(requestedAgent, runtime) {
       await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
       await assertLease();
       await deleteCodexRevocationMarker(hub, current.bucket, statePrefix);
+      await assertLease();
+      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
+      await assertLease();
+      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
     } finally {
       clearInterval(renewalTimer);
       await renewal;
@@ -24459,6 +24478,10 @@ async function codexCredentialsLogout(requestedAgent, runtime) {
       await writeCodexRevocationMarker(hub, current, statePrefix, runtime.now());
       await assertControlLease(control, lease, runtime.now());
       await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
+      await assertControlLease(control, lease, runtime.now());
+      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
+        await assertControlLease(control, lease, runtime.now());
+      });
     } finally {
       await releaseControlLease(control, lease);
     }
@@ -24646,6 +24669,35 @@ async function writeCodexRevocationMarker(hub, manifest, statePrefix, now) {
 }
 async function deleteCodexRevocationMarker(hub, bucket, statePrefix) {
   await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
+}
+async function ensureRuntimeDeploymentId(manifest, secrets, hub, runtime, assertLease) {
+  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    return;
+  }
+  await assertLease();
+  await writeSecretEnv(runtime.configRoot, manifest.agent, {
+    ...secrets,
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
+  });
+}
+async function restartDeploymentForCredentialChange(manifest, runtime, hub, assertLease) {
+  if (manifest.gatewayLocation === "space") {
+    await assertLease();
+    await hub.restartSpace(manifest.space, true);
+    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
+    return;
+  }
+  const runner = localRunnerFor(manifest, runtime);
+  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
+  if (!existing?.running) {
+    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
+    return;
+  }
+  await assertLease();
+  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 async function credentialManifest(requestedAgent, runtime) {
   if (requestedAgent) return await readManifest(runtime.configRoot, requestedAgent);

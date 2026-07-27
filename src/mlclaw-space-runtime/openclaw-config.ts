@@ -1,6 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SpaceRuntimeConfig } from "./config.js";
+import {
+  CODEX_MODEL_CHOICE,
+  CODEX_MODEL_ID,
+  CODEX_MODEL_REF,
+  CODEX_PROVIDER_ID,
+  CODEX_PROXY_BASE_PATH,
+  deriveCodexProviderToken,
+} from "./codex-provider.js";
 import { managedMcpServerConfig } from "./mcp-integrations.js";
 import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 
@@ -9,7 +17,10 @@ export const BROKER_MCP_REQUEST_TIMEOUT_MS = 45_000;
 // OpenClaw has no disabled reset mode. This valid idle window is over 4,000 years.
 export const AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2_147_483_647;
 
-export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Promise<void> {
+export async function configureOpenClawGateway(
+  config: SpaceRuntimeConfig,
+  options: { codexConfigured?: boolean } = {},
+): Promise<void> {
   const raw = await fs.readFile(config.openclawConfigPath, "utf8");
   const openclawConfig = JSON.parse(raw) as Record<string, unknown>;
   const gateway = object(openclawConfig, "gateway");
@@ -31,7 +42,7 @@ export async function configureOpenClawGateway(config: SpaceRuntimeConfig): Prom
     allowedOrigins: config.accessOrigins,
     embedSandbox: "scripts",
   };
-  configureOpenClawModels(openclawConfig, config);
+  configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured));
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
@@ -177,39 +188,91 @@ function configureManagedMcpServers(openclawConfig: Record<string, unknown>, con
   }
 }
 
-function configureOpenClawModels(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
-  const agents = object(openclawConfig, "agents");
-  const defaults = object(agents, "defaults");
-  const existingModel =
-    defaults.model && typeof defaults.model === "object" && !Array.isArray(defaults.model)
-      ? (defaults.model as Record<string, unknown>)
-      : {};
-  defaults.model = {
-    ...existingModel,
-    primary: config.model,
-  };
+function configureOpenClawModels(
+  openclawConfig: Record<string, unknown>,
+  config: SpaceRuntimeConfig,
+  codexConfigured: boolean,
+): void {
+  const routerChoices = config.modelChoices.filter((choice) => choice.provider !== CODEX_PROVIDER_ID);
+  configureAgentModelChoices(
+    object(object(openclawConfig, "agents"), "defaults"),
+    config,
+    routerChoices,
+    codexConfigured,
+  );
+  const models = object(openclawConfig, "models");
+  models.mode = "merge";
+  const providers = object(models, "providers");
+  configureHuggingFaceProvider(object(providers, "huggingface"), config, routerChoices);
+  configureCodexProvider(providers, config, codexConfigured);
+}
+
+function configureAgentModelChoices(
+  defaults: Record<string, unknown>,
+  config: SpaceRuntimeConfig,
+  routerChoices: ModelChoice[],
+  codexConfigured: boolean,
+): void {
+  const existingModel = objectValue(defaults.model) ?? {};
+  const visibleChoices = codexConfigured ? [...routerChoices, CODEX_MODEL_CHOICE] : routerChoices;
+  const primary = config.model === CODEX_MODEL_REF && !codexConfigured ? routerChoices[0]?.openclawModel : config.model;
+  defaults.model = { ...existingModel, ...(primary ? { primary } : {}) };
   defaults.models = Object.fromEntries(
-    config.modelChoices.map((choice) => [
+    visibleChoices.map((choice) => [
       choice.openclawModel,
       {
         alias: aliasForChoice(choice),
+        ...(choice.openclawModel === CODEX_MODEL_REF ? { agentRuntime: { id: "openclaw" } } : {}),
       },
     ]),
   );
+}
 
-  const models = object(openclawConfig, "models");
-  const providers = object(models, "providers");
-  const huggingface = object(providers, "huggingface");
+function configureHuggingFaceProvider(
+  huggingface: Record<string, unknown>,
+  config: SpaceRuntimeConfig,
+  routerChoices: ModelChoice[],
+): void {
   huggingface.baseUrl = config.brokerAgentUrl
     ? `${config.brokerAgentUrl.replace(/\/+$/, "")}/v1`
     : "https://router.huggingface.co/v1";
-  if (config.brokerAgentSecret) {
-    huggingface.apiKey = config.brokerAgentSecret;
-  } else {
-    delete huggingface.apiKey;
-  }
+  if (config.brokerAgentSecret) huggingface.apiKey = config.brokerAgentSecret;
+  else delete huggingface.apiKey;
   huggingface.api = "openai-completions";
-  huggingface.models = config.modelChoices.map(modelDefinitionFromChoice);
+  huggingface.models = routerChoices.map(modelDefinitionFromChoice);
+}
+
+function configureCodexProvider(
+  providers: Record<string, unknown>,
+  config: SpaceRuntimeConfig,
+  configured: boolean,
+): void {
+  if (!configured) {
+    delete providers[CODEX_PROVIDER_ID];
+    return;
+  }
+  providers[CODEX_PROVIDER_ID] = {
+    baseUrl: `http://127.0.0.1:${config.mcpPort}${CODEX_PROXY_BASE_PATH}`,
+    apiKey: deriveCodexProviderToken(config.sessionSecret),
+    auth: "api-key",
+    api: "openai-chatgpt-responses",
+    models: [
+      {
+        id: CODEX_MODEL_ID,
+        name: CODEX_MODEL_CHOICE.label,
+        api: "openai-chatgpt-responses",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
+        contextWindow: 272000,
+        maxTokens: 128000,
+        thinkingLevelMap: { minimal: "low", xhigh: "xhigh" },
+        params: { transport: "sse" },
+        agentRuntime: { id: "openclaw" },
+        compat: { supportsTools: true, supportsStrictMode: true },
+      },
+    ],
+  };
 }
 
 function modelDefinitionFromChoice(choice: ModelChoice): Record<string, unknown> {

@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   codexAuthJsonFromOAuthCredential,
   loginOpenAICodexDeviceCode,
+  openAICodexCredentialFromAuthJson,
+  refreshOpenAICodexCredential,
 } from "../src/mlclaw/openai-codex-device-auth.js";
 
-function accessToken(accountId = "acct_123"): string {
+function accessToken(accountId = "acct_123", expiresSeconds = 2_000_000_000): string {
   const payload = Buffer.from(
-    JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: accountId } }),
+    JSON.stringify({ exp: expiresSeconds, "https://api.openai.com/auth": { chatgpt_account_id: accountId } }),
     "utf8",
   ).toString("base64url");
   return `header.${payload}.signature`;
@@ -158,8 +160,41 @@ describe("OpenAI Codex device authentication", () => {
         access_token: "access-1",
         refresh_token: "refresh-1",
         account_id: "acct_123",
+        expires_at: 123,
       },
       last_refresh: "2026-07-27T08:00:00.000Z",
+    });
+  });
+
+  it("reads existing Codex auth and refreshes OAuth credentials directly", async () => {
+    const existing = openAICodexCredentialFromAuthJson({
+      auth_mode: "chatgpt",
+      tokens: {
+        access_token: accessToken("acct_123", 1_900_000_000),
+        refresh_token: "refresh-old",
+        account_id: "acct_123",
+      },
+    });
+    expect(existing.expires).toBe(1_900_000_000_000);
+
+    const refreshed = await refreshOpenAICodexCredential({
+      refreshToken: existing.refresh,
+      now: () => 1000,
+      fetchFn: async (_input, init) => {
+        expect(String(init?.body)).toContain("refresh_token=refresh-old");
+        return new Response(
+          JSON.stringify({
+            access_token: accessToken(),
+            refresh_token: "refresh-new",
+            expires_in: 3600,
+          }),
+        );
+      },
+    });
+    expect(refreshed).toMatchObject({
+      refresh: "refresh-new",
+      expires: 3_601_000,
+      accountId: "acct_123",
     });
   });
 });
