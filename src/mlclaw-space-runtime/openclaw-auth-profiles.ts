@@ -7,8 +7,7 @@ import type { SpaceRuntimeConfig } from "./config.js";
 export const CODEX_PROXY_TOKEN_ENV = "MLCLAW_CODEX_PROXY_TOKEN";
 export const CODEX_AUTH_PROFILE_ID = "openai:mlclaw";
 export const OPENAI_API_KEY_PROFILE_ID = "openai:mlclaw-api-key";
-
-const SECRET_REF_PROVIDER = "default";
+export const MLCLAW_SECRET_PROVIDER_ID = "mlclaw-runtime";
 
 type ManagedAuthProfileOptions = {
   codexConfigured: boolean;
@@ -34,6 +33,21 @@ export function configureManagedOpenClawAuthProfiles(
   openclawConfig: Record<string, unknown>,
   options: ManagedAuthProfileOptions,
 ): void {
+  const secrets = object(openclawConfig, "secrets");
+  const secretProviders = object(secrets, "providers");
+  const allowedSecrets = [
+    ...(options.codexConfigured ? [CODEX_PROXY_TOKEN_ENV] : []),
+    ...(options.openAiConfigured ? ["OPENAI_API_KEY"] : []),
+  ];
+  if (allowedSecrets.length > 0) {
+    secretProviders[MLCLAW_SECRET_PROVIDER_ID] = {
+      source: "env",
+      allowlist: allowedSecrets,
+    };
+  } else {
+    delete secretProviders[MLCLAW_SECRET_PROVIDER_ID];
+  }
+
   const auth = object(openclawConfig, "auth");
   const profiles = object(auth, "profiles");
   if (options.codexConfigured) {
@@ -149,7 +163,7 @@ function authProfileTarget(params: {
     pathSegments: ["profiles", params.profileId, params.field],
     agentId: "main",
     authProfileProvider: "openai",
-    ref: { source: "env", provider: SECRET_REF_PROVIDER, id: params.env },
+    ref: { source: "env", provider: MLCLAW_SECRET_PROVIDER_ID, id: params.env },
   };
 }
 

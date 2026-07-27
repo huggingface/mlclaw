@@ -12,6 +12,7 @@ import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime
 import {
   CODEX_AUTH_PROFILE_ID,
   CODEX_PROXY_TOKEN_ENV,
+  MLCLAW_SECRET_PROVIDER_ID,
   OPENAI_API_KEY_PROFILE_ID,
   openClawAuthProfilePlan,
 } from "../src/mlclaw-space-runtime/openclaw-auth-profiles.js";
@@ -1884,13 +1885,13 @@ describe("ML Claw Space runtime", () => {
           type: "auth-profiles.token.token",
           path: `profiles.${CODEX_AUTH_PROFILE_ID}.token`,
           authProfileProvider: "openai",
-          ref: { source: "env", provider: "default", id: CODEX_PROXY_TOKEN_ENV },
+          ref: { source: "env", provider: MLCLAW_SECRET_PROVIDER_ID, id: CODEX_PROXY_TOKEN_ENV },
         },
         {
           type: "auth-profiles.api_key.key",
           path: `profiles.${OPENAI_API_KEY_PROFILE_ID}.key`,
           authProfileProvider: "openai",
-          ref: { source: "env", provider: "default", id: "OPENAI_API_KEY" },
+          ref: { source: "env", provider: MLCLAW_SECRET_PROVIDER_ID, id: "OPENAI_API_KEY" },
         },
       ],
       options: {
@@ -2225,6 +2226,10 @@ describe("ML Claw Space runtime", () => {
       displayName: "ChatGPT",
     });
     expect(rewritten.auth.order.openai).toEqual([CODEX_AUTH_PROFILE_ID]);
+    expect(rewritten.secrets.providers[MLCLAW_SECRET_PROVIDER_ID]).toEqual({
+      source: "env",
+      allowlist: [CODEX_PROXY_TOKEN_ENV],
+    });
     expect(JSON.stringify(rewritten)).not.toContain("obsolete-capability");
     expect(JSON.stringify(rewritten)).not.toContain("OPENAI_OAUTH_TOKEN");
     expect(JSON.stringify(rewritten)).not.toContain("refresh_token");
@@ -2235,6 +2240,7 @@ describe("ML Claw Space runtime", () => {
     expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
     expect(disconnected.auth.profiles[CODEX_AUTH_PROFILE_ID]).toBeUndefined();
     expect(disconnected.auth.order.openai).toBeUndefined();
+    expect(disconnected.secrets.providers[MLCLAW_SECRET_PROVIDER_ID]).toBeUndefined();
 
     await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
     const apiKeyOnly = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
@@ -2248,6 +2254,10 @@ describe("ML Claw Space runtime", () => {
       displayName: "OpenAI API key",
     });
     expect(apiKeyOnly.auth.order.openai).toEqual([OPENAI_API_KEY_PROFILE_ID]);
+    expect(apiKeyOnly.secrets.providers[MLCLAW_SECRET_PROVIDER_ID]).toEqual({
+      source: "env",
+      allowlist: ["OPENAI_API_KEY"],
+    });
   });
 
   it("does not create a restrictive plugin allowlist", async () => {
