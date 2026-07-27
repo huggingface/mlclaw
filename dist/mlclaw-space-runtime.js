@@ -11372,50 +11372,50 @@ var CODEX_AUTH_PROFILE_ID = "openai:mlclaw";
 var OPENAI_API_KEY_PROFILE_ID = "openai:mlclaw-api-key";
 var MLCLAW_SECRET_PROVIDER_ID = "mlclaw-runtime";
 function configureManagedOpenClawAuthProfiles(openclawConfig, options) {
-  const secrets = object(openclawConfig, "secrets");
-  const secretProviders = object(secrets, "providers");
-  const allowedSecrets = [
-    ...options.codexConfigured ? [CODEX_PROXY_TOKEN_ENV] : [],
-    ...options.openAiConfigured ? ["OPENAI_API_KEY"] : []
-  ];
-  if (allowedSecrets.length > 0) {
-    secretProviders[MLCLAW_SECRET_PROVIDER_ID] = {
-      source: "env",
-      allowlist: allowedSecrets
-    };
-  } else {
-    delete secretProviders[MLCLAW_SECRET_PROVIDER_ID];
-  }
+  configureSecretProvider(openclawConfig, options);
   const auth = object(openclawConfig, "auth");
+  configureAuthProfiles(auth, options);
+  configureAuthOrder(auth, options);
+}
+function configureSecretProvider(openclawConfig, options) {
+  const secretProviders = object(object(openclawConfig, "secrets"), "providers");
+  const allowlist = [];
+  if (options.codexConfigured) allowlist.push(CODEX_PROXY_TOKEN_ENV);
+  if (options.openAiConfigured) allowlist.push("OPENAI_API_KEY");
+  if (allowlist.length === 0) {
+    delete secretProviders[MLCLAW_SECRET_PROVIDER_ID];
+    return;
+  }
+  secretProviders[MLCLAW_SECRET_PROVIDER_ID] = { source: "env", allowlist };
+}
+function configureAuthProfiles(auth, options) {
   const profiles = object(auth, "profiles");
-  if (options.codexConfigured) {
-    profiles[CODEX_AUTH_PROFILE_ID] = {
-      provider: "openai",
-      mode: "token",
-      displayName: "ChatGPT"
-    };
-  } else {
-    delete profiles[CODEX_AUTH_PROFILE_ID];
-  }
-  if (options.openAiConfigured) {
-    profiles[OPENAI_API_KEY_PROFILE_ID] = {
-      provider: "openai",
-      mode: "api_key",
-      displayName: "OpenAI API key"
-    };
-  } else {
-    delete profiles[OPENAI_API_KEY_PROFILE_ID];
-  }
+  configureAuthProfile(profiles, CODEX_AUTH_PROFILE_ID, options.codexConfigured, {
+    provider: "openai",
+    mode: "token",
+    displayName: "ChatGPT"
+  });
+  configureAuthProfile(profiles, OPENAI_API_KEY_PROFILE_ID, options.openAiConfigured, {
+    provider: "openai",
+    mode: "api_key",
+    displayName: "OpenAI API key"
+  });
+}
+function configureAuthProfile(profiles, profileId, configured, profile) {
+  if (configured) profiles[profileId] = profile;
+  else delete profiles[profileId];
+}
+function configureAuthOrder(auth, options) {
   const order = object(auth, "order");
   const existing = Array.isArray(order.openai) ? order.openai.filter((profileId) => typeof profileId === "string") : [];
   const unmanaged = existing.filter(
     (profileId) => profileId !== CODEX_AUTH_PROFILE_ID && profileId !== OPENAI_API_KEY_PROFILE_ID
   );
-  const managed = [
-    ...options.codexConfigured ? [CODEX_AUTH_PROFILE_ID] : [],
-    ...options.openAiConfigured ? [OPENAI_API_KEY_PROFILE_ID] : []
-  ];
-  if (managed.length > 0 || unmanaged.length > 0) order.openai = [...managed, ...unmanaged];
+  const managed = [];
+  if (options.codexConfigured) managed.push(CODEX_AUTH_PROFILE_ID);
+  if (options.openAiConfigured) managed.push(OPENAI_API_KEY_PROFILE_ID);
+  const configuredOrder = [...managed, ...unmanaged];
+  if (configuredOrder.length > 0) order.openai = configuredOrder;
   else delete order.openai;
 }
 function openClawAuthProfilePlan(options) {
