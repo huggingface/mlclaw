@@ -3,6 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { CodexAuthManager } from "../src/mlclaw-space-runtime/codex-auth.js";
 import { loadConfig, type SpaceRuntimeConfig } from "../src/mlclaw-space-runtime/config.js";
 import { McpCredentialStore } from "../src/mlclaw-space-runtime/mcp-credentials.js";
 import { deriveInternalToken, McpIntegrationServer } from "../src/mlclaw-space-runtime/mcp-integrations.js";
@@ -847,6 +848,69 @@ describe("automatic MCP integrations", () => {
     expect(calls).toEqual(["research", "abc_start_research"]);
   });
 
+  it("does not leave Codex running when the request aborts before spawn", async () => {
+    const root = await temporaryDirectory();
+    const binDir = path.join(root, "bin");
+    const pidFile = path.join(root, "codex.pid");
+    await fs.mkdir(binDir, { recursive: true });
+    await fs.writeFile(
+      path.join(binDir, "codex"),
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setInterval(() => undefined, 100000);
+`,
+      { mode: 0o700 },
+    );
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+    cleanups.push(() => {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    });
+    let releaseAuth!: () => void;
+    let authChecked!: () => void;
+    const authGate = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    const checked = new Promise<void>((resolve) => {
+      authChecked = resolve;
+    });
+    const codexAuth = {
+      hasRestoredAuth: async () => {
+        authChecked();
+        await authGate;
+        return true;
+      },
+    } as CodexAuthManager;
+    const fixture = await integrationFixture({}, { codexAuth });
+    const controller = new AbortController();
+    const pending = fetch(`http://127.0.0.1:${fixture.config.mcpPort}/mcp/codex`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mlclaw-mcp-key": deriveInternalToken(fixture.config.sessionSecret),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "codex_prompt", arguments: { prompt: "hello" } },
+      }),
+      signal: controller.signal,
+    }).catch((error) => error);
+    await checked;
+    controller.abort();
+    releaseAuth();
+    await pending;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const pid = Number.parseInt(await fs.readFile(pidFile, "utf8").catch(() => "0"), 10);
+    if (pid > 0) {
+      expect(() => process.kill(pid, 0)).toThrow();
+    }
+  });
+
   it("aborts active upstream requests during shutdown", async () => {
     let requestStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -884,6 +948,7 @@ async function integrationFixture(
   options: {
     skipCredential?: boolean;
     createStore?: (config: SpaceRuntimeConfig) => McpCredentialStore;
+    codexAuth?: CodexAuthManager;
   } = {},
 ): Promise<{
   config: SpaceRuntimeConfig;
@@ -915,7 +980,7 @@ async function integrationFixture(
       scope: ["openid", "profile", "read-mcp"],
     });
   }
-  const server = new McpIntegrationServer(config, store);
+  const server = new McpIntegrationServer(config, store, options.codexAuth);
   await server.start();
   cleanups.push(() => server.stop());
   return { config, store, server };

@@ -4,6 +4,7 @@ import { BucketClient } from "../hf-bucket-client/client.js";
 import {
   codexAuthContext,
   codexAuthObjectPath,
+  codexAuthRevocationObjectPath,
   deleteEncryptedCodexAuthFile,
   encodeCodexAuthDocument,
   readEncryptedCodexAuthFile,
@@ -49,6 +50,16 @@ export class CodexAuthManager {
   }
 
   async hasRestoredAuth(): Promise<boolean> {
+    const authoritative = await this.loadEncryptedDocument();
+    if (!authoritative) {
+      await this.clearRestoredAuth();
+      return false;
+    }
+    const serialized = stableJson(authoritative.authJson);
+    if (!this.lastPersistedAuthJson || serialized !== this.lastPersistedAuthJson) {
+      await this.writeAuthJson(authoritative.authJson);
+      this.lastPersistedAuthJson = serialized;
+    }
     return Boolean(await this.readAuthJson());
   }
 
@@ -90,9 +101,19 @@ export class CodexAuthManager {
   }
 
   private async persistCurrentAuth(): Promise<void> {
+    const authoritative = await this.loadEncryptedDocument();
+    if (!authoritative) {
+      await this.clearRestoredAuth();
+      return;
+    }
+    const authoritativeJson = stableJson(authoritative.authJson);
+    if (authoritativeJson !== this.lastPersistedAuthJson) {
+      await this.writeAuthJson(authoritative.authJson);
+      this.lastPersistedAuthJson = authoritativeJson;
+      return;
+    }
     const authJson = await this.readAuthJson();
     if (!authJson) {
-      if (!this.lastPersistedAuthJson) return;
       await this.deleteEncryptedDocument();
       this.lastPersistedAuthJson = "";
       return;
@@ -105,6 +126,10 @@ export class CodexAuthManager {
   }
 
   private async loadEncryptedDocument(): Promise<CodexAuthDocument | undefined> {
+    if (await this.hasRevocationMarker()) {
+      await deleteEncryptedCodexAuthFile(this.config.codexAuthStoreFile);
+      return undefined;
+    }
     const mountedFile = this.mountedStoreFile();
     if (mountedFile) {
       return await readEncryptedCodexAuthFile({
@@ -157,6 +182,25 @@ export class CodexAuthManager {
 
   private mountedStoreFile(): string | undefined {
     return this.config.stateMountDir ? this.config.codexAuthStoreFile : undefined;
+  }
+
+  private async hasRevocationMarker(): Promise<boolean> {
+    if (this.config.stateMountDir) {
+      return await fileExists(this.localRevocationFile());
+    }
+    if (this.config.stateBucket && this.config.hfToken) {
+      return Boolean(await this.bucketClient().downloadFile(codexAuthRevocationObjectPath(this.config.statePrefix)));
+    }
+    return await fileExists(this.localRevocationFile());
+  }
+
+  private localRevocationFile(): string {
+    return path.join(path.dirname(this.config.codexAuthStoreFile), path.basename(codexAuthRevocationObjectPath()));
+  }
+
+  private async clearRestoredAuth(): Promise<void> {
+    await fs.rm(this.authJsonFile(), { force: true });
+    this.lastPersistedAuthJson = "";
   }
 
   private async downloadEncryptedObject(): Promise<string | undefined> {
@@ -249,6 +293,16 @@ async function writePrivateRawFile(file: string, content: string): Promise<void>
 
 function stableJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
 }
 
 function isNotFound(error: unknown): boolean {

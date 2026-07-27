@@ -90,6 +90,18 @@ describe("runtime image Dockerfile", () => {
     expect(config.session?.maintenance?.resetArchiveRetention).toBe(false);
   });
 
+  it("publishes and verifies the runtime image before publishing npm", async () => {
+    const workflow = await fs.readFile(".github/workflows/publish.yml", "utf8");
+    const buildImage = workflow.indexOf("name: Build and publish runtime image");
+    const verifyImage = workflow.indexOf("name: Verify anonymous GHCR image pull");
+    const publishNpm = workflow.indexOf("npm publish --access public --provenance");
+
+    expect(buildImage).toBeGreaterThanOrEqual(0);
+    expect(verifyImage).toBeGreaterThan(buildImage);
+    expect(publishNpm).toBeGreaterThan(verifyImage);
+    expect(workflow.slice(verifyImage, publishNpm)).toContain("inputs.publish_npm == 'true'");
+  });
+
   it("leaves workspace tooling seeding to the bootstrap-aware runtime", async () => {
     const entrypoint = await fs.readFile("entrypoint.sh", "utf8");
     const runtimeCli = await fs.readFile("src/mlclaw-space-runtime/cli.ts", "utf8");

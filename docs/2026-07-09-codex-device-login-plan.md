@@ -122,12 +122,17 @@ ML Claw should persist Codex auth like this:
 
    with `0600` permissions.
 
-3. After login completion, logout, or token refresh, ML Claw encrypts the
-   current auth state and writes it to the private bucket, for example:
+3. After login completion or token refresh, ML Claw encrypts the current
+   auth state and writes it to the deployment's private bucket:
 
    ```text
-   credentials/codex-auth.json.enc
+   <state-prefix>/.mlclaw/codex-auth.enc
    ```
+
+   Logout first writes `<state-prefix>/.mlclaw/codex-auth.revoked`, then
+   removes the encrypted bundle. The runtime treats that marker as
+   authoritative so a pending token-refresh flush cannot restore logged-out
+   credentials.
 
 4. The encrypted bundle should include versioned metadata and an integrity
    check. Use authenticated encryption, not ad-hoc obfuscation.
@@ -156,8 +161,9 @@ Behavior:
   login cancels any previous active login.
 - `events` streams completion, cancellation, timeout, and error status.
 - `cancel` cancels the active Codex login through Codex's account API.
-- `logout` deletes local Codex auth, deletes the encrypted bucket auth bundle,
-  and asks OpenClaw to restart or reload.
+- `logout` writes the authoritative revocation marker, deletes local Codex
+  auth and the encrypted bucket auth bundle, and asks OpenClaw to restart or
+  reload.
 
 All mutating routes must be restricted to ML Claw admins and protected against
 cross-site request forgery.

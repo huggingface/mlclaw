@@ -571,7 +571,14 @@ async function runCodexExec(params: {
       child.kill("SIGTERM");
       killTimer = setTimeout(() => child.kill("SIGKILL"), CODEX_PROCESS_KILL_GRACE_MS);
     };
-    params.signal.addEventListener("abort", abort, { once: true });
+    if (params.signal.aborted) {
+      abort();
+    } else {
+      params.signal.addEventListener("abort", abort, { once: true });
+    }
+    child.stdin.on("error", () => {
+      // Process exit is handled by the child error/close listeners; suppress pipe errors during abort cleanup.
+    });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
