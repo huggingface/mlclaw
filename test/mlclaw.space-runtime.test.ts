@@ -1838,6 +1838,37 @@ describe("ML Claw Space runtime", () => {
     expect(env).toMatchObject({ HOME: "/home/node", USER: "node", LOGNAME: "node" });
   });
 
+  it("provides a fresh non-persisted gateway password for internal OpenClaw tools", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-internal-gateway-password-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const envFile = path.join(root, "env.json");
+    const inherited = "must-not-be-reused";
+    const previous = process.env.OPENCLAW_GATEWAY_PASSWORD;
+    process.env.OPENCLAW_GATEWAY_PASSWORD = inherited;
+    cleanups.push(() => {
+      if (previous === undefined) delete process.env.OPENCLAW_GATEWAY_PASSWORD;
+      else process.env.OPENCLAW_GATEWAY_PASSWORD = previous;
+    });
+    const config = await testConfig({
+      openclawArgs: [
+        "-e",
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({password:process.env.OPENCLAW_GATEWAY_PASSWORD}));setInterval(()=>undefined,100000)`,
+      ],
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(async () => fileExists(envFile));
+    const env = JSON.parse(await fs.readFile(envFile, "utf8")) as { password: string };
+    expect(env.password).toMatch(/^[A-Za-z0-9_-]{64}$/u);
+    expect(env.password).not.toBe(inherited);
+    expect(await fs.readFile(config.openclawConfigPath, "utf8")).not.toContain(env.password);
+  });
+
   it("forwards a persisted OpenAI Space secret to the OpenClaw child", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openai-secret-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -2190,8 +2221,13 @@ describe("ML Claw Space runtime", () => {
       fallbacks: [DEFAULT_OPENAI_MODEL_REF],
     });
     expect(rewritten.agents.defaults.models["openai/*"]).toEqual({
-      agentRuntime: { id: "openclaw" },
+      agentRuntime: { id: "codex" },
     });
+    expect(rewritten.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
+    expect(rewritten.plugins.allow).toBeUndefined();
     expect(rewritten.agents.defaults.models[LEGACY_CODEX_MODEL_REF]).toBeUndefined();
     expect(rewritten.auth.profiles["openai:mlclaw"]).toMatchObject({
       provider: "openai",
@@ -2213,13 +2249,58 @@ describe("ML Claw Space runtime", () => {
     const disconnected = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(disconnected.models.providers.openai).toEqual({ params: { keep: true } });
     expect(disconnected.agents.defaults.models["openai/*"]).toBeUndefined();
+    expect(disconnected.plugins.entries.codex).toEqual({
+      enabled: false,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
     expect(disconnected.auth.profiles?.["openai:mlclaw"]).toBeUndefined();
 
     await configureOpenClawGateway(config, { codexConfigured: false, openAiConfigured: true });
     const apiKeyOnly = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(apiKeyOnly.models.providers.openai).toEqual({ params: { keep: true } });
     expect(apiKeyOnly.agents.defaults.models["openai/*"]).toEqual({
-      agentRuntime: { id: "openclaw" },
+      agentRuntime: { id: "codex" },
+    });
+    expect(apiKeyOnly.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: { appServer: { clearEnv: ["OPENCLAW_GATEWAY_PASSWORD"] } },
+    });
+  });
+
+  it("preserves Codex plugin settings and extends an existing allowlist", async () => {
+    const config = await testConfig();
+    await fs.writeFile(
+      config.openclawConfigPath,
+      JSON.stringify({
+        plugins: {
+          allow: ["custom"],
+          entries: {
+            codex: {
+              enabled: false,
+              config: {
+                appServer: {
+                  homeScope: "agent",
+                  clearEnv: ["CUSTOM_SECRET"],
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await configureOpenClawGateway(config, { codexConfigured: true });
+
+    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
+    expect(rewritten.plugins.allow).toEqual(["custom", "openai", "codex", "brokerkit"]);
+    expect(rewritten.plugins.entries.codex).toEqual({
+      enabled: true,
+      config: {
+        appServer: {
+          homeScope: "agent",
+          clearEnv: ["CUSTOM_SECRET", "OPENCLAW_GATEWAY_PASSWORD"],
+        },
+      },
     });
   });
 

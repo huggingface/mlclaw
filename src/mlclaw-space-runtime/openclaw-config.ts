@@ -36,8 +36,11 @@ export async function configureOpenClawGateway(
     allowedOrigins: config.accessOrigins,
     embedSandbox: "scripts",
   };
-  configureOpenClawModels(openclawConfig, config, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
-  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config, codexConfigured, openAiConfigured);
+  configureOpenAiAuthMetadata(openclawConfig, codexConfigured);
+  configureCodexRuntimePlugin(openclawConfig, codexConfigured || openAiConfigured);
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
@@ -129,6 +132,32 @@ function brokerAgentScope(value: unknown): string[] | undefined {
 
 function brokerApprovalMode(value: unknown): "auto" | "prompt" | "approve" | undefined {
   return value === "auto" || value === "prompt" || value === "approve" ? value : undefined;
+}
+
+function configureCodexRuntimePlugin(openclawConfig: Record<string, unknown>, enabled: boolean): void {
+  const plugins = object(openclawConfig, "plugins");
+  const entries = object(plugins, "entries");
+  const existing = objectValue(entries.codex);
+  if (!enabled) {
+    if (existing) entries.codex = { ...existing, enabled: false };
+    return;
+  }
+  if (plugins.allow !== undefined) {
+    plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
+  }
+  const existingConfig = objectValue(existing?.config);
+  const existingAppServer = objectValue(existingConfig?.appServer);
+  entries.codex = {
+    ...existing,
+    enabled: true,
+    config: {
+      ...existingConfig,
+      appServer: {
+        ...existingAppServer,
+        clearEnv: uniqueStrings(existingAppServer?.clearEnv, "OPENCLAW_GATEWAY_PASSWORD"),
+      },
+    },
+  };
 }
 
 function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
@@ -225,7 +254,7 @@ function configureAgentModelChoices(
   };
   defaults.models = {
     ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
-    ...(openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}),
+    ...(openAiAvailable ? { "openai/*": { agentRuntime: { id: "codex" } } } : {}),
   };
 }
 

@@ -4571,6 +4571,7 @@ function readRuntimeSettings(file) {
 
 // src/mlclaw-space-runtime/server.ts
 import { spawn as spawn2 } from "node:child_process";
+import { randomBytes as randomBytes9 } from "node:crypto";
 import http3 from "node:http";
 import { Readable as Readable2 } from "node:stream";
 
@@ -12128,8 +12129,11 @@ async function configureOpenClawGateway(config2, options = {}) {
     allowedOrigins: config2.accessOrigins,
     embedSandbox: "scripts"
   };
-  configureOpenClawModels(openclawConfig, config2, Boolean(options.codexConfigured), Boolean(options.openAiConfigured));
-  configureOpenAiAuthMetadata(openclawConfig, Boolean(options.codexConfigured));
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured2 = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2);
+  configureOpenAiAuthMetadata(openclawConfig, codexConfigured);
+  configureCodexRuntimePlugin(openclawConfig, codexConfigured || openAiConfigured2);
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
@@ -12208,6 +12212,31 @@ function brokerAgentScope(value) {
 function brokerApprovalMode(value) {
   return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
 }
+function configureCodexRuntimePlugin(openclawConfig, enabled) {
+  const plugins = object(openclawConfig, "plugins");
+  const entries = object(plugins, "entries");
+  const existing = objectValue2(entries.codex);
+  if (!enabled) {
+    if (existing) entries.codex = { ...existing, enabled: false };
+    return;
+  }
+  if (plugins.allow !== void 0) {
+    plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
+  }
+  const existingConfig = objectValue2(existing?.config);
+  const existingAppServer = objectValue2(existingConfig?.appServer);
+  entries.codex = {
+    ...existing,
+    enabled: true,
+    config: {
+      ...existingConfig,
+      appServer: {
+        ...existingAppServer,
+        clearEnv: uniqueStrings(existingAppServer?.clearEnv, "OPENCLAW_GATEWAY_PASSWORD")
+      }
+    }
+  };
+}
 function configureBrokerKitPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
@@ -12278,7 +12307,7 @@ function configureAgentModelChoices(defaults, config2, routerChoices, codexConfi
   };
   defaults.models = {
     ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
-    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "openclaw" } } } : {}
+    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "codex" } } } : {}
   };
 }
 function resolvePrimaryModel(params) {
@@ -20150,6 +20179,7 @@ var SpaceRuntimeServer = class {
     });
   }
   openclaw;
+  openclawGatewayPassword = randomBytes9(48).toString("base64url");
   openclawStarting = false;
   openclawStopping = false;
   app;
@@ -20330,6 +20360,7 @@ var SpaceRuntimeServer = class {
         await this.syncOAuthProfile({ config: this.config, env });
         throw new Error("OpenAI OAuth credentials were revoked during native profile provisioning");
       }
+      env.OPENCLAW_GATEWAY_PASSWORD = this.openclawGatewayPassword;
       this.openclaw = spawn2(this.config.openclawCommand, this.config.openclawArgs, {
         stdio: "inherit",
         env,

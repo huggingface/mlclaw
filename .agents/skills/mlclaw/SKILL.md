@@ -298,11 +298,13 @@ mlclaw credentials codex login <agent>
 ```
 
 After login, ML Claw imports the deployment credential into a managed native
-OpenClaw OAuth profile. OpenClaw contacts OpenAI directly, refreshes the OAuth
-credential in its private auth store, and discovers the account-visible catalog
-under `openai/*`, including `openai/gpt-5.6-sol` when entitled. ML Claw does not
-proxy model discovery or inference. Normal `OPENAI_API_KEY` profiles continue
-to use the OpenAI Platform route.
+OpenClaw OAuth profile and enables OpenClaw's bundled Codex app-server harness
+for `openai/*` agent models. OpenClaw contacts OpenAI directly, refreshes the
+OAuth credential in its private auth store, and discovers the account-visible
+catalog, including `openai/gpt-5.6-sol` when entitled. ML Claw does not proxy
+model discovery or inference and does not install or invoke a Codex CLI from
+`PATH`. Normal `OPENAI_API_KEY` profiles can coexist with subscription OAuth;
+OpenAI agent turns use the Codex harness with either credential type.
 
 ## Branding
 
