@@ -161,6 +161,7 @@ export async function managedMcpServerStatus(config: SpaceRuntimeConfig): Promis
 function configureManagedMcpServers(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
   const mcp = object(openclawConfig, "mcp");
   const servers = object(mcp, "servers");
+  delete servers.codex;
   for (const [name, managed] of Object.entries(managedMcpServerConfig(config))) {
     const existing = servers[name];
     const userFields =

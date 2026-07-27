@@ -5,7 +5,6 @@ export const OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 export const OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
 export const BROKERKIT_PLUGIN_VERSION = RELEASE_CONFIG.brokerkitPluginVersion;
 export const BROKERKIT_VERSION = RELEASE_CONFIG.brokerkitVersion;
-export const CODEX_CLI_VERSION = RELEASE_CONFIG.codexCliVersion;
 export const DEFAULT_BROKERKIT_VERSION = BROKERKIT_VERSION;
 export const RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 export const DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;

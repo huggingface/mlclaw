@@ -1202,7 +1202,7 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path17 = __require("node:path");
+    var path16 = __require("node:path");
     var fs16 = __require("node:fs");
     var process5 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2215,9 +2215,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path17.resolve(baseDir, baseName);
+          const localBin = path16.resolve(baseDir, baseName);
           if (fs16.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path17.extname(baseName))) return void 0;
+          if (sourceExt.includes(path16.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs16.existsSync(`${localBin}${ext}`)
           );
@@ -2235,17 +2235,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path17.resolve(
-            path17.dirname(resolvedScriptPath),
+          executableDir = path16.resolve(
+            path16.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path17.basename(
+            const legacyName = path16.basename(
               this._scriptPath,
-              path17.extname(this._scriptPath)
+              path16.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2256,7 +2256,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path17.extname(executableFile));
+        launchWithNode = sourceExt.includes(path16.extname(executableFile));
         let proc;
         if (process5.platform !== "win32") {
           if (launchWithNode) {
@@ -3171,7 +3171,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path17.basename(filename, path17.extname(filename));
+        this._name = path16.basename(filename, path16.extname(filename));
         return this;
       }
       /**
@@ -3185,9 +3185,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path18) {
-        if (path18 === void 0) return this._executableDir;
-        this._executableDir = path18;
+      executableDir(path17) {
+        if (path17 === void 0) return this._executableDir;
+        this._executableDir = path17;
         return this;
       }
       /**
@@ -8952,11 +8952,9 @@ var init_cli = __esm({
 });
 
 // src/mlclaw/cli.ts
-import { spawn as spawn2 } from "node:child_process";
 import fs15 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os8 from "node:os";
-import path16 from "node:path";
 import process4 from "node:process";
 import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as randomUUID2 } from "node:crypto";
 import { pathToFileURL as pathToFileURL2 } from "node:url";
@@ -13952,10 +13950,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path17, processedBytes]) => ({
-        path: path17,
-        progress: processedBytes / this.fileSize[path17],
-        lastSentProgress: ((this.fileUploadedBytes[path17] ?? 0) + (processedBytes - (this.fileUploadedBytes[path17] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path17]
+      files: Object.entries(this.fileProcessedBytes).map(([path16, processedBytes]) => ({
+        path: path16,
+        progress: processedBytes / this.fileSize[path16],
+        lastSentProgress: ((this.fileUploadedBytes[path16] ?? 0) + (processedBytes - (this.fileUploadedBytes[path16] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path16]
       }))
     };
   }
@@ -14828,7 +14826,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path17) => ({ type: "deleteFile", path: path17 })));
+    await this.batch(paths.map((path16) => ({ type: "deleteFile", path: path16 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -14844,8 +14842,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path17) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path17)}`;
+  async downloadFile(path16) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path16)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -14947,19 +14945,19 @@ var HubApi = class {
   async deploymentControlStore(owner, deploymentId) {
     const repoId = `${owner}/mlclaw-control-${deploymentId.replaceAll("-", "")}`;
     await this.ensurePrivateModelRepo(repoId);
-    const path17 = "control-lease.json";
+    const path16 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path17),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path16),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
     };
   }
   async deploymentClaimStore(owner) {
     const repoId = `${owner}/mlclaw-control-claims`;
     await this.ensurePrivateModelRepo(repoId);
-    const path17 = "control-lease.json";
+    const path16 = "control-lease.json";
     return {
-      read: async () => await this.readModelDocument(repoId, path17),
-      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path17, expectedRevision, value)
+      read: async () => await this.readModelDocument(repoId, path16),
+      compareAndSwap: async (expectedRevision, value) => await this.commitModelDocument(repoId, path16, expectedRevision, value)
     };
   }
   async createDockerSpace(repoId, options) {
@@ -15187,9 +15185,9 @@ var HubApi = class {
           encoding: "base64"
         }
       })),
-      ...(params.deletePaths ?? []).map((path17) => ({
+      ...(params.deletePaths ?? []).map((path16) => ({
         key: "deletedFile",
-        value: { path: path17 }
+        value: { path: path16 }
       }))
     ].map((entry) => JSON.stringify(entry)).join("\n");
     await this.request(`/api/spaces/${repoId}/commit/${encodeURIComponent(params.branch ?? "main")}`, {
@@ -15219,10 +15217,10 @@ var HubApi = class {
     if (info.sha) return;
     await this.commitModelDocument(repoId, "README.md", "", "# ML Claw deployment control\n");
   }
-  async readModelDocument(repoId, path17) {
+  async readModelDocument(repoId, path16) {
     const info = await this.requestJson(`/api/models/${repoId}`);
     if (!info.sha) throw new Error(`control repository ${repoId} has no revision`);
-    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path17.split("/").map(encodeURIComponent).join("/")}`;
+    const url = `${this.hubUrl}/${repoId}/resolve/${info.sha}/${path16.split("/").map(encodeURIComponent).join("/")}`;
     const response = await this.fetchImpl(url, {
       headers: { Authorization: `Bearer ${this.token}` }
     });
@@ -15230,16 +15228,16 @@ var HubApi = class {
     if (!response.ok) throw new HubApiError2(response.status, url, await response.text());
     return { value: JSON.parse(await response.text()), revision: info.sha };
   }
-  async commitModelDocument(repoId, path17, parentCommit, value) {
+  async commitModelDocument(repoId, path16, parentCommit, value) {
     const header = {
       summary: value === null ? "Release deployment control" : "Update deployment control",
       description: "ML Claw deployment reconciliation state"
     };
     if (parentCommit) header.parentCommit = parentCommit;
-    const operation = value === null ? { key: "deletedFile", value: { path: path17 } } : {
+    const operation = value === null ? { key: "deletedFile", value: { path: path16 } } : {
       key: "file",
       value: {
-        path: path17,
+        path: path16,
         content: Buffer.from(typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}
 `).toString(
           "base64"
@@ -15389,7 +15387,6 @@ var RELEASE_CONFIG = {
   "openclawVersion": "2026.7.1",
   "brokerkitVersion": "hf-broker/v0.6.2",
   "brokerkitPluginVersion": "0.4.1",
-  "codexCliVersion": "0.145.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 
@@ -15399,7 +15396,6 @@ var OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
 var BROKERKIT_PLUGIN_VERSION = RELEASE_CONFIG.brokerkitPluginVersion;
 var BROKERKIT_VERSION = RELEASE_CONFIG.brokerkitVersion;
-var CODEX_CLI_VERSION = RELEASE_CONFIG.codexCliVersion;
 var RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
@@ -15502,7 +15498,6 @@ function imageDockerfile(runtimeImage) {
 function bundledDockerfile() {
   return `ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
 ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
-ARG CODEX_CLI_VERSION=${CODEX_CLI_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG BROKERKIT_VERSION
@@ -15547,9 +15542,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
 ARG BROKERKIT_PLUGIN_VERSION
-ARG CODEX_CLI_VERSION
 RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
-RUN npm install --global --omit=dev --omit=peer --no-audit --no-fund "@openai/codex@\${CODEX_CLI_VERSION}"   && codex --version
 
 COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
@@ -15825,6 +15818,265 @@ function assertContextMatches(observed, expected) {
 }
 function contextAad(context) {
   return Buffer.from(JSON.stringify(compactContext(context)), "utf8");
+}
+
+// src/mlclaw/openai-codex-device-auth.ts
+var OPENAI_AUTH_BASE_URL = "https://auth.openai.com";
+var OPENAI_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+var OPENAI_CODEX_DEVICE_VERIFICATION_URL = `${OPENAI_AUTH_BASE_URL}/codex/device`;
+var OPENAI_CODEX_DEVICE_CALLBACK_URL = `${OPENAI_AUTH_BASE_URL}/deviceauth/callback`;
+var OPENAI_CODEX_DEVICE_TIMEOUT_MS = 15 * 6e4;
+var DEFAULT_POLL_INTERVAL_MS = 5e3;
+var MIN_POLL_INTERVAL_MS = 1e3;
+var MAX_RESPONSE_BYTES = 256 * 1024;
+var JWT_AUTH_CLAIM = "https://api.openai.com/auth";
+async function loginOpenAICodexDeviceCode(options) {
+  throwIfAborted(options.signal);
+  const fetchFn = options.fetchFn ?? fetch;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? abortableSleep;
+  const device = await requestDeviceCode(fetchFn, options.signal);
+  await options.onVerification({
+    verificationUrl: OPENAI_CODEX_DEVICE_VERIFICATION_URL,
+    userCode: device.userCode,
+    expiresInMs: OPENAI_CODEX_DEVICE_TIMEOUT_MS
+  });
+  const authorization = await pollDeviceAuthorization({
+    fetchFn,
+    device,
+    now,
+    sleep,
+    ...options.signal ? { signal: options.signal } : {}
+  });
+  return await exchangeDeviceAuthorization(fetchFn, authorization, now, options.signal);
+}
+function codexAuthJsonFromOAuthCredential(credential, now) {
+  return {
+    auth_mode: "chatgpt",
+    OPENAI_API_KEY: null,
+    tokens: {
+      ...credential.idToken ? { id_token: credential.idToken } : {},
+      access_token: credential.access,
+      refresh_token: credential.refresh,
+      account_id: credential.accountId
+    },
+    last_refresh: now.toISOString()
+  };
+}
+async function requestDeviceCode(fetchFn, signal) {
+  const response = await fetchFn(`${OPENAI_AUTH_BASE_URL}/api/accounts/deviceauth/usercode`, {
+    method: "POST",
+    headers: requestHeaders("application/json"),
+    body: JSON.stringify({ client_id: OPENAI_CODEX_CLIENT_ID }),
+    ...signal ? { signal } : {}
+  });
+  const body = await readJsonObject(response);
+  if (!response.ok) {
+    throw responseError("OpenAI device code request failed", response, body);
+  }
+  const deviceAuthId = nonEmptyString(body.device_auth_id);
+  const userCode = nonEmptyString(body.user_code) ?? nonEmptyString(body.usercode);
+  const intervalMs = secondsToSafeMilliseconds(body.interval);
+  if (!deviceAuthId || !userCode) {
+    throw new Error("OpenAI device code response was missing required fields");
+  }
+  return {
+    deviceAuthId,
+    userCode,
+    intervalMs: Math.min(
+      OPENAI_CODEX_DEVICE_TIMEOUT_MS,
+      Math.max(MIN_POLL_INTERVAL_MS, intervalMs ?? DEFAULT_POLL_INTERVAL_MS)
+    )
+  };
+}
+async function pollDeviceAuthorization(params) {
+  const deadline = params.now() + OPENAI_CODEX_DEVICE_TIMEOUT_MS;
+  let intervalMs = params.device.intervalMs;
+  while (params.now() < deadline) {
+    throwIfAborted(params.signal);
+    const response = await params.fetchFn(`${OPENAI_AUTH_BASE_URL}/api/accounts/deviceauth/token`, {
+      method: "POST",
+      headers: requestHeaders("application/json"),
+      body: JSON.stringify({
+        device_auth_id: params.device.deviceAuthId,
+        user_code: params.device.userCode
+      }),
+      ...params.signal ? { signal: params.signal } : {}
+    });
+    const body = await readJsonObject(response);
+    if (response.ok) {
+      const authorizationCode = nonEmptyString(body.authorization_code);
+      const codeVerifier = nonEmptyString(body.code_verifier);
+      if (!authorizationCode || !codeVerifier) {
+        throw new Error("OpenAI device authorization response was missing required fields");
+      }
+      return { authorizationCode, codeVerifier };
+    }
+    const errorCode = oauthErrorCode(body);
+    if (response.status === 403 || response.status === 404 || errorCode === "deviceauth_authorization_pending") {
+      await params.sleep(Math.min(intervalMs, Math.max(0, deadline - params.now())), params.signal);
+      continue;
+    }
+    if (errorCode === "slow_down") {
+      intervalMs += 5e3;
+      await params.sleep(Math.min(intervalMs, Math.max(0, deadline - params.now())), params.signal);
+      continue;
+    }
+    throw responseError("OpenAI device authorization failed", response, body);
+  }
+  throw new Error("OpenAI device authorization timed out after 15 minutes");
+}
+async function exchangeDeviceAuthorization(fetchFn, authorization, now, signal) {
+  const response = await fetchFn(`${OPENAI_AUTH_BASE_URL}/oauth/token`, {
+    method: "POST",
+    headers: requestHeaders("application/x-www-form-urlencoded"),
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: OPENAI_CODEX_CLIENT_ID,
+      code: authorization.authorizationCode,
+      code_verifier: authorization.codeVerifier,
+      redirect_uri: OPENAI_CODEX_DEVICE_CALLBACK_URL
+    }),
+    ...signal ? { signal } : {}
+  });
+  const body = await readJsonObject(response);
+  if (!response.ok) {
+    throw responseError("OpenAI device token exchange failed", response, body);
+  }
+  const access = nonEmptyString(body.access_token);
+  const refresh = nonEmptyString(body.refresh_token);
+  const expiresInMs = secondsToSafeMilliseconds(body.expires_in);
+  if (!access || !refresh || expiresInMs === void 0) {
+    throw new Error("OpenAI token exchange response was missing required fields");
+  }
+  const accountId = accountIdFromAccessToken(access);
+  const idToken = nonEmptyString(body.id_token);
+  return {
+    access,
+    refresh,
+    expires: now() + expiresInMs,
+    accountId,
+    ...idToken ? { idToken } : {}
+  };
+}
+function requestHeaders(contentType) {
+  return {
+    "Content-Type": contentType,
+    originator: "mlclaw",
+    "User-Agent": "mlclaw"
+  };
+}
+async function readJsonObject(response) {
+  const text = await readResponseTextLimited(response);
+  if (!text) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("OpenAI OAuth response was not valid JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("OpenAI OAuth response was not a JSON object");
+  }
+  return parsed;
+}
+async function readResponseTextLimited(response) {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => void 0);
+    throw new Error("OpenAI OAuth response exceeded the size limit");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => void 0);
+        throw new Error("OpenAI OAuth response exceeded the size limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+function responseError(prefix, response, body) {
+  const code = oauthErrorCode(body);
+  const safeCode = code ? sanitizeErrorText(code) : void 0;
+  return new Error(`${prefix} (HTTP ${response.status})${safeCode ? `: ${safeCode}` : ""}`);
+}
+function oauthErrorCode(body) {
+  const error = body.error;
+  if (typeof error === "string") return nonEmptyString(error);
+  if (error && typeof error === "object" && !Array.isArray(error)) {
+    return nonEmptyString(error.code);
+  }
+  return void 0;
+}
+function sanitizeErrorText(value) {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 500);
+}
+function accountIdFromAccessToken(accessToken) {
+  const parts = accessToken.split(".");
+  if (parts.length !== 3 || !parts[1]) {
+    throw new Error("OpenAI access token was not a JWT");
+  }
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    throw new Error("OpenAI access token JWT was invalid");
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("OpenAI access token JWT payload was invalid");
+  }
+  const claim = payload[JWT_AUTH_CLAIM];
+  const accountId = claim && typeof claim === "object" && !Array.isArray(claim) ? nonEmptyString(claim.chatgpt_account_id) : void 0;
+  if (!accountId) {
+    throw new Error("OpenAI access token did not contain a ChatGPT account ID");
+  }
+  return accountId;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function secondsToSafeMilliseconds(value) {
+  const seconds = typeof value === "string" && value.trim() ? Number(value) : value;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return void 0;
+  const milliseconds = Math.floor(seconds * 1e3);
+  return Number.isSafeInteger(milliseconds) ? milliseconds : void 0;
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw new Error("OpenAI device login cancelled");
+}
+async function abortableSleep(milliseconds, signal) {
+  throwIfAborted(signal);
+  await new Promise((resolve, reject) => {
+    const finish = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const timer = setTimeout(finish, milliseconds);
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(new Error("OpenAI device login cancelled"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+  });
 }
 
 // src/mlclaw-space-runtime/model-default.ts
@@ -16323,8 +16575,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path17, errorMaps, issueData } = params;
-  const fullPath = [...path17, ...issueData.path || []];
+  const { data, path: path16, errorMaps, issueData } = params;
+  const fullPath = [...path16, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -16440,11 +16692,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path17, key) {
+  constructor(parent, value, path16, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path17;
+    this._path = path16;
     this._key = key;
   }
   get path() {
@@ -20393,8 +20645,8 @@ async function readDocument(client, file, schema) {
   if (blob.size > MAX_CONTROL_BYTES) throw new Error(`${file} exceeds ${MAX_CONTROL_BYTES} bytes`);
   return schema.parse(JSON.parse(await blob.text()));
 }
-function jsonBlob(path17, value) {
-  return { path: path17, content: new Blob([stringify(value)], { type: "application/json" }) };
+function jsonBlob(path16, value) {
+  return { path: path16, content: new Blob([stringify(value)], { type: "application/json" }) };
 }
 function stringify(value) {
   return `${JSON.stringify(value, null, 2)}
@@ -20696,7 +20948,6 @@ var REMOTE_DISCOVERY_TIMEOUT_MS = 2e4;
 var STALE_PATH_VARS = ["OPENCLAW_STATE_DIR", "OPENCLAW_WORKSPACE_DIR", "OPENCLAW_CONFIG_PATH"];
 var SNAPSHOT_MANIFEST_REMOTE_NAME = "manifest.json";
 var DEFAULT_CANONICAL_TEMPLATE_SPACE = "osolmaz/mlclaw";
-var CODEX_CLI_INSTALL_COMMAND = "npm install --global @openai/codex@0.145.0";
 var PAID_HARDWARE_COST_NOTE = "Paid Hugging Face Space hardware costs money while allocated. The cheapest option is cpu-upgrade at $0.03/hour, about $22/month if kept always on.";
 var defaultPrompt = {
   isInteractive: () => Boolean(process4.stdin.isTTY && process4.stdout.isTTY),
@@ -20722,7 +20973,7 @@ function createRuntime(overrides = {}) {
     dockerRunner: overrides.dockerRunner ?? new CliDockerRunner(),
     podmanRunner: overrides.podmanRunner ?? new CliPodmanRunner(),
     tailscaleRunner: overrides.tailscaleRunner ?? new CliTailscaleRunner(),
-    codexDeviceLogin: overrides.codexDeviceLogin ?? (async (codexHome) => await runCodexDeviceLogin(codexHome)),
+    codexDeviceLogin: overrides.codexDeviceLogin ?? loginOpenAICodexDeviceCode,
     configRoot: overrides.configRoot ?? defaultConfigRoot(overrides.env ?? process4.env),
     now: overrides.now ?? (() => /* @__PURE__ */ new Date()),
     sleep: overrides.sleep ?? delay2,
@@ -20771,8 +21022,8 @@ function createProgram(runtimeOverrides = {}) {
     await credentialsRepair(agent, opts, runtime);
   });
   const codexCredentials = credentials.command("codex").description("Manage deployment-scoped OpenAI Codex account credentials");
-  codexCredentials.command("login").description("Connect a Codex ChatGPT account to one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").option("--auth-json-file <path>", "Advanced: import a Codex auth.json file for this deployment").action(async (agent, opts) => {
-    await codexCredentialsLogin(agent, opts, runtime);
+  codexCredentials.command("login").description("Connect a Codex ChatGPT account to one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").action(async (agent) => {
+    await codexCredentialsLogin(agent, runtime);
   });
   codexCredentials.command("status").description("Show the Codex credential status for one ML Claw deployment").argument("[agent]", "Agent name; inferred when exactly one deployment exists").action(async (agent) => {
     await codexCredentialsStatus(agent, runtime);
@@ -24122,14 +24373,14 @@ async function readOptionalRouterTokenFile(file) {
   const parsed = parseSecretEnv(raw);
   return nonEmpty(parsed.MLCLAW_ROUTER_TOKEN) ?? nonEmpty(parsed.HF_ROUTER_TOKEN) ?? nonEmpty(raw);
 }
-async function codexCredentialsLogin(requestedAgent, opts, runtime) {
+async function codexCredentialsLogin(requestedAgent, runtime) {
   const manifest = await credentialManifest(requestedAgent, runtime);
   await withDeploymentLock(runtime.configRoot, deploymentLockKey(manifest), async () => {
     const current = await readManifest(runtime.configRoot, manifest.agent);
     const secrets = await readSecretEnv(runtime.configRoot, current.agent);
     const credentialKey = await verifiedDeploymentCredentialKey(current, secrets, runtime);
     const statePrefix = persistedBucketPrefix(secrets);
-    const authJson = opts.authJsonFile ? await readCodexAuthJsonFile(opts.authJsonFile) : await runTemporaryCodexDeviceLogin(current, runtime);
+    const authJson = await runDirectCodexDeviceLogin(current, runtime);
     const document = encodeCodexAuthDocument({ authJson, now: runtime.now() });
     const token = await runtime.readToken(runtime.env);
     const hub = runtime.hubFactory(token);
@@ -24159,10 +24410,6 @@ async function codexCredentialsLogin(requestedAgent, opts, runtime) {
       await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
       await assertLease();
       await deleteCodexRevocationMarker(hub, current.bucket, statePrefix);
-      await assertLease();
-      await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
-      await assertLease();
-      await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
     } finally {
       clearInterval(renewalTimer);
       await renewal;
@@ -24212,10 +24459,6 @@ async function codexCredentialsLogout(requestedAgent, runtime) {
       await writeCodexRevocationMarker(hub, current, statePrefix, runtime.now());
       await assertControlLease(control, lease, runtime.now());
       await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
-      await assertControlLease(control, lease, runtime.now());
-      await restartDeploymentForCredentialChange(current, runtime, hub, async () => {
-        await assertControlLease(control, lease, runtime.now());
-      });
     } finally {
       await releaseControlLease(control, lease);
     }
@@ -24353,34 +24596,17 @@ async function verifiedDeploymentCredentialKey(manifest, secrets, runtime) {
   }
   return credentialKey;
 }
-async function readCodexAuthJsonFile(file) {
-  const parsed = JSON.parse(await fs15.readFile(file, "utf8"));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Codex auth JSON file must contain an object");
-  }
-  return parsed;
+async function runDirectCodexDeviceLogin(manifest, runtime) {
+  runtime.stdout.log(`Connecting a ChatGPT account to deployment ${manifest.agent}.`);
+  const credential = await runtime.codexDeviceLogin({
+    onVerification: (verification) => printCodexDeviceVerification(verification, runtime)
+  });
+  return codexAuthJsonFromOAuthCredential(credential, runtime.now());
 }
-async function runTemporaryCodexDeviceLogin(manifest, runtime) {
-  if (!runtime.prompt.isInteractive()) {
-    throw new Error("Codex device login requires an interactive terminal or --auth-json-file");
-  }
-  await assertCodexCliAvailable();
-  const parent = await fs15.mkdtemp(path16.join(os8.tmpdir(), `mlclaw-codex-${manifest.agent}-`));
-  try {
-    await fs15.writeFile(
-      path16.join(parent, "config.toml"),
-      'cli_auth_credentials_store = "file"\nforced_login_method = "chatgpt"\n',
-      { encoding: "utf8", mode: 384 }
-    );
-    runtime.prompt.note(
-      `ML Claw will start Codex device login for deployment ${manifest.agent}. Complete the OpenAI login shown by Codex; the resulting auth file is encrypted into this deployment only.`,
-      "Codex login"
-    );
-    await runtime.codexDeviceLogin(parent);
-    return await readCodexAuthJsonFile(path16.join(parent, "auth.json"));
-  } finally {
-    await fs15.rm(parent, { recursive: true, force: true });
-  }
+function printCodexDeviceVerification(verification, runtime) {
+  runtime.stdout.log(`Open: ${verification.verificationUrl}`);
+  runtime.stdout.log(`Code: ${verification.userCode}`);
+  runtime.stdout.log("Waiting for OpenAI authorization...");
 }
 function codexContextForManifest(manifest, statePrefix) {
   return codexAuthContext({
@@ -24420,35 +24646,6 @@ async function writeCodexRevocationMarker(hub, manifest, statePrefix, now) {
 }
 async function deleteCodexRevocationMarker(hub, bucket, statePrefix) {
   await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
-}
-async function ensureRuntimeDeploymentId(manifest, secrets, hub, runtime, assertLease) {
-  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
-  if (manifest.gatewayLocation === "space") {
-    await assertLease();
-    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
-    return;
-  }
-  await assertLease();
-  await writeSecretEnv(runtime.configRoot, manifest.agent, {
-    ...secrets,
-    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
-  });
-}
-async function restartDeploymentForCredentialChange(manifest, runtime, hub, assertLease) {
-  if (manifest.gatewayLocation === "space") {
-    await assertLease();
-    await hub.restartSpace(manifest.space, true);
-    runtime.stdout.log(`Space gateway restart requested: ${manifest.space}`);
-    return;
-  }
-  const runner = localRunnerFor(manifest, runtime);
-  const existing = await runner.inspect(containerNameFor(manifest.agent), localConnectionFor(manifest));
-  if (!existing?.running) {
-    runtime.stdout.log(`Local gateway is stopped; credentials will apply when ${manifest.agent} starts`);
-    return;
-  }
-  await assertLease();
-  await startLocalGateway({ manifest, runtime, pull: false, refresh: true, existing, assertLease });
 }
 async function credentialManifest(requestedAgent, runtime) {
   if (requestedAgent) return await readManifest(runtime.configRoot, requestedAgent);
@@ -24746,56 +24943,6 @@ function parseInteger(value) {
 function parseTailscaleMode(value) {
   if (value === "off" || value === "direct" || value === "serve") return value;
   throw new InvalidArgumentError(`expected tailscale mode off, direct, or serve; got ${value}`);
-}
-async function assertCodexCliAvailable() {
-  await new Promise((resolve, reject) => {
-    const child = spawn2("codex", ["--version"], { stdio: "ignore", env: codexLoginEnvironment(os8.tmpdir()) });
-    child.once("error", () => {
-      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
-    });
-    child.once("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`Codex CLI is required for device login. Install it with: ${CODEX_CLI_INSTALL_COMMAND}`));
-    });
-  });
-}
-async function runCodexDeviceLogin(codexHome) {
-  await assertCodexCliAvailable();
-  await new Promise((resolve, reject) => {
-    const child = spawn2("codex", ["login", "--device-auth"], {
-      stdio: "inherit",
-      env: codexLoginEnvironment(codexHome)
-    });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(`codex login failed${signal ? ` with signal ${signal}` : ` with exit code ${code ?? "unknown"}`}`)
-      );
-    });
-  });
-}
-function codexLoginEnvironment(codexHome) {
-  return {
-    PATH: process4.env.PATH,
-    HOME: process4.env.HOME ?? os8.homedir(),
-    USER: process4.env.USER,
-    LOGNAME: process4.env.LOGNAME,
-    TERM: process4.env.TERM,
-    COLORTERM: process4.env.COLORTERM,
-    LANG: process4.env.LANG,
-    LC_ALL: process4.env.LC_ALL,
-    SSL_CERT_FILE: process4.env.SSL_CERT_FILE,
-    SSL_CERT_DIR: process4.env.SSL_CERT_DIR,
-    NODE_EXTRA_CA_CERTS: process4.env.NODE_EXTRA_CA_CERTS,
-    CODEX_HOME: codexHome
-  };
 }
 function parseLocalPort(value) {
   if (!/^\d+$/.test(value)) {

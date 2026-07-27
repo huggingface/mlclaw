@@ -4,7 +4,6 @@ import type net from "node:net";
 import { Readable } from "node:stream";
 import type { Hono } from "hono";
 import { createSpaceRuntimeApp } from "./app.js";
-import { CodexAuthManager } from "./codex-auth.js";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import { McpCredentialStore } from "./mcp-credentials.js";
 import { McpIntegrationServer } from "./mcp-integrations.js";
@@ -27,7 +26,6 @@ export class SpaceRuntimeServer {
   private readonly mcpCredentials: McpCredentialStore;
   private readonly mcpIntegrations: McpIntegrationServer;
   private readonly openAiCredentials: OpenAiCredentialStore;
-  private readonly codexAuth: CodexAuthManager;
 
   constructor(
     private readonly config: SpaceRuntimeConfig,
@@ -42,8 +40,7 @@ export class SpaceRuntimeServer {
       ...(config.oauthClientSecret ? { clientSecret: config.oauthClientSecret } : {}),
     });
     this.openAiCredentials = new OpenAiCredentialStore(config.openaiCredentialStoreFile, config.credentialKey);
-    this.codexAuth = new CodexAuthManager(config);
-    this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials, this.codexAuth);
+    this.mcpIntegrations = new McpIntegrationServer(config, this.mcpCredentials);
     const credentialSlot = integrationCredentialSlot(config);
     this.app = createSpaceRuntimeApp(config, {
       openclawRunning: () => Boolean(this.openclaw && !this.openclaw.killed),
@@ -127,7 +124,6 @@ export class SpaceRuntimeServer {
 
   async stop(): Promise<void> {
     await this.stopOpenClaw();
-    await this.codexAuth.stopSync();
     await this.mcpIntegrations.stop();
   }
 
@@ -236,8 +232,6 @@ export class SpaceRuntimeServer {
         (await loadOpenAiCredentialFile(this.config.openaiCredentialFile)) ??
         process.env.OPENAI_API_KEY?.trim() ??
         (await this.openAiCredentials.load());
-      await this.codexAuth.restore();
-      await this.codexAuth.startSync();
       const env: NodeJS.ProcessEnv = {
         ...allowedOpenClawEnvironment(process.env),
         HOME: "/home/node",

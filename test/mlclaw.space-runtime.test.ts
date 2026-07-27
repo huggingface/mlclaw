@@ -16,12 +16,6 @@ import {
   configureOpenClawGateway,
 } from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
-import {
-  codexAuthRevocationObjectPath,
-  encodeCodexAuthDocument,
-  writeEncryptedCodexAuthFile,
-} from "../src/mlclaw/codex-auth.js";
-import { CodexAuthManager } from "../src/mlclaw-space-runtime/codex-auth.js";
 import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
 import { deriveLocalAccessToken } from "../src/mlclaw-space-runtime/local-access.js";
@@ -1872,308 +1866,6 @@ describe("ML Claw Space runtime", () => {
     await expect(fs.readFile(envFile, "utf8")).resolves.toBe(JSON.stringify({ OPENAI_API_KEY: apiKey }));
   });
 
-  it("exposes Codex account credentials only through bounded text-only MCP", async () => {
-    const config = await testConfig();
-    const runtime = new SpaceRuntimeServer(config);
-    const server = await runtime.start();
-    cleanups.push(
-      () => closeServer(server),
-      () => runtime.stop(),
-    );
-    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    const headers = rewritten.mcp.servers.codex.headers as Record<string, string>;
-
-    expect(rewritten.mcp.servers.codex).toMatchObject({
-      enabled: true,
-      url: `http://127.0.0.1:${config.mcpPort}/mcp/codex`,
-      transport: "streamable-http",
-      supportsParallelToolCalls: false,
-    });
-    const list = await fetch(`http://127.0.0.1:${config.mcpPort}/mcp/codex`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "codex-list", method: "tools/list" }),
-    });
-    expect(list.status).toBe(200);
-    await expect(list.json()).resolves.toMatchObject({
-      id: "codex-list",
-      result: { tools: [expect.objectContaining({ name: "codex_prompt" })] },
-    });
-
-    const response = await fetch(`http://127.0.0.1:${config.mcpPort}/mcp/codex`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "codex-call",
-        method: "tools/call",
-        params: { name: "codex_prompt", arguments: { prompt: "hello" } },
-      }),
-    });
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      id: "codex-call",
-      result: {
-        content: [{ type: "text", text: "Codex account credentials are not configured for this deployment." }],
-        isError: true,
-      },
-    });
-
-    const oversized = await fetch(`http://127.0.0.1:${config.mcpPort}/mcp/codex`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "codex-oversized",
-        method: "tools/call",
-        params: { name: "codex_prompt", arguments: { prompt: "x".repeat(20_001) } },
-      }),
-    });
-    expect(oversized.status).toBe(200);
-    await expect(oversized.json()).resolves.toMatchObject({
-      id: "codex-oversized",
-      error: { code: -32602 },
-    });
-  });
-
-  it("disables privileged Codex feature gates before invoking the managed helper", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-mcp-"));
-    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-    const codexHome = path.join(root, "codex-home");
-    const storeFile = path.join(root, "state", "openclaw-state", ".mlclaw", "codex-auth.enc");
-    const binDir = path.join(root, "bin");
-    const captureFile = path.join(root, "codex-capture.json");
-    await fs.mkdir(binDir, { recursive: true });
-    const fakeCodex = path.join(binDir, "codex");
-    await fs.writeFile(
-      fakeCodex,
-      `#!/usr/bin/env node
-const fs = require("node:fs");
-const args = process.argv.slice(2);
-let stdin = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => { stdin += chunk; });
-process.stdin.on("end", () => {
-  fs.writeFileSync(${JSON.stringify(captureFile)}, JSON.stringify({ args, cwd: process.cwd(), stdin, env: { CODEX_HOME: process.env.CODEX_HOME } }));
-  const outputFile = args[args.indexOf("-o") + 1];
-  fs.writeFileSync(outputFile, "bounded answer\\n");
-});
-`,
-      { mode: 0o700 },
-    );
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
-    cleanups.push(() => {
-      if (previousPath === undefined) {
-        delete process.env.PATH;
-      } else {
-        process.env.PATH = previousPath;
-      }
-    });
-    await writeEncryptedCodexAuthFile({
-      file: storeFile,
-      document: encodeCodexAuthDocument({
-        authJson: { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } },
-        now: new Date("2026-07-01T00:00:00.000Z"),
-      }),
-      secret: "k".repeat(48),
-      context: {
-        deploymentId: "00000000-0000-4000-8000-000000000001",
-        bucket: "alice/research-data",
-        statePrefix: "openclaw-state",
-      },
-    });
-    const config = await testConfig({ codexHome, codexAuthStoreFile: storeFile });
-    const runtime = new SpaceRuntimeServer(config);
-    const server = await runtime.start();
-    cleanups.push(
-      () => closeServer(server),
-      () => runtime.stop(),
-    );
-    const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    const headers = rewritten.mcp.servers.codex.headers as Record<string, string>;
-
-    const response = await fetch(`http://127.0.0.1:${config.mcpPort}/mcp/codex`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "codex-call",
-        method: "tools/call",
-        params: { name: "codex_prompt", arguments: { prompt: "hello" } },
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      id: "codex-call",
-      result: { content: [{ type: "text", text: "bounded answer" }] },
-    });
-    const capture = JSON.parse(await fs.readFile(captureFile, "utf8")) as {
-      args: string[];
-      cwd: string;
-      stdin: string;
-      env: { CODEX_HOME?: string };
-    };
-    const disabled = capture.args.flatMap((arg, index, args) => (arg === "--disable" ? [args[index + 1]] : []));
-    expect(disabled).toEqual(
-      expect.arrayContaining([
-        "apps",
-        "enable_mcp_apps",
-        "plugins",
-        "remote_plugin",
-        "plugin_sharing",
-        "skill_mcp_dependency_install",
-        "tool_call_mcp_elicitation",
-        "auth_elicitation",
-        "unified_exec",
-        "computer_use",
-        "shell_tool",
-        "browser_use",
-        "browser_use_external",
-        "browser_use_full_cdp_access",
-        "image_generation",
-      ]),
-    );
-    expect(capture.args).toEqual(expect.arrayContaining(["--ignore-user-config", "--ignore-rules", "--ephemeral"]));
-    expect(capture.env.CODEX_HOME).toBe(codexHome);
-    expect(capture.cwd).not.toBe(codexHome);
-    expect(capture.stdin).toContain(
-      "Local shell, file, browser, user configuration, project rules, and workspace tools are disabled.",
-    );
-  });
-
-  it("clears stale local Codex auth when the authoritative bucket object is missing", async () => {
-    const hubPort = await freePort();
-    const hub = http.createServer((req, res) => {
-      if (req.url?.startsWith("/buckets/alice/research-data/resolve/")) {
-        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-        res.end("not found");
-        return;
-      }
-      if (req.url === "/api/buckets/alice/research-data") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end("{}");
-        return;
-      }
-      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-      res.end(`unexpected ${req.method ?? ""} ${req.url ?? ""}`);
-    });
-    await listen(hub, hubPort);
-    cleanups.push(() => closeServer(hub));
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-stale-cache-"));
-    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-    const codexHome = path.join(root, "codex-home");
-    const storeFile = path.join(root, "protected", "codex-auth.enc");
-    const authJson = { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } };
-    await fs.mkdir(codexHome, { recursive: true });
-    await fs.writeFile(path.join(codexHome, "auth.json"), `${JSON.stringify(authJson)}\n`, "utf8");
-    await writeEncryptedCodexAuthFile({
-      file: storeFile,
-      document: encodeCodexAuthDocument({ authJson, now: new Date("2026-07-01T00:00:00.000Z") }),
-      secret: "k".repeat(48),
-      context: {
-        deploymentId: "00000000-0000-4000-8000-000000000001",
-        bucket: "alice/research-data",
-        statePrefix: "openclaw-state",
-      },
-    });
-    const config = await testConfig({
-      codexHome,
-      codexAuthStoreFile: storeFile,
-      stateMountDir: undefined,
-      hfToken: "hf_test",
-      hubUrl: `http://127.0.0.1:${hubPort}`,
-    });
-
-    await expect(new CodexAuthManager(config).restore()).resolves.toEqual({ configured: false, updatedAt: null });
-
-    await expect(fs.access(storeFile)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(fs.access(path.join(codexHome, "auth.json"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("does not recreate revoked Codex credentials while flushing auth refreshes", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-revocation-"));
-    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-    const codexHome = path.join(root, "codex-home");
-    const storeFile = path.join(root, "state", "openclaw-state", ".mlclaw", "codex-auth.enc");
-    const revocationFile = path.join(root, "state", codexAuthRevocationObjectPath());
-    const context = {
-      deploymentId: "00000000-0000-4000-8000-000000000001",
-      bucket: "alice/research-data",
-      statePrefix: "openclaw-state",
-    };
-    await writeEncryptedCodexAuthFile({
-      file: storeFile,
-      document: encodeCodexAuthDocument({
-        authJson: { auth_mode: "chatgpt", tokens: { refresh_token: "old" } },
-        now: new Date("2026-07-01T00:00:00.000Z"),
-      }),
-      secret: "k".repeat(48),
-      context,
-    });
-    const config = await testConfig({
-      codexHome,
-      codexAuthStoreFile: storeFile,
-      stateMountDir: path.join(root, "state"),
-    });
-    const manager = new CodexAuthManager(config);
-    await manager.restore();
-    await manager.startSync();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await fs.writeFile(
-      path.join(codexHome, "auth.json"),
-      JSON.stringify({ auth_mode: "chatgpt", tokens: { refresh_token: "refreshed" } }),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await fs.mkdir(path.dirname(revocationFile), { recursive: true });
-    await fs.writeFile(revocationFile, "revoked\n", "utf8");
-    await fs.rm(storeFile, { force: true });
-
-    await manager.stopSync();
-
-    await expect(fs.access(storeFile)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(fs.access(path.join(codexHome, "auth.json"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(manager.hasRestoredAuth()).resolves.toBe(false);
-  });
-
-  it("restores encrypted Codex account credentials without exposing CODEX_HOME to OpenClaw", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-runtime-"));
-    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-    const envFile = path.join(root, "env.json");
-    const codexHome = path.join(root, "codex-home");
-    const storeFile = path.join(root, "state", "openclaw-state", ".mlclaw", "codex-auth.enc");
-    const authJson = { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } };
-    await writeEncryptedCodexAuthFile({
-      file: storeFile,
-      document: encodeCodexAuthDocument({ authJson, now: new Date("2026-07-01T00:00:00.000Z") }),
-      secret: "k".repeat(48),
-      context: {
-        deploymentId: "00000000-0000-4000-8000-000000000001",
-        bucket: "alice/research-data",
-        statePrefix: "openclaw-state",
-      },
-    });
-    const config = await testConfig({
-      codexHome,
-      codexAuthStoreFile: storeFile,
-      openclawArgs: [
-        "-e",
-        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({CODEX_HOME:process.env.CODEX_HOME ?? null}));setInterval(()=>undefined,100000)`,
-      ],
-    });
-    const runtime = new SpaceRuntimeServer(config);
-    const server = await runtime.start();
-    cleanups.push(
-      () => closeServer(server),
-      () => runtime.stop(),
-    );
-
-    await waitFor(async () => fileExists(envFile));
-    await expect(fs.readFile(envFile, "utf8")).resolves.toBe(JSON.stringify({ CODEX_HOME: null }));
-    await expect(fs.readFile(path.join(codexHome, "auth.json"), "utf8")).resolves.toBe(`${JSON.stringify(authJson)}\n`);
-  });
-
   it("scrubs broad Hub tokens when no Router token exists", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-legacy-hub-token-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
@@ -2284,6 +1976,10 @@ process.stdin.on("end", () => {
               toolFilter: { include: ["paper_search"] },
               url: "https://stale.example/mcp",
             },
+            codex: {
+              enabled: true,
+              url: "http://127.0.0.1:7862/mcp/codex",
+            },
           },
         },
         plugins: {
@@ -2368,12 +2064,7 @@ process.stdin.on("end", () => {
       url: `http://127.0.0.1:${config.mcpPort}/mcp/research`,
       transport: "streamable-http",
     });
-    expect(rewritten.mcp.servers.codex).toMatchObject({
-      enabled: true,
-      url: `http://127.0.0.1:${config.mcpPort}/mcp/codex`,
-      transport: "streamable-http",
-      supportsParallelToolCalls: false,
-    });
+    expect(rewritten.mcp.servers.codex).toBeUndefined();
     expect(rewritten.plugins).toEqual({
       allow: ["custom", "brokerkit"],
       load: { paths: ["/opt/custom-plugin", config.brokerKitPluginPath] },
@@ -2772,8 +2463,6 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     runtimeId: "test-runtime",
     deploymentId: "00000000-0000-4000-8000-000000000001",
     templateRev: "test-rev",
-    codexHome: path.join(root, "codex-home"),
-    codexAuthStoreFile: path.join(root, "durable", "codex-auth.enc"),
     assetsDir: path.resolve("assets"),
     branding: resolveBranding({}, "research"),
     ...overrides,

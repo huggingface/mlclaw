@@ -4768,23 +4768,38 @@ describe("mlclaw CLI", () => {
     expect(buckets.get(targetBucket)?.has(codexAuthRevocationObjectPath())).toBe(false);
   });
 
-  it("stores Codex account credentials in the target deployment bucket", async () => {
+  it("logs in directly and stores deployment-scoped Codex credentials without a Codex binary", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stdout: string[] = [];
     const runtime = {
       ...(await createRuntime(hub, prompt)),
       stdout: { log: (message: unknown) => stdout.push(String(message)) },
+      codexDeviceLogin: async (options: {
+        onVerification: (verification: {
+          verificationUrl: string;
+          userCode: string;
+          expiresInMs: number;
+        }) => void | Promise<void>;
+      }) => {
+        await options.onVerification({
+          verificationUrl: "https://auth.openai.com/codex/device",
+          userCode: "ABCD-EFGH",
+          expiresInMs: 15 * 60_000,
+        });
+        return {
+          access: "opaque-access",
+          refresh: "opaque-refresh",
+          expires: Date.parse("2026-06-16T01:00:00.000Z"),
+          accountId: "acct_123",
+          idToken: "opaque-id",
+        };
+      },
     };
     const credentialKey = await seedCodexCredentialDeployment(runtime.configRoot, hub);
-    const authFile = path.join(runtime.configRoot, "codex-auth.json");
-    const authJson = { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } };
-    await fs.writeFile(authFile, JSON.stringify(authJson), "utf8");
     hub.bucketObjects.set(codexAuthRevocationObjectPath(), "revoked");
 
-    await expect(
-      main(["credentials", "codex", "login", "research", "--auth-json-file", authFile], runtime),
-    ).resolves.toBe(0);
+    await expect(main(["credentials", "codex", "login", "research"], runtime)).resolves.toBe(0);
 
     const encrypted = hub.bucketObjects.get(codexAuthObjectPath());
     expect(encrypted).toBeDefined();
@@ -4800,13 +4815,25 @@ describe("mlclaw CLI", () => {
           statePrefix: "openclaw-state",
         },
       }).authJson,
-    ).toEqual(authJson);
-    expect(hub.calls).toContainEqual({
-      name: "addSpaceVariable",
-      args: ["alice/research", "MLCLAW_DEPLOYMENT_ID", "22222222-2222-4222-8222-222222222222"],
+    ).toEqual({
+      auth_mode: "chatgpt",
+      OPENAI_API_KEY: null,
+      tokens: {
+        id_token: "opaque-id",
+        access_token: "opaque-access",
+        refresh_token: "opaque-refresh",
+        account_id: "acct_123",
+      },
+      last_refresh: "2026-06-16T00:00:00.000Z",
     });
-    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
-    expect(stdout.join("\n")).toContain("Codex credentials connected: research");
+    expect(hub.calls).not.toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(stdout).toEqual(
+      expect.arrayContaining([
+        "Open: https://auth.openai.com/codex/device",
+        "Code: ABCD-EFGH",
+        "Codex credentials connected: research",
+      ]),
+    );
   });
 
   it("removes deployment-scoped Codex credentials", async () => {
@@ -4825,7 +4852,7 @@ describe("mlclaw CLI", () => {
     expect(hub.bucketObjects.has(codexAuthObjectPath())).toBe(false);
     expect(hub.bucketObjects.has(codexAuthRevocationObjectPath())).toBe(true);
     expect(hub.calls).toContainEqual({ name: "bucket.deleteFiles", args: [[codexAuthObjectPath()]] });
-    expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+    expect(hub.calls).not.toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
 
     await expect(main(["credentials", "codex", "status", "research"], runtime)).resolves.toBe(0);
     expect(stdout.join("\n")).toContain("Codex account: not configured");

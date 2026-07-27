@@ -17,7 +17,6 @@ const releaseConfig = {
   openclawVersion: requiredString(pkg.config?.openclawVersion, "OpenClaw version"),
   brokerkitVersion: requiredString(pkg.config?.brokerkitVersion, "BrokerKit version"),
   brokerkitPluginVersion: requiredString(pkg.config?.brokerkitPluginVersion, "BrokerKit plugin version"),
-  codexCliVersion: requiredString(pkg.config?.codexCliVersion, "Codex CLI version"),
   runtimeImageRepository: requiredString(pkg.config?.runtimeImageRepository, "runtime image repository"),
 };
 if (pkg.dependencies?.["openclaw-brokerkit"] !== releaseConfig.brokerkitPluginVersion) {
@@ -38,7 +37,6 @@ const dockerValues = new Map([
   ["OPENCLAW_BASE_IMAGE", "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"],
   ["BROKERKIT_PLUGIN_VERSION", releaseConfig.brokerkitPluginVersion],
   ["BROKERKIT_VERSION", releaseConfig.brokerkitVersion],
-  ["CODEX_CLI_VERSION", releaseConfig.codexCliVersion],
   ["MLCLAW_RUNTIME_IMAGE", runtimeImage],
 ]);
 const currentDockerfile = fs.readFileSync(dockerfile, "utf8");
