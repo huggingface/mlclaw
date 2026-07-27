@@ -109,8 +109,6 @@ jobs:
             echo "::error::HF_TOKEN secret is required when updating the canonical Hugging Face template Space."
             exit 1
           fi
-      - run: npm publish --access public --provenance
-        if: ${{ github.event_name == 'release' || inputs.publish_npm == 'true' }}
       - name: Log in to GHCR
         if: ${{ github.event_name == 'release' || inputs.publish_image == 'true' }}
         uses: docker/login-action@v3
@@ -151,13 +149,15 @@ jobs:
         run: |
           gh api --method PATCH /orgs/huggingface/packages/container/mlclaw/visibility -f visibility=public
       - name: Verify anonymous GHCR image pull
-        if: ${{ github.event_name == 'release' || inputs.publish_image == 'true' || inputs.update_template_space == 'true' }}
+        if: ${{ github.event_name == 'release' || inputs.publish_image == 'true' || inputs.publish_npm == 'true' || inputs.update_template_space == 'true' }}
         env:
           MLCLAW_PUBLISHED_IMAGE: ${{ steps.runtime-config.outputs.runtime_image }}:${{ steps.runtime-config.outputs.runtime_tag }}
         run: |
           tmp_docker_config="$(mktemp -d)"
           trap 'rm -rf "$tmp_docker_config"' EXIT
           DOCKER_CONFIG="$tmp_docker_config" docker buildx imagetools inspect "$MLCLAW_PUBLISHED_IMAGE"
+      - run: npm publish --access public --provenance
+        if: ${{ github.event_name == 'release' || inputs.publish_npm == 'true' }}
       - name: Update canonical Hugging Face template Space
         if: ${{ github.event_name == 'release' || inputs.update_template_space == 'true' }}
         env:

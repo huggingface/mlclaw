@@ -3,8 +3,20 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL, LOCAL_LIVE_DIR, LOCAL_VOLUME_MOUNT_PATH, main } from "../src/mlclaw/cli.js";
-import { codexAuthObjectPath, decryptCodexAuthDocument } from "../src/mlclaw/codex-auth.js";
+import {
+  DEFAULT_MODEL,
+  LOCAL_LIVE_DIR,
+  LOCAL_VOLUME_MOUNT_PATH,
+  main,
+  migrateCodexCredentialForBucketAdoption,
+} from "../src/mlclaw/cli.js";
+import {
+  codexAuthObjectPath,
+  codexAuthRevocationObjectPath,
+  decryptCodexAuthDocument,
+  encodeCodexAuthDocument,
+  encryptCodexAuthDocument,
+} from "../src/mlclaw/codex-auth.js";
 import { newOperation, updateOperation } from "../src/mlclaw/deployment-state.js";
 import { DEFAULT_RUNTIME_IMAGE } from "../src/mlclaw/runtime-image.js";
 import {
@@ -1416,7 +1428,7 @@ describe("mlclaw CLI", () => {
     });
   });
 
-  it("accepts a bucket that only contains the deployment Codex credential object", async () => {
+  it("rejects a bucket that only contains an orphaned Codex credential object", async () => {
     const hub = createFakeHub({ existingBuckets: ["alice/research-data"] });
     hub.bucketObjects.set(codexAuthObjectPath(), "encrypted-codex-auth");
     const { prompt } = createPrompt([], false);
@@ -1438,12 +1450,10 @@ describe("mlclaw CLI", () => {
       runtime,
     );
 
-    expect(stderr).toEqual([]);
-    expect(code).toBe(0);
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("contains objects but no ML Claw state");
     expect(hub.calls).toContainEqual({ name: "bucket.listFiles", args: [""] });
-    await expect(readManifest(runtime.configRoot, "research")).resolves.toMatchObject({
-      bucket: "alice/research-data",
-    });
+    await expect(readManifest(runtime.configRoot, "research")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("pins an existing manifest bucket during repeated bootstrap", async () => {
@@ -4684,6 +4694,80 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "pauseSpace")).toBe(false);
   });
 
+  it("re-encrypts Codex credentials for an adopted state bucket", async () => {
+    const sourceBucket = "alice/research-data";
+    const targetBucket = "alice/research-archive-data";
+    const credentialKey = "codex-credential-key";
+    const buckets = new Map<string, Map<string, string>>([
+      [sourceBucket, new Map()],
+      [targetBucket, new Map()],
+    ]);
+    const hub = {
+      bucket: (bucket: string) => ({
+        downloadFile: async (file: string) => {
+          const value = buckets.get(bucket)?.get(file);
+          return value ? new Blob([value]) : null;
+        },
+        uploadFiles: async (files: Array<{ path: string; content: Blob }>) => {
+          const objects = buckets.get(bucket) ?? new Map<string, string>();
+          buckets.set(bucket, objects);
+          for (const file of files) objects.set(file.path, await file.content.text());
+        },
+        deleteFiles: async (files: string[]) => {
+          for (const file of files) buckets.get(bucket)?.delete(file);
+        },
+      }),
+    } as unknown as HubApi;
+    const manifest: DeploymentManifest = {
+      version: 2,
+      deploymentId: "22222222-2222-4222-8222-222222222222",
+      desiredGeneration: 0,
+      agent: "research",
+      owner: "alice",
+      bucket: sourceBucket,
+      space: "alice/research",
+      localRuntimeId: "local-research",
+      gatewayLocation: "local",
+      model: DEFAULT_MODEL,
+      runtimeImage: DEFAULT_RUNTIME_IMAGE,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    };
+    const authJson = { auth_mode: "chatgpt", tokens: { refresh_token: "opaque-refresh" } };
+    buckets.get(sourceBucket)?.set(
+      codexAuthObjectPath(),
+      encryptCodexAuthDocument({
+        document: encodeCodexAuthDocument({ authJson, now: new Date("2026-07-01T00:00:00.000Z") }),
+        secret: credentialKey,
+        context: { deploymentId: manifest.deploymentId, bucket: sourceBucket, statePrefix: "openclaw-state" },
+      }),
+    );
+
+    await migrateCodexCredentialForBucketAdoption({
+      hub,
+      manifest,
+      targetBucket,
+      statePrefix: undefined,
+      credentialKey,
+      now: new Date("2026-07-02T00:00:00.000Z"),
+    });
+
+    const moved = buckets.get(targetBucket)?.get(codexAuthObjectPath());
+    expect(moved).toBeDefined();
+    expect(
+      decryptCodexAuthDocument({
+        encrypted: moved ?? "",
+        secret: credentialKey,
+        expectedContext: {
+          deploymentId: manifest.deploymentId,
+          bucket: targetBucket,
+          statePrefix: "openclaw-state",
+        },
+      }).authJson,
+    ).toEqual(authJson);
+    expect(buckets.get(targetBucket)?.has(codexAuthRevocationObjectPath())).toBe(false);
+  });
+
   it("stores Codex account credentials in the target deployment bucket", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
@@ -4696,6 +4780,7 @@ describe("mlclaw CLI", () => {
     const authFile = path.join(runtime.configRoot, "codex-auth.json");
     const authJson = { auth_mode: "chatgpt", tokens: { id_token: "opaque", refresh_token: "opaque-refresh" } };
     await fs.writeFile(authFile, JSON.stringify(authJson), "utf8");
+    hub.bucketObjects.set(codexAuthRevocationObjectPath(), "revoked");
 
     await expect(
       main(["credentials", "codex", "login", "research", "--auth-json-file", authFile], runtime),
@@ -4704,6 +4789,7 @@ describe("mlclaw CLI", () => {
     const encrypted = hub.bucketObjects.get(codexAuthObjectPath());
     expect(encrypted).toBeDefined();
     expect(encrypted).not.toContain("opaque-refresh");
+    expect(hub.bucketObjects.has(codexAuthRevocationObjectPath())).toBe(false);
     expect(
       decryptCodexAuthDocument({
         encrypted: encrypted ?? "",
@@ -4726,15 +4812,23 @@ describe("mlclaw CLI", () => {
   it("removes deployment-scoped Codex credentials", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
-    const runtime = await createRuntime(hub, prompt);
+    const stdout: string[] = [];
+    const runtime = {
+      ...(await createRuntime(hub, prompt)),
+      stdout: { log: (message: unknown) => stdout.push(String(message)) },
+    };
     await seedCodexCredentialDeployment(runtime.configRoot, hub);
     hub.bucketObjects.set(codexAuthObjectPath(), "encrypted");
 
     await expect(main(["credentials", "codex", "logout", "research"], runtime)).resolves.toBe(0);
 
     expect(hub.bucketObjects.has(codexAuthObjectPath())).toBe(false);
+    expect(hub.bucketObjects.has(codexAuthRevocationObjectPath())).toBe(true);
     expect(hub.calls).toContainEqual({ name: "bucket.deleteFiles", args: [[codexAuthObjectPath()]] });
     expect(hub.calls).toContainEqual({ name: "restartSpace", args: ["alice/research", true] });
+
+    await expect(main(["credentials", "codex", "status", "research"], runtime)).resolves.toBe(0);
+    expect(stdout.join("\n")).toContain("Codex account: not configured");
   });
 });
 

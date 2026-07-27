@@ -11765,7 +11765,13 @@ async function runCodexExec(params) {
       child.kill("SIGTERM");
       killTimer = setTimeout(() => child.kill("SIGKILL"), CODEX_PROCESS_KILL_GRACE_MS);
     };
-    params.signal.addEventListener("abort", abort, { once: true });
+    if (params.signal.aborted) {
+      abort();
+    } else {
+      params.signal.addEventListener("abort", abort, { once: true });
+    }
+    child.stdin.on("error", () => {
+    });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -18882,8 +18888,12 @@ import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv
 import fs5 from "node:fs/promises";
 import path5 from "node:path";
 var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
+var CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 function codexAuthObjectPath(statePrefix) {
   return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_OBJECT_BASENAME}`;
+}
+function codexAuthRevocationObjectPath(statePrefix) {
+  return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_REVOCATION_BASENAME}`;
 }
 function codexAuthContext(params) {
   return compactContext({
@@ -19066,6 +19076,16 @@ var CodexAuthManager = class {
     return document ? { configured: true, updatedAt: document.updatedAt } : { configured: false, updatedAt: null };
   }
   async hasRestoredAuth() {
+    const authoritative = await this.loadEncryptedDocument();
+    if (!authoritative) {
+      await this.clearRestoredAuth();
+      return false;
+    }
+    const serialized = stableJson(authoritative.authJson);
+    if (!this.lastPersistedAuthJson || serialized !== this.lastPersistedAuthJson) {
+      await this.writeAuthJson(authoritative.authJson);
+      this.lastPersistedAuthJson = serialized;
+    }
     return Boolean(await this.readAuthJson());
   }
   async startSync() {
@@ -19103,9 +19123,19 @@ var CodexAuthManager = class {
     }, DEFAULT_SYNC_DEBOUNCE_MS);
   }
   async persistCurrentAuth() {
+    const authoritative = await this.loadEncryptedDocument();
+    if (!authoritative) {
+      await this.clearRestoredAuth();
+      return;
+    }
+    const authoritativeJson = stableJson(authoritative.authJson);
+    if (authoritativeJson !== this.lastPersistedAuthJson) {
+      await this.writeAuthJson(authoritative.authJson);
+      this.lastPersistedAuthJson = authoritativeJson;
+      return;
+    }
     const authJson = await this.readAuthJson();
     if (!authJson) {
-      if (!this.lastPersistedAuthJson) return;
       await this.deleteEncryptedDocument();
       this.lastPersistedAuthJson = "";
       return;
@@ -19117,6 +19147,10 @@ var CodexAuthManager = class {
     this.lastPersistedAuthJson = serialized;
   }
   async loadEncryptedDocument() {
+    if (await this.hasRevocationMarker()) {
+      await deleteEncryptedCodexAuthFile(this.config.codexAuthStoreFile);
+      return void 0;
+    }
     const mountedFile = this.mountedStoreFile();
     if (mountedFile) {
       return await readEncryptedCodexAuthFile({
@@ -19166,6 +19200,22 @@ var CodexAuthManager = class {
   }
   mountedStoreFile() {
     return this.config.stateMountDir ? this.config.codexAuthStoreFile : void 0;
+  }
+  async hasRevocationMarker() {
+    if (this.config.stateMountDir) {
+      return await fileExists(this.localRevocationFile());
+    }
+    if (this.config.stateBucket && this.config.hfToken) {
+      return Boolean(await this.bucketClient().downloadFile(codexAuthRevocationObjectPath(this.config.statePrefix)));
+    }
+    return await fileExists(this.localRevocationFile());
+  }
+  localRevocationFile() {
+    return path6.join(path6.dirname(this.config.codexAuthStoreFile), path6.basename(codexAuthRevocationObjectPath()));
+  }
+  async clearRestoredAuth() {
+    await fs6.rm(this.authJsonFile(), { force: true });
+    this.lastPersistedAuthJson = "";
   }
   async downloadEncryptedObject() {
     if (!this.config.stateBucket || !this.config.hfToken) return void 0;
@@ -19245,6 +19295,15 @@ async function writePrivateRawFile(file, content) {
 }
 function stableJson(value) {
   return JSON.stringify(value);
+}
+async function fileExists(file) {
+  try {
+    await fs6.access(file);
+    return true;
+  } catch (error) {
+    if (isNotFound2(error)) return false;
+    throw error;
+  }
 }
 function isNotFound2(error) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");

@@ -16,7 +16,11 @@ import {
   configureOpenClawGateway,
 } from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
-import { encodeCodexAuthDocument, writeEncryptedCodexAuthFile } from "../src/mlclaw/codex-auth.js";
+import {
+  codexAuthRevocationObjectPath,
+  encodeCodexAuthDocument,
+  writeEncryptedCodexAuthFile,
+} from "../src/mlclaw/codex-auth.js";
 import { CodexAuthManager } from "../src/mlclaw-space-runtime/codex-auth.js";
 import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
 import { SpaceRuntimeServer } from "../src/mlclaw-space-runtime/server.js";
@@ -2086,6 +2090,51 @@ process.stdin.on("end", () => {
 
     await expect(fs.access(storeFile)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(fs.access(path.join(codexHome, "auth.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not recreate revoked Codex credentials while flushing auth refreshes", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-codex-revocation-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const codexHome = path.join(root, "codex-home");
+    const storeFile = path.join(root, "state", "openclaw-state", ".mlclaw", "codex-auth.enc");
+    const revocationFile = path.join(root, "state", codexAuthRevocationObjectPath());
+    const context = {
+      deploymentId: "00000000-0000-4000-8000-000000000001",
+      bucket: "alice/research-data",
+      statePrefix: "openclaw-state",
+    };
+    await writeEncryptedCodexAuthFile({
+      file: storeFile,
+      document: encodeCodexAuthDocument({
+        authJson: { auth_mode: "chatgpt", tokens: { refresh_token: "old" } },
+        now: new Date("2026-07-01T00:00:00.000Z"),
+      }),
+      secret: "k".repeat(48),
+      context,
+    });
+    const config = await testConfig({
+      codexHome,
+      codexAuthStoreFile: storeFile,
+      stateMountDir: path.join(root, "state"),
+    });
+    const manager = new CodexAuthManager(config);
+    await manager.restore();
+    await manager.startSync();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await fs.writeFile(
+      path.join(codexHome, "auth.json"),
+      JSON.stringify({ auth_mode: "chatgpt", tokens: { refresh_token: "refreshed" } }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await fs.mkdir(path.dirname(revocationFile), { recursive: true });
+    await fs.writeFile(revocationFile, "revoked\n", "utf8");
+    await fs.rm(storeFile, { force: true });
+
+    await manager.stopSync();
+
+    await expect(fs.access(storeFile)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.access(path.join(codexHome, "auth.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(manager.hasRestoredAuth()).resolves.toBe(false);
   });
 
   it("restores encrypted Codex account credentials without exposing CODEX_HOME to OpenClaw", async () => {

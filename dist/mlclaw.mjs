@@ -15712,8 +15712,12 @@ async function assertNoLiveForeignLease(params) {
 // src/mlclaw/codex-auth.ts
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
+var CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 function codexAuthObjectPath(statePrefix) {
   return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_OBJECT_BASENAME}`;
+}
+function codexAuthRevocationObjectPath(statePrefix) {
+  return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_REVOCATION_BASENAME}`;
 }
 function codexAuthContext(params) {
   return compactContext({
@@ -21981,6 +21985,17 @@ async function stateAdopt(agent, opts, runtime) {
           });
         }
       }
+      if (bucketChanged) {
+        await assertLease();
+        await migrateCodexCredentialForBucketAdoption({
+          hub,
+          manifest: current,
+          targetBucket: updated.bucket,
+          statePrefix: bucketPrefix,
+          credentialKey: nonEmpty(secrets.MLCLAW_CREDENTIAL_KEY),
+          now: runtime.now()
+        });
+      }
       await assertLease();
       await writeLocalDeployment(runtime.configRoot, updated, updatedSecrets);
       if (updated.gatewayLocation === "local") {
@@ -22038,6 +22053,8 @@ async function stateAdopt(agent, opts, runtime) {
         bucket,
         runtime.now()
       );
+      await assertLease();
+      await deleteCodexCredentialControlObjects(hub, manifest.pendingTombstoneBucket, bucketPrefix);
       const { pendingTombstoneBucket: _completed, ...completed } = manifest;
       await assertLease();
       await writeManifest(runtime.configRoot, completed);
@@ -22047,6 +22064,43 @@ async function stateAdopt(agent, opts, runtime) {
   updated = reconciled.manifest;
   runtime.stdout.log(`State bucket: ${bucket}`);
 }
+async function migrateCodexCredentialForBucketAdoption(params) {
+  const revoked = await codexCredentialIsRevoked(params.hub, params.manifest.bucket, params.statePrefix);
+  const encrypted = revoked ? void 0 : await readCodexCredentialBundle({
+    hub: params.hub,
+    manifest: params.manifest,
+    statePrefix: params.statePrefix
+  });
+  const targetManifest = { ...params.manifest, bucket: params.targetBucket };
+  if (encrypted) {
+    if (!params.credentialKey) {
+      throw new Error("cannot move Codex credentials without MLCLAW_CREDENTIAL_KEY");
+    }
+    const document = decryptCodexAuthDocument({
+      encrypted,
+      secret: params.credentialKey,
+      expectedContext: codexContextForManifest(params.manifest, params.statePrefix)
+    });
+    await writeCodexCredentialBundle({
+      manifest: targetManifest,
+      statePrefix: params.statePrefix,
+      credentialKey: params.credentialKey,
+      document,
+      hub: params.hub
+    });
+    await deleteCodexRevocationMarker(params.hub, params.targetBucket, params.statePrefix);
+    return;
+  }
+  if (revoked) {
+    await writeCodexRevocationMarker(params.hub, targetManifest, params.statePrefix, params.now);
+    await params.hub.bucket(params.targetBucket).deleteFiles([codexAuthObjectPath(params.statePrefix)]);
+    return;
+  }
+  await deleteCodexCredentialControlObjects(params.hub, params.targetBucket, params.statePrefix);
+}
+async function deleteCodexCredentialControlObjects(hub, bucket, statePrefix) {
+  await hub.bucket(bucket).deleteFiles([codexAuthObjectPath(statePrefix), codexAuthRevocationObjectPath(statePrefix)]);
+}
 async function inspectStateBucket(hub, bucket, bucketPrefix) {
   await hub.assertBucketAccessible(bucket);
   const client = hub.bucket(bucket);
@@ -22055,8 +22109,12 @@ async function inspectStateBucket(hub, bucket, bucketPrefix) {
   const prefix = normalizeBucketPrefix(bucketPrefix);
   const prefixWithSlash = `${prefix}/`;
   const manifestPath2 = `${prefixWithSlash}${SNAPSHOT_MANIFEST_REMOTE_NAME}`;
+  const prefixedControlPath = `${prefixWithSlash}.mlclaw/`;
+  const credentialPayloadPaths = new Set(
+    fileEntries.some((entry) => entry.path === DEPLOYMENT_PATH) ? [] : [codexAuthObjectPath(bucketPrefix)]
+  );
   const payloadEntries = fileEntries.filter(
-    (entry) => !entry.path.startsWith(".mlclaw/") && !entry.path.startsWith(`${prefixWithSlash}.mlclaw/`)
+    (entry) => !entry.path.startsWith(".mlclaw/") && (!entry.path.startsWith(prefixedControlPath) || credentialPayloadPaths.has(entry.path))
   );
   const stateEntries = payloadEntries.filter(
     (entry) => entry.path === manifestPath2 || entry.path.startsWith(`${prefixWithSlash}snapshots/`) || entry.path.startsWith(`${prefixWithSlash}runtime/`)
@@ -24100,6 +24158,8 @@ async function codexCredentialsLogin(requestedAgent, opts, runtime) {
       await assertLease();
       await writeCodexCredentialBundle({ manifest: current, statePrefix, credentialKey, document, hub });
       await assertLease();
+      await deleteCodexRevocationMarker(hub, current.bucket, statePrefix);
+      await assertLease();
       await ensureRuntimeDeploymentId(current, secrets, hub, runtime, assertLease);
       await assertLease();
       await restartDeploymentForCredentialChange(current, runtime, hub, assertLease);
@@ -24118,7 +24178,8 @@ async function codexCredentialsStatus(requestedAgent, runtime) {
   const token = await runtime.readToken(runtime.env);
   const hub = runtime.hubFactory(token);
   const statePrefix = persistedBucketPrefix(secrets);
-  const encrypted = await readCodexCredentialBundle({ hub, manifest, statePrefix });
+  const revoked = await codexCredentialIsRevoked(hub, manifest.bucket, statePrefix);
+  const encrypted = revoked ? void 0 : await readCodexCredentialBundle({ hub, manifest, statePrefix });
   if (!encrypted) {
     runtime.stdout.log(`Agent: ${manifest.agent}`);
     runtime.stdout.log("Codex account: not configured");
@@ -24147,6 +24208,8 @@ async function codexCredentialsLogout(requestedAgent, runtime) {
     const operation = newOperation(current, runtime.now());
     const lease = await acquireControlLease(control, current, operation, runtime.now());
     try {
+      await assertControlLease(control, lease, runtime.now());
+      await writeCodexRevocationMarker(hub, current, statePrefix, runtime.now());
       await assertControlLease(control, lease, runtime.now());
       await hub.bucket(current.bucket).deleteFiles([codexAuthObjectPath(statePrefix)]);
       await assertControlLease(control, lease, runtime.now());
@@ -24337,6 +24400,26 @@ async function writeCodexCredentialBundle(params) {
 async function readCodexCredentialBundle(params) {
   const blob = await params.hub.bucket(params.manifest.bucket).downloadFile(codexAuthObjectPath(params.statePrefix));
   return blob ? await blob.text() : void 0;
+}
+async function codexCredentialIsRevoked(hub, bucket, statePrefix) {
+  return Boolean(await hub.bucket(bucket).downloadFile(codexAuthRevocationObjectPath(statePrefix)));
+}
+async function writeCodexRevocationMarker(hub, manifest, statePrefix, now) {
+  const content = new Blob([
+    `${JSON.stringify({
+      version: 1,
+      kind: "codex-auth-revocation",
+      deploymentId: manifest.deploymentId,
+      bucket: manifest.bucket,
+      statePrefix: normalizeBucketPrefix(statePrefix),
+      revokedAt: now.toISOString()
+    })}
+`
+  ]);
+  await hub.bucket(manifest.bucket).uploadFiles([{ path: codexAuthRevocationObjectPath(statePrefix), content }]);
+}
+async function deleteCodexRevocationMarker(hub, bucket, statePrefix) {
+  await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
 }
 async function ensureRuntimeDeploymentId(manifest, secrets, hub, runtime, assertLease) {
   if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
@@ -24762,5 +24845,6 @@ export {
   TELEGRAM_SLEEP_TIME,
   createProgram,
   main,
-  mergeStateVolume
+  mergeStateVolume,
+  migrateCodexCredentialForBucketAdoption
 };

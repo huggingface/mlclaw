@@ -4,6 +4,7 @@ import path from "node:path";
 import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 
 export const CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
+export const CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 
 export type CodexAuthContext = {
   deploymentId?: string;
@@ -30,6 +31,10 @@ type EncryptedCodexAuthEnvelope = {
 
 export function codexAuthObjectPath(statePrefix?: string): string {
   return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_OBJECT_BASENAME}`;
+}
+
+export function codexAuthRevocationObjectPath(statePrefix?: string): string {
+  return `${normalizeBucketPrefix(statePrefix)}/${CODEX_AUTH_REVOCATION_BASENAME}`;
 }
 
 export function codexAuthContext(params: {
