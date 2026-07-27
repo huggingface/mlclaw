@@ -383,16 +383,20 @@ mlclaw credentials codex logout mlclaw
 
 `login` requests a one-time device code from OpenAI, prints the verification
 URL and code, polls for approval, encrypts the OAuth credential into the
-selected deployment's private state bucket, and restarts the deployment. The
-`mlclaw-codex/gpt-5.4` model then appears automatically in OpenClaw.
+selected deployment's private state bucket, and restarts the deployment.
+OpenClaw then discovers the models visible to that ChatGPT account under its
+native `openai/*` provider. For example, an entitled account may expose
+`openai/gpt-5.6-sol` alongside the other live Codex models.
 
-OpenClaw sends model requests to a loopback-only ML Claw proxy using an
-internal capability. The trusted wrapper decrypts and refreshes the OAuth
-credential, adds it only to the upstream OpenAI request, and persists token
-rotation back to the encrypted bucket object. `status` and `logout` inspect or
-revoke the deployment-scoped login without exposing tokens. Raw tokens are
-never printed, stored in the Space repo, passed to OpenClaw, or included in
-workspace snapshots.
+OpenClaw sends native model discovery and Responses requests to a loopback-only
+ML Claw proxy using a random capability created for that runtime. The trusted
+wrapper decrypts and refreshes the OAuth credential, adds it only to the
+upstream OpenAI request, and persists token rotation back to the encrypted
+bucket object. OpenClaw keeps its own model names, metadata, and transport, and
+a normal `OPENAI_API_KEY` profile can coexist with the ChatGPT route. `status`
+and `logout` inspect or revoke the deployment-scoped login without exposing
+tokens. Raw OAuth tokens and the runtime capability are never printed, stored
+in the Space repo or OpenClaw config, or included in workspace snapshots.
 
 ## How State Works
 

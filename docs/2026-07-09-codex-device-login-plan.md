@@ -67,27 +67,23 @@ Never store raw OAuth credentials in:
 
 ## Trusted Provider Boundary
 
-When encrypted credentials are available, ML Claw adds the following custom provider to generated OpenClaw config:
+When encrypted credentials are available, ML Claw configures OpenClaw's native `openai` provider with a trusted loopback Codex base URL. OpenClaw retains its own account-filtered catalog parser, `openai/*` model ids, metadata, reasoning controls, and ChatGPT Responses transport.
 
-```text
-mlclaw-codex/gpt-5.4
-```
-
-OpenClaw sends ChatGPT Responses requests to a loopback-only ML Claw endpoint. Its configured API key is a deployment-scoped internal capability JWT derived from `MLCLAW_SESSION_SECRET`; it is not an OpenAI credential.
+OpenClaw sends the loopback endpoint an opaque random capability through `OPENAI_OAUTH_TOKEN`. The capability is created once per ML Claw runtime, is never persisted, and is not an OpenAI credential. A separate `OPENAI_API_KEY` can remain available for explicitly selected Platform profiles.
 
 The trusted proxy:
 
-- accepts only the exact loopback Codex Responses route;
-- authenticates the internal capability with constant-time comparison;
-- allows only the registered Codex model;
-- forces streaming and `store: false`;
+- accepts only exact loopback `GET /backend-api/codex/models` and `POST /backend-api/codex/responses` routes;
+- authenticates the runtime capability with constant-time comparison;
+- forwards the account-filtered model catalog without maintaining a second parser or hardcoded model list;
+- forces Responses streaming and `store: false`;
 - loads and decrypts the deployment credential in the trusted process;
 - refreshes the OAuth credential when needed and persists token rotation;
 - adds the real OpenAI bearer token and ChatGPT account id only on the upstream request;
-- streams the upstream Responses protocol back to OpenClaw;
+- streams the upstream response back to OpenClaw;
 - retries once with a forced refresh after an upstream `401`.
 
-OpenClaw uses its built-in ChatGPT Responses adapter with the ordinary OpenClaw agent runtime. No Codex subprocess, app server, shell tool, or workspace access is introduced.
+OpenClaw uses its native OpenAI provider with the ordinary OpenClaw agent runtime. No Codex subprocess, app server, shell tool, or workspace access is introduced.
 
 ## Security Requirements
 
@@ -115,8 +111,8 @@ Coverage verifies:
 - no Codex binary or npm package dependency;
 - encrypted credential round trips, refresh rotation, optimistic refresh races, and revocation;
 - bucket migration and cleanup;
-- loopback provider authentication, request bounds, model allowlisting, forced `store: false`, streaming, and `401` refresh retry;
-- automatic OpenClaw provider/model addition and removal;
+- loopback provider authentication, request bounds, account-catalog forwarding, forced `store: false`, streaming, and `401` refresh retry;
+- native OpenAI provider routing and removal when Codex credentials are unavailable;
 - login/logout runtime restart behavior;
 - generated Dockerfiles and release metadata contain no Codex installation.
 
@@ -124,9 +120,9 @@ Live acceptance requires:
 
 1. Login to a deployment.
 2. Deploy the updated bundled runtime.
-3. Confirm startup reports `Codex provider enabled`.
-4. Confirm `mlclaw-codex/gpt-5.4` appears in OpenClaw's model picker.
-5. Select it and complete a real response.
+3. Confirm startup reports `Native OpenAI Codex routing enabled`.
+4. Confirm all account-visible `openai/*` models appear in OpenClaw's model picker, including `openai/gpt-5.6-sol` when entitled.
+5. Select a discovered model and complete a real response.
 6. Restart the Space and repeat the response without logging in again.
 7. Logout and confirm the provider disappears after restart.
 

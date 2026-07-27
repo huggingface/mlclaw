@@ -3,12 +3,7 @@ import http from "node:http";
 import { Readable } from "node:stream";
 import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js";
 import type { CodexCredentialStore } from "./codex-credentials.js";
-import {
-  CODEX_MODEL_ID,
-  CODEX_RESPONSES_PATH,
-  CODEX_RESPONSES_URL,
-  deriveCodexProviderToken,
-} from "./codex-provider.js";
+import { CODEX_MODELS_PATH, CODEX_MODELS_URL, CODEX_RESPONSES_PATH, CODEX_RESPONSES_URL } from "./codex-proxy.js";
 import type { McpCredentialStore } from "./mcp-credentials.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -37,6 +32,7 @@ export class McpIntegrationServer {
     private readonly config: SpaceRuntimeConfig,
     private readonly credentials: McpCredentialStore,
     private readonly codexCredentials?: CodexCredentialStore,
+    private readonly codexCapability?: string,
     private readonly fetchFn: typeof fetch = fetch,
   ) {
     this.internalToken = deriveInternalToken(config.sessionSecret);
@@ -102,9 +98,13 @@ export class McpIntegrationServer {
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse, signal: AbortSignal): Promise<void> {
     const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (pathname === CODEX_RESPONSES_PATH) {
-      if (!validBearerToken(req.headers.authorization, deriveCodexProviderToken(this.config.sessionSecret))) {
+    if (pathname === CODEX_MODELS_PATH || pathname === CODEX_RESPONSES_PATH) {
+      if (!this.codexCapability || !validBearerToken(req.headers.authorization, this.codexCapability)) {
         writeJson(res, 401, { error: { message: "Unauthorized", type: "authentication_error" } });
+        return;
+      }
+      if (pathname === CODEX_MODELS_PATH) {
+        await this.handleCodexModels(req, res, signal);
         return;
       }
       const body = await readBody(req, MAX_REQUEST_BYTES);
@@ -144,6 +144,39 @@ export class McpIntegrationServer {
     });
   }
 
+  private async handleCodexModels(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (req.method !== "GET") {
+      writeJson(res, 405, { error: { message: "Method not allowed", type: "invalid_request_error" } });
+      return;
+    }
+    if (!this.codexCredentials) {
+      writeJson(res, 503, { error: { message: "Codex is not configured", type: "authentication_error" } });
+      return;
+    }
+    const requestUrl = new URL(req.url ?? CODEX_MODELS_PATH, "http://127.0.0.1");
+    const upstreamUrl = new URL(CODEX_MODELS_URL);
+    const clientVersion = requestUrl.searchParams.get("client_version")?.trim();
+    if (clientVersion && /^[0-9A-Za-z._-]{1,64}$/u.test(clientVersion)) {
+      upstreamUrl.searchParams.set("client_version", clientVersion);
+    }
+    const upstream = await this.fetchCodexUpstream(
+      upstreamUrl,
+      { method: "GET", headers: { accept: "application/json" } },
+      signal,
+      false,
+    );
+    res.writeHead(upstream.status, responseHeaders(upstream.headers));
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+    await pipeResponseBody(upstream.body, res);
+  }
+
   private async handleCodexResponses(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -163,12 +196,13 @@ export class McpIntegrationServer {
       writeJson(res, 400, { error: { message: "Invalid JSON request", type: "invalid_request_error" } });
       return;
     }
-    if (request.model !== CODEX_MODEL_ID) {
-      writeJson(res, 400, { error: { message: "Unsupported Codex model", type: "invalid_request_error" } });
+    if (typeof request.model !== "string" || !request.model.trim()) {
+      writeJson(res, 400, { error: { message: "Codex model is required", type: "invalid_request_error" } });
       return;
     }
-    normalizeCodexRequest(request);
-    const upstream = await this.fetchCodexResponse(request, signal, false);
+    request.store = false;
+    request.stream = true;
+    const upstream = await this.fetchCodexResponse(request, signal);
     res.writeHead(upstream.status, responseHeaders(upstream.headers));
     if (!upstream.body) {
       res.end();
@@ -177,8 +211,26 @@ export class McpIntegrationServer {
     await pipeResponseBody(upstream.body, res);
   }
 
-  private async fetchCodexResponse(
-    request: Record<string, unknown>,
+  private async fetchCodexResponse(request: Record<string, unknown>, signal: AbortSignal): Promise<Response> {
+    return await this.fetchCodexUpstream(
+      new URL(CODEX_RESPONSES_URL),
+      {
+        method: "POST",
+        headers: {
+          accept: "text/event-stream",
+          "content-type": "application/json",
+          "openai-beta": "responses=experimental",
+        },
+        body: JSON.stringify(request),
+      },
+      signal,
+      false,
+    );
+  }
+
+  private async fetchCodexUpstream(
+    url: URL,
+    request: RequestInit,
     signal: AbortSignal,
     refreshed: boolean,
   ): Promise<Response> {
@@ -187,24 +239,20 @@ export class McpIntegrationServer {
       signal,
     });
     if (!credential) throw new Error("Codex is not configured");
-    const response = await this.fetchFn(CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential.access}`,
-        "chatgpt-account-id": credential.accountId,
-        originator: "mlclaw",
-        "user-agent": "mlclaw",
-        "openai-beta": "responses=experimental",
-        accept: "text/event-stream",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(request),
+    const headers = new Headers(request.headers);
+    headers.set("authorization", `Bearer ${credential.access}`);
+    headers.set("chatgpt-account-id", credential.accountId);
+    headers.set("originator", "mlclaw");
+    headers.set("user-agent", "mlclaw");
+    const response = await this.fetchFn(url, {
+      ...request,
+      headers,
       redirect: "error",
       signal,
     });
     if (response.status === 401 && !refreshed) {
       await response.body?.cancel().catch(() => undefined);
-      return await this.fetchCodexResponse(request, signal, true);
+      return await this.fetchCodexUpstream(url, request, signal, true);
     }
     return response;
   }
@@ -536,65 +584,6 @@ function parseJsonObject(body: Uint8Array): Record<string, unknown> | undefined 
   } catch {
     return undefined;
   }
-}
-
-function normalizeCodexRequest(request: Record<string, unknown>): void {
-  const instructions = codexInstructions(request.input);
-  const existingInstructions = stringValue(request.instructions);
-  const combinedInstructions = [existingInstructions, ...instructions.text].filter((value): value is string =>
-    Boolean(value),
-  );
-  if (combinedInstructions.length > 0) request.instructions = combinedInstructions.join("\n\n");
-  if (instructions.input) request.input = instructions.input;
-  for (const key of [
-    "max_output_tokens",
-    "metadata",
-    "prompt_cache_retention",
-    "service_tier",
-    "temperature",
-    "top_p",
-  ]) {
-    delete request[key];
-  }
-  const text = objectValue(request.text);
-  if (text) {
-    const sanitized = { ...text };
-    delete sanitized.format;
-    if (Object.keys(sanitized).length > 0) request.text = sanitized;
-    else delete request.text;
-  }
-  request.store = false;
-  request.stream = true;
-}
-
-function codexInstructions(input: unknown): { input?: unknown[]; text: string[] } {
-  if (!Array.isArray(input)) return { text: [] };
-  const remaining: unknown[] = [];
-  const text: string[] = [];
-  for (const item of input) {
-    const message = objectValue(item);
-    if (message?.role !== "system" && message?.role !== "developer") {
-      remaining.push(item);
-      continue;
-    }
-    const instruction = responseMessageText(message.content);
-    if (instruction) text.push(instruction);
-  }
-  if (remaining.length === 0 && text.length > 0) {
-    remaining.push({ role: "user", content: [{ type: "input_text", text: " " }] });
-  }
-  return { input: remaining, text };
-}
-
-function responseMessageText(content: unknown): string | undefined {
-  if (typeof content === "string") return stringValue(content);
-  if (!Array.isArray(content)) return undefined;
-  const text = content
-    .map((item) => stringValue(objectValue(item)?.text))
-    .filter((value): value is string => Boolean(value))
-    .join("\n")
-    .trim();
-  return text || undefined;
 }
 
 function parseJsonRpc(body: Uint8Array): JsonRpcRequest | undefined {
