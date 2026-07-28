@@ -36,8 +36,6 @@ Object.assign(config.channels.telegram, {
   botToken: "${TELEGRAM_BOT_TOKEN}",
   dmPolicy: "allowlist",
   allowFrom: allowedUsers,
-  timeoutSeconds: 45,
-  pollingStallThresholdMs: 60000,
   commands: {
     ...(config.channels.telegram.commands || {}),
     native: false
