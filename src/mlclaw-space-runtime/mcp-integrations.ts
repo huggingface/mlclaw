@@ -326,16 +326,12 @@ export function managedMcpServerConfig(config: SpaceRuntimeConfig): Record<strin
       url: `http://127.0.0.1:${config.mcpPort}/mcp/huggingface`,
       transport: "streamable-http",
       headers,
-      timeout: 120,
-      connectTimeout: 10,
       supportsParallelToolCalls: true,
     },
     "research-agent": {
       url: `http://127.0.0.1:${config.mcpPort}/mcp/research`,
       transport: "streamable-http",
       headers,
-      timeout: Math.ceil(config.researchTimeoutMs / 1000) + 30,
-      connectTimeout: 10,
       supportsParallelToolCalls: false,
     },
   };
