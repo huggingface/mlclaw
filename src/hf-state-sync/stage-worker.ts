@@ -7,6 +7,9 @@ import { pipeline } from "node:stream/promises";
 import { PROTECTED_STATE_DIR_NAME, createTarZst, extractTarZst, stageLiveDir } from "./archive.js";
 import type { SyncConfig } from "./paths.js";
 import type { StageArchive, StagedArchiveOutcome } from "./snapshot.js";
+import { checkIntegrity, vacuumInto } from "./sqlite.js";
+
+const PROTECTED_SQLITE_DATABASES = ["unyolo/telegram/callbacks.db"] as const;
 
 type WorkerMessage = StagedArchiveOutcome | { kind: "failed"; detail: string };
 
@@ -59,13 +62,40 @@ export function protectedStageArchive(params: {
         recursive: true,
         force: false,
         preserveTimestamps: true,
-        filter: (source) => includeProtectedSnapshotPath(params.sourceDir, source),
+        filter: (source) =>
+          includeProtectedSnapshotPath(params.sourceDir, source) &&
+          !isProtectedDatabaseArtifact(params.sourceDir, source),
       });
+      let protectedDatabaseCount = 0;
+      for (const relative of PROTECTED_SQLITE_DATABASES) {
+        const source = path.join(params.sourceDir, relative);
+        const sourceStat = await fs.lstat(source).catch((err: unknown) => {
+          if (isNodeError(err, "ENOENT")) return undefined;
+          throw err;
+        });
+        if (!sourceStat) continue;
+        if (!sourceStat.isFile()) {
+          throw new Error(`protected database is not a regular file: ${relative}`);
+        }
+        const staged = path.join(destination, relative);
+        await fs.mkdir(path.dirname(staged), { recursive: true });
+        vacuumInto(source, staged);
+        await fs.chmod(staged, 0o600);
+        const integrity = checkIntegrity(staged);
+        if (integrity.kind === "corrupt") {
+          return {
+            kind: "corrupt-database",
+            database: path.join(params.archiveName, relative),
+            detail: integrity.detail,
+          };
+        }
+        protectedDatabaseCount += 1;
+      }
       await fs.chmod(destination, 0o700);
       await fs.rm(request.archivePath, { force: true });
       await createTarZst(stagingDir, request.archivePath);
       await fs.chmod(request.archivePath, 0o600);
-      return outcome;
+      return { ...outcome, databaseCount: outcome.databaseCount + protectedDatabaseCount };
     } finally {
       await fs.rm(workDir, { recursive: true, force: true });
     }
@@ -75,6 +105,15 @@ export function protectedStageArchive(params: {
 export function includeProtectedSnapshotPath(sourceDir: string, source: string): boolean {
   const relative = path.relative(sourceDir, source);
   return relative !== "unyolo/hf-broker/mirrors" && !relative.startsWith(`unyolo/hf-broker/mirrors${path.sep}`);
+}
+
+function isProtectedDatabaseArtifact(sourceDir: string, source: string): boolean {
+  const relative = path.relative(sourceDir, source);
+  return PROTECTED_SQLITE_DATABASES.some((database) => relative === database || relative.startsWith(`${database}-`));
+}
+
+function isNodeError(err: unknown, code: string): err is NodeJS.ErrnoException {
+  return err instanceof Error && "code" in err && err.code === code;
 }
 
 export function trustedStageArchive(config: SyncConfig, scriptPath: string | undefined): StageArchive | undefined {

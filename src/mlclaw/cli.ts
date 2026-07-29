@@ -148,9 +148,8 @@ type BootstrapOptions = {
   gateway?: string;
   telegramToken?: string;
   telegramTokenFile?: string;
+  approvalTelegramTokenFile?: string;
   telegramUserId?: string;
-  telegramApiRoot?: string;
-  telegramProxy?: string;
   hardware?: string;
   sleepTime?: number;
   model?: string;
@@ -364,9 +363,8 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--gateway <local|space>", "Where the live gateway runs")
     .option("--telegram-token <token>", "Optional Telegram bot token")
     .option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token")
-    .option("--telegram-user-id <id>", "Allowed Telegram user ID")
-    .option("--telegram-api-root <url>", "Telegram API root override")
-    .option("--telegram-proxy <url>", "Telegram proxy URL override")
+    .option("--approval-telegram-token-file <path>", "File containing the separate unYOLO approval bot token")
+    .option("--telegram-user-id <id>", "Allowed Telegram user ID and private approval chat ID")
     .option("--hardware <flavor>", "Hugging Face Space hardware flavor")
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
     .option("--model <model>", "OpenClaw model identifier")
@@ -778,9 +776,8 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const me = await hub.whoami();
   const selectionOwner = opts.owner ?? me.name;
   const suppliedTelegramToken = await readOptionalTelegramToken(opts, runtime);
-  let bot = suppliedTelegramToken
-    ? await runtime.getTelegramBot(suppliedTelegramToken, opts.telegramApiRoot)
-    : undefined;
+  const suppliedApprovalTelegramToken = await readOptionalApprovalTelegramToken(opts);
+  let bot = suppliedTelegramToken ? await runtime.getTelegramBot(suppliedTelegramToken) : undefined;
   const requestedAgentName = opts.name ?? bot?.username;
   let agentName = await resolveBootstrapAgentName({
     ...(requestedAgentName ? { requestedName: requestedAgentName } : {}),
@@ -794,14 +791,32 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   const owner = opts.owner ?? selectedManifest?.owner ?? selectionOwner;
   const telegramToken = suppliedTelegramToken ?? selectedSecrets.TELEGRAM_BOT_TOKEN;
   if (!bot && telegramToken) {
-    bot = await runtime.getTelegramBot(telegramToken, opts.telegramApiRoot ?? selectedSecrets.TELEGRAM_API_ROOT);
+    bot = await runtime.getTelegramBot(telegramToken);
   }
-  const telegramUserId = telegramToken
-    ? (opts.telegramUserId ??
-      runtime.env.TELEGRAM_ALLOWED_USERS ??
-      selectedSecrets.TELEGRAM_ALLOWED_USERS ??
-      (await promptRequired("Telegram allowed user ID", runtime)))
+  const configuredApprovalTelegramToken =
+    suppliedApprovalTelegramToken ??
+    runtime.env.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN ??
+    selectedSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
+  if (!telegramToken && (suppliedApprovalTelegramToken || selectedSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN)) {
+    throw new Error("the unYOLO approval bot requires the ML Claw Telegram channel");
+  }
+  const approvalTelegramToken = telegramToken
+    ? (configuredApprovalTelegramToken ?? (await promptRequiredSecret("Separate unYOLO approval bot token", runtime)))
     : undefined;
+  const telegramUserId = telegramToken
+    ? normalizeTelegramPrivateUserId(
+        opts.telegramUserId ??
+          runtime.env.TELEGRAM_ALLOWED_USERS ??
+          selectedSecrets.TELEGRAM_ALLOWED_USERS ??
+          (await promptRequired("Telegram allowed user ID", runtime)),
+      )
+    : undefined;
+  if (bot && approvalTelegramToken) {
+    const approvalBot = await runtime.getTelegramBot(approvalTelegramToken);
+    if (approvalBot.id === bot.id) {
+      throw new Error("the ML Claw conversation bot and unYOLO approval bot must be different Telegram bots");
+    }
+  }
 
   const model = opts.model ?? DEFAULT_MODEL;
   const runtimeImage = resolveRuntimeImage(opts.runtimeImage, runtime.env);
@@ -823,6 +838,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
       ...(reviewedBrokerHfToken ? { providedBrokerHfToken: reviewedBrokerHfToken } : {}),
       ...(requestedGatewayLocation ? { requestedGatewayLocation } : {}),
       ...(telegramToken ? { telegramToken } : {}),
+      ...(approvalTelegramToken ? { approvalTelegramToken } : {}),
       ...(telegramUserId ? { telegramUserId } : {}),
     });
     reviewedBrokerHfToken = plan.secrets.MLCLAW_BROKER_HF_TOKEN;
@@ -913,6 +929,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
         hub,
         runtime,
         ...(telegramToken ? { telegramToken } : {}),
+        ...(approvalTelegramToken ? { approvalTelegramToken } : {}),
         ...(telegramUserId ? { telegramUserId } : {}),
       });
     }
@@ -1369,6 +1386,7 @@ async function resolveBootstrapPlan(params: {
   hfIdentity: HubIdentity;
   providedBrokerHfToken?: string;
   telegramToken?: string;
+  approvalTelegramToken?: string;
   telegramUserId?: string;
   model: string;
   runtimeImage: string;
@@ -1384,6 +1402,7 @@ async function resolveBootstrapPlan(params: {
     hfIdentity,
     providedBrokerHfToken,
     telegramToken,
+    approvalTelegramToken,
     telegramUserId,
     model,
     runtimeImage,
@@ -1503,12 +1522,12 @@ async function resolveBootstrapPlan(params: {
     updatedAt: now,
   };
   const effectiveTelegramToken = telegramToken ?? existingSecrets.TELEGRAM_BOT_TOKEN;
+  const effectiveApprovalTelegramToken = approvalTelegramToken ?? existingSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
   const effectiveTelegramUserId = telegramUserId ?? existingSecrets.TELEGRAM_ALLOWED_USERS;
-  const effectiveTelegramProxy = opts.telegramProxy ?? existingSecrets.TELEGRAM_PROXY;
-  const effectiveTelegramApiRoot = opts.telegramApiRoot ?? existingSecrets.TELEGRAM_API_ROOT;
   const secrets = deploymentSecrets({
     hfToken: brokerCredential.token,
     ...(effectiveTelegramToken ? { telegramToken: effectiveTelegramToken } : {}),
+    ...(effectiveApprovalTelegramToken ? { approvalTelegramToken: effectiveApprovalTelegramToken } : {}),
     ...(effectiveTelegramUserId ? { telegramUserId: effectiveTelegramUserId } : {}),
     sessionSecret,
     credentialKey,
@@ -1522,8 +1541,6 @@ async function resolveBootstrapPlan(params: {
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
     deploymentId: manifest.deploymentId,
     ...(bucketPrefix ? { bucketPrefix } : {}),
-    ...(effectiveTelegramProxy ? { telegramProxy: effectiveTelegramProxy } : {}),
-    ...(effectiveTelegramApiRoot ? { telegramApiRoot: effectiveTelegramApiRoot } : {}),
     ...(routerToken ? { routerToken } : {}),
   });
   return {
@@ -1826,6 +1843,7 @@ async function resolveHostedBootstrapFallback(params: {
   hfIdentity: HubIdentity;
   brokerHfToken: string;
   telegramToken?: string;
+  approvalTelegramToken?: string;
   telegramUserId?: string;
   model: string;
   runtimeImage: string;
@@ -1847,6 +1865,7 @@ async function resolveHostedBootstrapFallback(params: {
       hub: params.hub,
       runtime: params.runtime,
       ...(params.telegramToken ? { telegramToken: params.telegramToken } : {}),
+      ...(params.approvalTelegramToken ? { approvalTelegramToken: params.approvalTelegramToken } : {}),
       ...(params.telegramUserId ? { telegramUserId: params.telegramUserId } : {}),
     });
   } catch (localError) {
@@ -2241,6 +2260,7 @@ function deploymentSecrets(params: {
   hfToken: string;
   routerToken?: string;
   telegramToken?: string;
+  approvalTelegramToken?: string;
   telegramUserId?: string;
   sessionSecret: string;
   credentialKey: string;
@@ -2254,8 +2274,6 @@ function deploymentSecrets(params: {
   runtimeId: string;
   deploymentId: string;
   bucketPrefix?: string;
-  telegramProxy?: string;
-  telegramApiRoot?: string;
 }): Record<string, string> {
   return {
     MLCLAW_BROKER_HF_TOKEN: params.hfToken,
@@ -2273,10 +2291,9 @@ function deploymentSecrets(params: {
     OPENCLAW_GATEWAY_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
     ...(params.gatewayLocation === "local" ? localAccessSecrets(params.owner, params.localPort, {}) : {}),
     ...(params.telegramToken ? { TELEGRAM_BOT_TOKEN: params.telegramToken } : {}),
+    ...(params.approvalTelegramToken ? { MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN: params.approvalTelegramToken } : {}),
     ...(params.telegramUserId ? { TELEGRAM_ALLOWED_USERS: params.telegramUserId } : {}),
     ...(params.bucketPrefix ? { OPENCLAW_HF_STATE_PREFIX: params.bucketPrefix } : {}),
-    ...(params.telegramProxy ? { TELEGRAM_PROXY: params.telegramProxy } : {}),
-    ...(params.telegramApiRoot ? { TELEGRAM_API_ROOT: params.telegramApiRoot } : {}),
   };
 }
 
@@ -3917,6 +3934,13 @@ async function update(
   ) {
     throw new Error(`${repoId} does not look like a ML Claw deployment; pass --force to update anyway`);
   }
+  if (!canonicalTemplate) {
+    const secretRecords = await hub.getSpaceSecrets(repoId);
+    const telegramIssue = telegramApprovalSecretIssue(secretRecords);
+    if (telegramIssue) {
+      throw new Error(`${telegramIssue}; run \`mlclaw bootstrap --name ${repoId.split("/")[1] ?? "agent"}\` first`);
+    }
+  }
   const runtimeImage = resolveSpaceRuntimeImage(opts, runtime.env);
   const agentName = variables.get("OPENCLAW_AGENT_NAME")?.value?.trim() || repoId.split("/")[1] || "openclaw";
   let localManifest: DeploymentManifest | undefined;
@@ -4163,6 +4187,22 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
   } else if (!secrets.has("MLCLAW_BROKER_HF_TOKEN")) {
     issues.push("secret MLCLAW_BROKER_HF_TOKEN is missing");
   }
+  const unsupportedTelegramTransportSecrets = ["TELEGRAM_PROXY", "TELEGRAM_API_ROOT"].filter((key) => secrets.has(key));
+  if (unsupportedTelegramTransportSecrets.length > 0) {
+    if (fix) {
+      for (const key of unsupportedTelegramTransportSecrets) {
+        await hub.deleteSpaceSecret(repoId, key);
+        secrets.delete(key);
+      }
+      fixed.push(`deleted unsupported Telegram transport secrets ${unsupportedTelegramTransportSecrets.join(", ")}`);
+    } else {
+      issues.push(
+        `unsupported Telegram transport secrets present: ${unsupportedTelegramTransportSecrets.join(", ")}; approval routing uses the standard Telegram Bot API directly`,
+      );
+    }
+  }
+  const telegramIssue = telegramApprovalSecretIssue(secrets);
+  if (telegramIssue) issues.push(telegramIssue);
   const staleTokenSecrets = ["HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"].filter((key) => secrets.has(key));
   if (staleTokenSecrets.length > 0) {
     const model = variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL;
@@ -4425,12 +4465,17 @@ async function setSpaceGatewaySecrets(
       MLCLAW_BROKER_HF_TOKEN: requiredSecret(secrets, "MLCLAW_BROKER_HF_TOKEN"),
       ...(secrets.MLCLAW_ROUTER_TOKEN ? { MLCLAW_ROUTER_TOKEN: secrets.MLCLAW_ROUTER_TOKEN } : {}),
       ...(secrets.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: secrets.TELEGRAM_BOT_TOKEN } : {}),
+      ...(secrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN
+        ? { MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN: secrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN }
+        : {}),
       ...(secrets.TELEGRAM_ALLOWED_USERS ? { TELEGRAM_ALLOWED_USERS: secrets.TELEGRAM_ALLOWED_USERS } : {}),
-      ...(secrets.TELEGRAM_PROXY ? { TELEGRAM_PROXY: secrets.TELEGRAM_PROXY } : {}),
-      ...(secrets.TELEGRAM_API_ROOT ? { TELEGRAM_API_ROOT: secrets.TELEGRAM_API_ROOT } : {}),
     },
     assertMutation,
   );
+  for (const key of ["TELEGRAM_PROXY", "TELEGRAM_API_ROOT"]) {
+    await assertMutation();
+    await hub.deleteSpaceSecret(repoId, key);
+  }
 }
 
 async function deleteStaleSpaceTokenSecrets(
@@ -4446,6 +4491,18 @@ async function deleteStaleSpaceTokenSecrets(
 
 function canDeleteBroadTokenSecrets(params: { model: string; routerTokenPresent: boolean }): boolean {
   return params.routerTokenPresent || !isHuggingFaceRouterModel(params.model);
+}
+
+function telegramApprovalSecretIssue(secrets: Map<string, { key: string }>): string | undefined {
+  const conversationConfigured = secrets.has("TELEGRAM_BOT_TOKEN");
+  const approvalConfigured = secrets.has("MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
+  if (conversationConfigured && !approvalConfigured) {
+    return "Telegram is missing the separate unYOLO approval bot secret";
+  }
+  if (approvalConfigured && !conversationConfigured) {
+    return "the unYOLO approval bot secret is set without the ML Claw conversation bot";
+  }
+  return undefined;
 }
 
 function hasRouterTokenSecretRecord(secrets: Record<string, string>): boolean {
@@ -4564,6 +4621,21 @@ async function readOptionalTelegramToken(
     return (match?.[1] ?? raw.trim()).trim();
   }
   return undefined;
+}
+
+async function readOptionalApprovalTelegramToken(opts: BootstrapOptions): Promise<string | undefined> {
+  if (!opts.approvalTelegramTokenFile) return undefined;
+  const raw = await fs.readFile(opts.approvalTelegramTokenFile, "utf8");
+  const parsed = parseSecretEnv(raw);
+  return nonEmpty(parsed.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN) ?? nonEmpty(raw);
+}
+
+function normalizeTelegramPrivateUserId(value: string): string {
+  const normalized = value.trim();
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
+    throw new Error("Telegram approvals require one positive private-chat user ID");
+  }
+  return normalized;
 }
 
 async function resolveRouterToken(params: {
@@ -5330,6 +5402,14 @@ async function promptRequired(label: string, runtime: Required<CliRuntime>): Pro
     throw new Error(`${label} is required`);
   }
   const value = await runtime.prompt.text({ message: label });
+  return readPromptValue(value, label);
+}
+
+async function promptRequiredSecret(label: string, runtime: Required<CliRuntime>): Promise<string> {
+  if (!runtime.prompt.isInteractive()) {
+    throw new Error(`${label} is required; pass --approval-telegram-token-file`);
+  }
+  const value = await runtime.prompt.password({ message: label });
   return readPromptValue(value, label);
 }
 

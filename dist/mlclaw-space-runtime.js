@@ -312,6 +312,7 @@ import process2 from "node:process";
 // src/mlclaw-space-runtime/config.ts
 import { readFileSync as readFileSync2 } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { isAbsolute as isAbsolute2 } from "node:path";
 
 // src/hf-state-sync/paths.ts
 var DEFAULT_BUCKET_PREFIX = "openclaw-state";
@@ -4465,6 +4466,10 @@ function loadConfig(env = process.env) {
     openclawCommand,
     openclawArgs,
     unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
+    unyoloTelegramConfigPath: optionalAbsolutePath(
+      env.MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH,
+      "MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH"
+    ),
     agentName,
     model,
     modelChoices: runtimeSettings2.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
@@ -4581,6 +4586,11 @@ function splitArgs(value) {
 function trim(value) {
   const trimmed = value?.trim();
   return trimmed || void 0;
+}
+function optionalAbsolutePath(value, name) {
+  const path9 = trim(value);
+  if (path9 && !isAbsolute2(path9)) throw new Error(`${name} must be absolute`);
+  return path9;
 }
 function readRuntimeSettings(file) {
   try {
@@ -20228,9 +20238,11 @@ var SpaceRuntimeServer = class {
     });
   }
   openclaw;
+  unyoloTelegram;
   openclawGatewayPassword = randomBytes9(48).toString("base64url");
   openclawStarting = false;
   openclawStopping = false;
+  unyoloTelegramStopping = false;
   app;
   exitProcess;
   syncOAuthProfile;
@@ -20241,7 +20253,13 @@ var SpaceRuntimeServer = class {
   async start() {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
-      await this.startOpenClaw();
+      try {
+        await this.startUnyoloTelegram();
+        await this.startOpenClaw();
+      } catch (err) {
+        await this.stop();
+        throw err;
+      }
     }
     const server2 = http3.createServer((req, res) => {
       this.handle(req, res).catch((err) => {
@@ -20296,7 +20314,65 @@ var SpaceRuntimeServer = class {
   }
   async stop() {
     await this.stopOpenClaw();
+    await this.stopUnyoloTelegram();
     await this.mcpIntegrations.stop();
+  }
+  async startUnyoloTelegram() {
+    const configPath = this.config.unyoloTelegramConfigPath;
+    if (!configPath || this.unyoloTelegram) return;
+    const command = this.config.unyoloTelegramCommand ?? "/usr/sbin/gosu";
+    const args = this.config.unyoloTelegramArgs ?? [
+      "unyolo-telegram",
+      "/usr/local/bin/unyolo-telegram",
+      "serve",
+      "--config",
+      configPath
+    ];
+    const child = spawn2(command, args, {
+      stdio: "inherit",
+      env: unyoloTelegramEnvironment(process.env)
+    });
+    this.unyoloTelegram = child;
+    let started = false;
+    const spawned = new Promise((resolve, reject) => {
+      child.once("spawn", () => {
+        started = true;
+        resolve();
+      });
+      child.once("error", reject);
+    });
+    child.once("exit", (code, signal) => {
+      process.stdout.write(`[unyolo-telegram] exited code=${code ?? "null"} signal=${signal ?? "null"}
+`);
+      if (this.unyoloTelegram === child) this.unyoloTelegram = void 0;
+      if (started && !this.unyoloTelegramStopping) {
+        this.exitProcess(typeof code === "number" && code !== 0 ? code : 1);
+      }
+    });
+    try {
+      await spawned;
+    } catch (err) {
+      if (this.unyoloTelegram === child) this.unyoloTelegram = void 0;
+      throw err;
+    }
+    process.stdout.write("[unyolo-telegram] approval ingress started\n");
+  }
+  async stopUnyoloTelegram() {
+    const child = this.unyoloTelegram;
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      this.unyoloTelegram = void 0;
+      return;
+    }
+    this.unyoloTelegramStopping = true;
+    child.kill("SIGTERM");
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => child.kill("SIGKILL"), 1e4);
+      child.once("exit", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    this.unyoloTelegramStopping = false;
   }
   async stopOpenClaw() {
     const child = this.openclaw;
@@ -20473,6 +20549,31 @@ var SpaceRuntimeServer = class {
     res.end(body);
   }
 };
+var UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
+  "PATH",
+  "TZ",
+  "LANG",
+  "LC_ALL",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy"
+];
+function unyoloTelegramEnvironment(source) {
+  const env = {
+    HOME: "/var/lib/unyolo-telegram",
+    USER: "unyolo-telegram",
+    LOGNAME: "unyolo-telegram"
+  };
+  for (const key of UNYOLO_TELEGRAM_ENV_ALLOWLIST) {
+    if (source[key] !== void 0) env[key] = source[key];
+  }
+  return env;
+}
 var OPENCLAW_ENV_ALLOWLIST = [
   "PATH",
   "NODE_ENV",
@@ -20487,10 +20588,8 @@ var OPENCLAW_ENV_ALLOWLIST = [
   "OPENCLAW_WORKSPACE_DIR",
   "MLCLAW_HF_BROKER_URL",
   "MLCLAW_HF_BROKER_AGENT_SECRET_FILE",
-  "TELEGRAM_API_ROOT",
   "TELEGRAM_ALLOWED_USERS",
-  "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_PROXY"
+  "TELEGRAM_BOT_TOKEN"
 ];
 function allowedOpenClawEnvironment(source) {
   const env = {};

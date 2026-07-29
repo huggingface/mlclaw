@@ -31,6 +31,15 @@ function createDb(file: string): void {
   db.close();
 }
 
+function readDbValues(file: string): string[] {
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    return (db.prepare("SELECT v FROM t ORDER BY rowid").all() as Array<{ v: unknown }>).map((row) => String(row.v));
+  } finally {
+    db.close();
+  }
+}
+
 async function buildFakeLiveDir(): Promise<string> {
   const live = path.join(dir, "live");
   const state = path.join(live, ".openclaw");
@@ -41,6 +50,7 @@ async function buildFakeLiveDir(): Promise<string> {
   await fs.mkdir(path.join(live, "workspace"), { recursive: true });
   await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "control"), { recursive: true });
   await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker"), { recursive: true });
+  await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/telegram"), { recursive: true });
   await fs.mkdir(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker/mirrors/dataset/example.git"), {
     recursive: true,
   });
@@ -55,6 +65,11 @@ async function buildFakeLiveDir(): Promise<string> {
     "unyolo-state-v1-grant-uses\n",
   );
   await fs.writeFile(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker/state.db"), "protected broker state");
+  createDb(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/telegram/callbacks.db"));
+  await fs.writeFile(
+    path.join(live, PROTECTED_STATE_DIR_NAME, "control/unyolo-telegram-inbox-key"),
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+  );
   await fs.writeFile(
     path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker/mirrors/dataset/example.git/HEAD"),
     "ref: refs/heads/main\n",
@@ -122,8 +137,18 @@ describe("protected staging", () => {
       sourceDir: path.join(live, PROTECTED_STATE_DIR_NAME),
       archiveName: PROTECTED_STATE_DIR_NAME,
     });
+    const liveInbox = new DatabaseSync(path.join(live, PROTECTED_STATE_DIR_NAME, "unyolo/telegram/callbacks.db"));
+    liveInbox.exec("PRAGMA wal_autocheckpoint=0");
+    liveInbox.prepare("INSERT INTO t (v) VALUES (?)").run("pending callback");
 
-    await expect(stage({ liveDir: live, archivePath: archive })).resolves.toMatchObject({ kind: "staged" });
+    try {
+      await expect(stage({ liveDir: live, archivePath: archive })).resolves.toEqual({
+        kind: "staged",
+        databaseCount: 2,
+      });
+    } finally {
+      liveInbox.close();
+    }
     const extracted = path.join(dir, "protected-extracted");
     await extractTarZst(archive, extracted);
     await expect(fs.readFile(path.join(extracted, "workspace/draft.md"), "utf8")).resolves.toBe("user work");
@@ -133,6 +158,16 @@ describe("protected staging", () => {
     await expect(
       fs.readFile(path.join(extracted, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker/state.db"), "utf8"),
     ).resolves.toBe("protected broker state");
+    expect(readDbValues(path.join(extracted, PROTECTED_STATE_DIR_NAME, "unyolo/telegram/callbacks.db"))).toEqual([
+      "durable",
+      "pending callback",
+    ]);
+    await expect(
+      fs.access(path.join(extracted, PROTECTED_STATE_DIR_NAME, "unyolo/telegram/callbacks.db-wal")),
+    ).rejects.toThrow();
+    await expect(
+      fs.readFile(path.join(extracted, PROTECTED_STATE_DIR_NAME, "control/unyolo-telegram-inbox-key"), "utf8"),
+    ).resolves.toMatch(/^[0-9a-f]{64}\n$/);
     await expect(
       fs.access(path.join(extracted, PROTECTED_STATE_DIR_NAME, "unyolo/hf-broker/mirrors")),
     ).rejects.toThrow();
