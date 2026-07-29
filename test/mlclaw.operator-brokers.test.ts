@@ -18,6 +18,7 @@ function approval(id: string, status: string, revision: number) {
     revision,
     requester: "bob",
     operation: "repo.update",
+    mode: "window",
     status,
     requested_at: "2026-07-11T00:00:00Z",
     pending_expires_at: "2026-07-11T00:05:00Z",

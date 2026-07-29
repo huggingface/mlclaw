@@ -15,6 +15,8 @@ STATE_HF_TOKEN=""
 RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
 PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"
 HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"
+HF_BROKER_STATE_CONTRACT="unyolo-state-v1-grant-uses"
+HF_BROKER_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/hf-broker-state-contract"
 
 prepare_hf_broker() {
   local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
@@ -70,12 +72,20 @@ restore_protected_state() {
     cp -a "$RESTORED_PROTECTED_STATE_DIR/." "$PROTECTED_STATE_DIR/"
     rm -rf "$RESTORED_PROTECTED_STATE_DIR"
   fi
-  # HF Broker v0.7.0 replaces its pre-release state contract and requires fresh
-  # state. The renamed path preserves new unYOLO state across later restarts
-  # while the superseded state is removed instead of imported.
+  # unYOLO replaces incompatible pre-release state contracts in place. Reset
+  # the broker state once for this contract, then preserve the new state across
+  # restarts. Superseded state is removed instead of imported.
   rm -rf "$PROTECTED_STATE_DIR/hf-broker"
   install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR/control"
   install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"
+  if [ ! -f "$HF_BROKER_STATE_CONTRACT_FILE" ] || [ -L "$HF_BROKER_STATE_CONTRACT_FILE" ] || \
+    [ "$(cat "$HF_BROKER_STATE_CONTRACT_FILE" 2>/dev/null || true)" != "$HF_BROKER_STATE_CONTRACT" ]; then
+    rm -rf "$HF_BROKER_STATE_DIR"
+    rm -f "$HF_BROKER_STATE_CONTRACT_FILE"
+    printf '%s\n' "$HF_BROKER_STATE_CONTRACT" > "$HF_BROKER_STATE_CONTRACT_FILE"
+  fi
+  chown root:root "$HF_BROKER_STATE_CONTRACT_FILE"
+  chmod 0600 "$HF_BROKER_STATE_CONTRACT_FILE"
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
   rm -rf -- \
     "$HF_BROKER_STATE_DIR/grants" \

@@ -118,7 +118,16 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"');
     expect(entrypoint).toContain('PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"');
     expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"');
+    expect(entrypoint).toContain('HF_BROKER_STATE_CONTRACT="unyolo-state-v1-grant-uses"');
+    expect(entrypoint).toContain(
+      'HF_BROKER_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/hf-broker-state-contract"',
+    );
     expect(entrypoint).toContain('rm -rf "$PROTECTED_STATE_DIR/hf-broker"');
+    expect(entrypoint).toContain('[ ! -f "$HF_BROKER_STATE_CONTRACT_FILE" ]');
+    expect(entrypoint).toContain('[ -L "$HF_BROKER_STATE_CONTRACT_FILE" ]');
+    expect(entrypoint).toContain('rm -rf "$HF_BROKER_STATE_DIR"');
+    expect(entrypoint).toContain('rm -f "$HF_BROKER_STATE_CONTRACT_FILE"');
+    expect(entrypoint).toContain("printf '%s\\n' \"$HF_BROKER_STATE_CONTRACT\"");
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"');
     expect(entrypoint).toContain('chmod 0710 "$PROTECTED_STATE_DIR"');

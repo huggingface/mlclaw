@@ -10,6 +10,7 @@ function request(id: string, revision = 1, status = "pending") {
     revision,
     requester: "bob",
     operation: "repo.update",
+    mode: "window",
     status,
     requested_at: "2026-07-12T00:00:00Z",
     pending_expires_at: "2026-07-12T01:00:00Z",

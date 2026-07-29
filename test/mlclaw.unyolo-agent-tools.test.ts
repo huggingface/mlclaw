@@ -1,6 +1,12 @@
-import { spawn } from "node:child_process";
+import { execFile as execFileCallback, spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
+
+const execFile = promisify(execFileCallback);
 
 const brokerBinary = process.env.MLCLAW_HF_BROKER_BINARY;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -10,6 +16,41 @@ afterEach(async () => {
 });
 
 describe.runIf(brokerBinary)("pinned unYOLO agent tools", () => {
+  it("renders reusable seven-day job windows in the default policy", async () => {
+    if (!brokerBinary) throw new Error("MLCLAW_HF_BROKER_BINARY is required");
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-policy-"));
+    cleanups.push(() => fs.rm(directory, { recursive: true, force: true }));
+    const scopePath = path.join(directory, "scope.json");
+    await execFile(brokerBinary, [
+      "policy",
+      "render",
+      "--preset",
+      "request-all-agent-operations",
+      "--client",
+      "default",
+      "--profile-out",
+      path.join(directory, "profile.json"),
+      "--output",
+      scopePath,
+      "--manifest-out",
+      path.join(directory, "manifest.json"),
+    ]);
+
+    const scope = jsonObject(JSON.parse(await fs.readFile(scopePath, "utf8")), "rendered policy");
+    const jobRule = arrayField(scope, "rules")
+      .map((value) => jsonObject(value, "policy rule"))
+      .find((rule) => arrayField(rule, "operations").includes("job.run"));
+    expect(jobRule).toBeDefined();
+    expect(jobRule?.effect).toBe("request");
+    expect(objectValue(jobRule?.grant_policy)).toMatchObject({
+      mode: "window",
+      default_minutes: 5,
+      max_minutes: 10_080,
+      default_max_uses: 1_000_000,
+      max_uses: 1_000_000,
+    });
+  });
+
   it("advertises bounded transcript-safe submission and recovery schemas", async () => {
     const backend = await startAgentBackend();
     cleanups.push(backend.close);

@@ -319,11 +319,13 @@ The popover uses a renewable, short-lived, admin-bound browser token.
 Broker operator tokens remain in backend-only files and are never sent to the
 browser or OpenClaw.
 
-ML Claw 0.7.0 adopts unYOLO's renamed version 1 contracts and starts HF Broker
-with fresh state, as required by HF Broker 0.7.0. Pending approvals, active
+ML Claw 0.8.0 adopts unYOLO's reusable grant contract and starts HF Broker
+with fresh state, as required by HF Broker 0.8.0. Pending approvals, active
 grants, and broker audit records from earlier ML Claw releases are not imported.
 OpenClaw conversations, workspace files, model credentials, and deployment
-settings remain in the normal ML Claw snapshot.
+settings remain in the normal ML Claw snapshot. Requestable Hugging Face
+operations now use reusable windows by default; policy can still require one
+exact single-use execution.
 
 See
 [Operator Broker Configuration](docs/operator-brokers-config.md).

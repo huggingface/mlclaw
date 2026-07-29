@@ -15383,10 +15383,10 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.7.0",
+  "packageVersion": "0.8.0",
   "openclawVersion": "2026.7.2-beta.5",
-  "hfBrokerVersion": "hf-broker/v0.7.0",
-  "unyoloPluginVersion": "0.5.1",
+  "hfBrokerVersion": "hf-broker/v0.8.0",
+  "unyoloPluginVersion": "0.6.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 
