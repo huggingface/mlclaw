@@ -34,7 +34,7 @@
     "managed": [
       {
         "name": "hf-broker",
-        "source": "https://github.com/osolmaz/brokerkit",
+        "source": "https://github.com/osolmaz/unyolo",
         "revision": "hf-broker/v0.6.2"
       }
     ],

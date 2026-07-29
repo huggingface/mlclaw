@@ -15,17 +15,17 @@ const packageLock = JSON.parse(fs.readFileSync(packageLockFile, "utf8"));
 const releaseConfig = {
   packageVersion: requiredString(pkg.version, "package version"),
   openclawVersion: requiredString(pkg.config?.openclawVersion, "OpenClaw version"),
-  brokerkitVersion: requiredString(pkg.config?.brokerkitVersion, "BrokerKit version"),
-  brokerkitPluginVersion: requiredString(pkg.config?.brokerkitPluginVersion, "BrokerKit plugin version"),
+  hfBrokerVersion: requiredString(pkg.config?.hfBrokerVersion, "HF Broker version"),
+  unyoloPluginVersion: requiredString(pkg.config?.unyoloPluginVersion, "unYOLO plugin version"),
   runtimeImageRepository: requiredString(pkg.config?.runtimeImageRepository, "runtime image repository"),
 };
-if (pkg.dependencies?.["openclaw-brokerkit"] !== releaseConfig.brokerkitPluginVersion) {
-  throw new Error("openclaw-brokerkit dependency must exactly match config.brokerkitPluginVersion");
+if (pkg.dependencies?.["openclaw-unyolo"] !== releaseConfig.unyoloPluginVersion) {
+  throw new Error("openclaw-unyolo dependency must exactly match config.unyoloPluginVersion");
 }
 if (
   packageLock.version !== releaseConfig.packageVersion ||
   packageLock.packages?.[""]?.version !== releaseConfig.packageVersion ||
-  packageLock.packages?.[""]?.dependencies?.["openclaw-brokerkit"] !== releaseConfig.brokerkitPluginVersion
+  packageLock.packages?.[""]?.dependencies?.["openclaw-unyolo"] !== releaseConfig.unyoloPluginVersion
 ) {
   throw new Error("package-lock.json release metadata is stale; run npm install --package-lock-only");
 }
@@ -35,8 +35,8 @@ const runtimeImage = `${releaseConfig.runtimeImageRepository}:${releaseConfig.pa
 const dockerValues = new Map([
   ["OPENCLAW_VERSION", releaseConfig.openclawVersion],
   ["OPENCLAW_BASE_IMAGE", "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"],
-  ["BROKERKIT_PLUGIN_VERSION", releaseConfig.brokerkitPluginVersion],
-  ["BROKERKIT_VERSION", releaseConfig.brokerkitVersion],
+  ["UNYOLO_PLUGIN_VERSION", releaseConfig.unyoloPluginVersion],
+  ["HF_BROKER_VERSION", releaseConfig.hfBrokerVersion],
   ["MLCLAW_RUNTIME_IMAGE", runtimeImage],
 ]);
 const currentDockerfile = fs.readFileSync(dockerfile, "utf8");

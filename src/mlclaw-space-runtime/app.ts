@@ -7,7 +7,7 @@ import { integrationCredentialSlot, type SpaceRuntimeConfig } from "./config.js"
 import { BrokerOperatorError, OperatorBrokerRegistry } from "./operator-brokers.js";
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
-import { DelegatedBrokerKit, DelegatedBrokerKitError, type DelegatedSessionIdentity } from "./delegated-brokerkit.js";
+import { DelegatedUnyolo, DelegatedUnyoloError, type DelegatedSessionIdentity } from "./delegated-unyolo.js";
 import {
   normalizeModel,
   restartCurrentSpace,
@@ -46,7 +46,7 @@ import {
 } from "./session.js";
 import { CONTROL_BRANDING_SCRIPT, SERVICE_WORKER_RESET_SCRIPT } from "./shell.js";
 
-const BROKERKIT_SESSION_HEADER = "brokerkit-session";
+const UNYOLO_SESSION_HEADER = "unyolo-session";
 
 export type RuntimeControls = {
   openclawRunning(): boolean;
@@ -63,10 +63,10 @@ export type RuntimeControls = {
 export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: RuntimeControls): Hono {
   const app = new Hono();
   const operatorBrokers = new OperatorBrokerRegistry(config.operatorBrokers);
-  const delegatedBrokerKit = new DelegatedBrokerKit(operatorBrokers, config.sessionSecret);
+  const delegatedUnyolo = new DelegatedUnyolo(operatorBrokers, config.sessionSecret);
   const allowDelegatedSessionSnapshot = fixedWindowRateLimit(12, 60_000);
   const allowDelegatedActorSnapshot = fixedWindowRateLimit(60, 60_000);
-  const allowBrokerKitSummary = fixedWindowRateLimit(12, 60_000);
+  const allowUnyoloSummary = fixedWindowRateLimit(12, 60_000);
   const allowDelegatedEvents = fixedWindowRateLimit(60, 60_000);
   const allowSummaryEvents = fixedWindowRateLimit(60, 60_000);
   const allowLocalLogin = fixedWindowRateLimit(10, 60_000);
@@ -84,8 +84,8 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     serveFile(path.join(config.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8"),
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
-  app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
-  app.get("/plugins/brokerkit/ui/*", (c) => trustedBrokerKitUi(c, config, delegatedBrokerKit));
+  app.get("/plugins/unyolo/ui", (c) => c.redirect("/plugins/unyolo/ui/", 308));
+  app.get("/plugins/unyolo/ui/*", (c) => trustedUnyoloUi(c, config, delegatedUnyolo));
   app.get("/assets/brand/logo", async () => serveBrandAsset(config, config.branding.logoAsset));
   app.get("/favicon.svg", async () => serveBrandAsset(config, config.branding.faviconSvgAsset));
   app.get("/favicon-32.png", async () => serveBrandAsset(config, config.branding.favicon32Asset));
@@ -192,77 +192,77 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     return c.json(await statusPayload(config, controls));
   });
 
-  app.get("/mlclaw/api/brokerkit/summary", async (c) => {
+  app.get("/trusted-host/api/unyolo/summary", async (c) => {
     const auth = requireAdmin(c, config);
     if (auth instanceof Response) return auth;
-    if (!allowBrokerKitSummary(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
+    if (!allowUnyoloSummary(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
     try {
-      return c.json(await delegatedBrokerKit.summary());
+      return c.json(await delegatedUnyolo.summary());
     } catch {
       return c.json({ ok: false, error: "operator inbox unavailable" }, 503);
     }
   });
 
-  app.get("/mlclaw/api/brokerkit/summary/events", async (c) => {
+  app.get("/trusted-host/api/unyolo/summary/events", async (c) => {
     const auth = requireAdmin(c, config);
     if (auth instanceof Response) return auth;
     if (!allowSummaryEvents(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
     const input = delegatedEventQuery(c.req.url);
     if (!input) return c.json({ ok: false, error: "invalid request" }, 400);
     try {
-      return c.json(await delegatedBrokerKit.events(input.cursor, input.waitSeconds, c.req.raw.signal));
+      return c.json(await delegatedUnyolo.events(input.cursor, input.waitSeconds, c.req.raw.signal));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
 
-  app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
+  app.options("/trusted-host/api/unyolo/*", (c) => delegatedPreflight(c));
 
-  app.post("/mlclaw/api/brokerkit/session", (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.post("/trusted-host/api/unyolo/session", (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
-    return delegatedJson(c, delegatedBrokerKit.issueSession(identity.actor, identity.access));
+    return delegatedJson(c, delegatedUnyolo.issueSession(identity.actor, identity.access));
   });
 
-  app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/snapshot", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     if (!allowDelegatedSessionSnapshot(identity.sessionId) || !allowDelegatedActorSnapshot(identity.actor)) {
       return delegatedErrorResponse(c, "rate_limited", 429);
     }
     try {
-      return delegatedJson(c, await delegatedBrokerKit.snapshot());
+      return delegatedJson(c, await delegatedUnyolo.snapshot());
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
 
-  app.get("/mlclaw/api/brokerkit/events", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/events", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     if (!allowDelegatedEvents(identity.sessionId)) return delegatedErrorResponse(c, "rate_limited", 429);
     const input = delegatedEventQuery(c.req.url);
     if (!input) return delegatedErrorResponse(c, "invalid_input", 400);
     try {
-      return delegatedJson(c, await delegatedBrokerKit.events(input.cursor, input.waitSeconds, c.req.raw.signal));
+      return delegatedJson(c, await delegatedUnyolo.events(input.cursor, input.waitSeconds, c.req.raw.signal));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
 
-  app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/requests/:handle", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
+      return delegatedJson(c, await delegatedUnyolo.detail(c.req.param("handle")));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
 
   for (const action of ["approve", "deny", "revoke"] as const) {
-    app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
-      const identity = delegatedIdentity(c, delegatedBrokerKit);
+    app.post(`/trusted-host/api/unyolo/requests/:handle/${action}`, async (c) => {
+      const identity = delegatedIdentity(c, delegatedUnyolo);
       if (!identity || identity.access !== "decide") return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readBoundedJson(c, 16_384);
       if (!body || Object.keys(body).some((key) => !["expectedRevision", "constraints"].includes(key))) {
@@ -288,7 +288,7 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
       try {
         return delegatedJson(
           c,
-          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
+          await delegatedUnyolo.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
             ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
             ...(typeof maxUses === "number" || maxUses === null ? { maxUses } : {}),
           }),
@@ -299,7 +299,7 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
     });
   }
 
-  app.all("/mlclaw/api/brokerkit/*", (c) => delegatedErrorResponse(c, "not_found", 404));
+  app.all("/trusted-host/api/unyolo/*", (c) => delegatedErrorResponse(c, "not_found", 404));
 
   app.post("/mlclaw/api/integrations/huggingface/disconnect", async (c) => {
     const auth = requireAdmin(c, config);
@@ -585,16 +585,16 @@ async function controlUi(c: Context, config: SpaceRuntimeConfig): Promise<Respon
   return serveFile(path.join(config.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 
-async function trustedBrokerKitUi(
+async function trustedUnyoloUi(
   c: Context,
   config: SpaceRuntimeConfig,
-  delegatedBrokerKit: DelegatedBrokerKit,
+  delegatedUnyolo: DelegatedUnyolo,
 ): Promise<Response> {
-  const prefix = "/plugins/brokerkit/ui/";
+  const prefix = "/plugins/unyolo/ui/";
   const requested = c.req.path.slice(prefix.length);
   const relative = requested ? safeRelativePath(requested) : "index.html";
   if (!relative) return c.text("not found\n", 404);
-  const uiDir = path.join(config.brokerKitPluginPath, "dist", "ui");
+  const uiDir = path.join(config.unyoloPluginPath, "dist", "ui");
   const file = path.join(uiDir, relative);
   if (relative === "index.html") {
     const destination = c.req.header("sec-fetch-dest");
@@ -608,18 +608,18 @@ async function trustedBrokerKitUi(
       const template = await fs.readFile(file, "utf8");
       const delegatedSession = destination === "document" || embeddedPopover;
       const marker = !delegatedSession
-        ? '<meta name="brokerkit-delegated-top-level">'
-        : `<meta name="brokerkit-delegated-session" content="${Buffer.from(
+        ? '<meta name="unyolo-delegated-top-level">'
+        : `<meta name="unyolo-delegated-session" content="${Buffer.from(
             JSON.stringify(
-              delegatedBrokerKit.issueSession(
+              delegatedUnyolo.issueSession(
                 auth.username,
-                embeddedPopover && !config.brokerKitPopoverDecisions ? "read" : "decide",
+                embeddedPopover && !config.unyoloPopoverDecisions ? "read" : "decide",
               ),
             ),
             "utf8",
           ).toString("base64url")}">`;
       if (!template.includes("</head>")) return c.text("not found\n", 404);
-      const headers = trustedBrokerKitHeaders(
+      const headers = trustedUnyoloHeaders(
         embeddedPopover ? "popover" : destination === "iframe" ? "launcher" : "top-level",
         new URL(c.req.url).origin,
       );
@@ -631,12 +631,12 @@ async function trustedBrokerKitUi(
   }
   const response = await serveFile(file, contentType(file), true);
   if (response.status !== 200) return response;
-  const headers = trustedBrokerKitHeaders("asset", new URL(c.req.url).origin);
+  const headers = trustedUnyoloHeaders("asset", new URL(c.req.url).origin);
   headers.set("content-type", response.headers.get("content-type") ?? "application/octet-stream");
   return new Response(response.body, { status: response.status, headers });
 }
 
-function trustedBrokerKitHeaders(mode: "launcher" | "popover" | "top-level" | "asset", origin: string): Headers {
+function trustedUnyoloHeaders(mode: "launcher" | "popover" | "top-level" | "asset", origin: string): Headers {
   const asset = mode === "asset";
   const sandbox = mode === "top-level" || mode === "popover" ? "sandbox allow-scripts; " : "";
   const headers = new Headers({
@@ -735,15 +735,15 @@ function delegatedEventQuery(urlValue: string): { cursor: string; waitSeconds: n
   return { cursor, waitSeconds: Number(wait) };
 }
 
-function delegatedIdentity(c: Context, delegated: DelegatedBrokerKit): DelegatedSessionIdentity | undefined {
+function delegatedIdentity(c: Context, delegated: DelegatedUnyolo): DelegatedSessionIdentity | undefined {
   if (!delegatedOriginAllowed(c)) return undefined;
-  return delegated.authorizeSession(c.req.header(BROKERKIT_SESSION_HEADER));
+  return delegated.authorizeSession(c.req.header(UNYOLO_SESSION_HEADER));
 }
 
 function delegatedPreflight(c: Context): Response {
   if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
   delegatedHeaders(c);
-  c.header("access-control-allow-headers", `${BROKERKIT_SESSION_HEADER}, content-type`);
+  c.header("access-control-allow-headers", `${UNYOLO_SESSION_HEADER}, content-type`);
   c.header("access-control-allow-methods", "GET, POST, OPTIONS");
   c.header("access-control-max-age", "300");
   return c.body(null, 204);
@@ -764,7 +764,7 @@ function delegatedErrorResponse(
 }
 
 function delegatedFailure(c: Context, error: unknown): Response {
-  if (error instanceof DelegatedBrokerKitError) {
+  if (error instanceof DelegatedUnyoloError) {
     const status =
       error.code === "request_not_found"
         ? 404
@@ -781,7 +781,7 @@ function delegatedFailure(c: Context, error: unknown): Response {
     return delegatedErrorResponse(c, code, status);
   }
   process.stderr.write(
-    `[mlclaw] delegated BrokerKit request failed: route=${delegatedRouteLabel(c)} status=502 class=${safeErrorClass(error)}\n`,
+    `[mlclaw] delegated unYOLO request failed: route=${delegatedRouteLabel(c)} status=502 class=${safeErrorClass(error)}\n`,
   );
   return delegatedErrorResponse(c, "source_unavailable", 502);
 }

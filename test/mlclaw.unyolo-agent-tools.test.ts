@@ -9,7 +9,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-describe.runIf(brokerBinary)("pinned BrokerKit agent tools", () => {
+describe.runIf(brokerBinary)("pinned unYOLO agent tools", () => {
   it("advertises bounded transcript-safe submission and recovery schemas", async () => {
     const backend = await startAgentBackend();
     cleanups.push(backend.close);
@@ -66,7 +66,7 @@ describe.runIf(brokerBinary)("pinned BrokerKit agent tools", () => {
     });
 
     expect(grant).toMatchObject({
-      api_version: "brokerkit.io/mcp-grant/v1",
+      api_version: "unyolo.io/mcp-grant/v1",
       request_id: "weekly-bucket-write",
       status: "active",
       operation: "bucket.object.write",
@@ -186,11 +186,11 @@ async function startAgentBackend(): Promise<{
       response.writeHead(401).end(JSON.stringify({ error: { code: "unauthorized", message: "unauthorized" } }));
       return;
     }
-    if (request.method === "GET" && url.pathname === "/.well-known/brokerkit-agent") {
+    if (request.method === "GET" && url.pathname === "/.well-known/unyolo-agent") {
       response.writeHead(200).end(
         JSON.stringify({
-          api_version: "brokerkit.io/agent/v1",
-          contract_digest: "sha256:dedfef7e6b34e5058302c1c2eb379130b45905cdd9f220298d46ccabd248e876",
+          api_version: "unyolo.io/agent/v1",
+          contract_digest: "sha256:bdc7fc2230ea7db9ede54305f2adcb3e3c21451056e58f9467fd5dbcc4a3ddc7",
           build_id: "test",
           operations: [
             "repo.create",
@@ -269,7 +269,7 @@ async function startAgentBackend(): Promise<{
       const operation = operations.get(key);
       response.writeHead(200).end(
         JSON.stringify({
-          api_version: "brokerkit.io/agent/v1",
+          api_version: "unyolo.io/agent/v1",
           operations: operation ? [operationSummary(operation)] : [],
           next_cursor: null,
         }),
@@ -291,7 +291,7 @@ async function startAgentBackend(): Promise<{
 function createOperation(sequence: number, submission: AgentSubmission): AgentOperation {
   const now = "2026-07-15T00:00:00.000000000Z";
   return {
-    api_version: "brokerkit.io/agent/v1",
+    api_version: "unyolo.io/agent/v1",
     id: `op_${sequence}`,
     broker: "hf-broker",
     client_id: "openclaw",

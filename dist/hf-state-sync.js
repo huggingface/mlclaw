@@ -9479,7 +9479,7 @@ function protectedStageArchive(params) {
 }
 function includeProtectedSnapshotPath(sourceDir, source) {
   const relative = path7.relative(sourceDir, source);
-  return relative !== "hf-broker/mirrors" && !relative.startsWith(`hf-broker/mirrors${path7.sep}`);
+  return relative !== "unyolo/hf-broker/mirrors" && !relative.startsWith(`unyolo/hf-broker/mirrors${path7.sep}`);
 }
 function trustedStageArchive(config, scriptPath) {
   const canStageAsOpenClaw = process.getuid?.() === 0 && Boolean(scriptPath) && config.snapshotUid !== void 0 && config.snapshotGid !== void 0;

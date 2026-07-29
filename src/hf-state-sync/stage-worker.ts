@@ -74,7 +74,7 @@ export function protectedStageArchive(params: {
 
 export function includeProtectedSnapshotPath(sourceDir: string, source: string): boolean {
   const relative = path.relative(sourceDir, source);
-  return relative !== "hf-broker/mirrors" && !relative.startsWith(`hf-broker/mirrors${path.sep}`);
+  return relative !== "unyolo/hf-broker/mirrors" && !relative.startsWith(`unyolo/hf-broker/mirrors${path.sep}`);
 }
 
 export function trustedStageArchive(config: SyncConfig, scriptPath: string | undefined): StageArchive | undefined {

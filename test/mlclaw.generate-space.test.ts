@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateSpaceRepo } from "../src/mlclaw/git.js";
-import { BROKERKIT_PLUGIN_VERSION, BROKERKIT_VERSION, OPENCLAW_BASE_IMAGE } from "../src/mlclaw/runtime-image.js";
+import { UNYOLO_PLUGIN_VERSION, HF_BROKER_VERSION, OPENCLAW_BASE_IMAGE } from "../src/mlclaw/runtime-image.js";
 
 async function listFiles(root: string): Promise<string[]> {
   const entries = await fs.readdir(root, { recursive: true, withFileTypes: true });
@@ -105,24 +105,22 @@ describe("generated Space repository", () => {
 
     const dockerfile = await fs.readFile(path.join(outDir, "Dockerfile"), "utf8");
     expect(dockerfile).toContain(`FROM ${OPENCLAW_BASE_IMAGE}`);
-    expect(dockerfile).toContain(`ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}`);
-    expect(dockerfile).toContain(`ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}`);
+    expect(dockerfile).toContain(`ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}`);
+    expect(dockerfile).toContain(`ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}`);
     expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
     expect(dockerfile).not.toContain("@openai/codex");
     expect(dockerfile).toContain(
-      'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"',
+      'git -C /src fetch --depth=1 https://github.com/osolmaz/unyolo.git "refs/tags/$HF_BROKER_VERSION:refs/tags/$HF_BROKER_VERSION"',
     );
     expect(dockerfile).toContain(
-      'test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
+      'test "$(git -C /src rev-parse "refs/tags/$HF_BROKER_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
     );
     expect(dockerfile).toContain("GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker");
     expect(dockerfile).not.toContain("github.com/osolmaz/hf-broker.git");
-    expect(dockerfile).toContain(`"openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"`);
-    expect(dockerfile).not.toContain("brokerkit-plugin-build");
-    expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json");
-    expect(dockerfile).toContain(
-      "ENV MLCLAW_BROKERKIT_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
-    );
+    expect(dockerfile).toContain(`"openclaw-unyolo@\${UNYOLO_PLUGIN_VERSION}"`);
+    expect(dockerfile).not.toContain("unyolo-plugin-build");
+    expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json");
+    expect(dockerfile).toContain("ENV MLCLAW_UNYOLO_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-unyolo");
     expect(dockerfile).toContain("/out/hf-broker policy render");
     expect(dockerfile).toContain("--preset request-all-agent-operations");
     expect(dockerfile).toContain("--client default");

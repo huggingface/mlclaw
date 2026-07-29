@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
-  BROKERKIT_PLUGIN_VERSION,
-  BROKERKIT_VERSION,
-  DEFAULT_BROKERKIT_VERSION,
+  UNYOLO_PLUGIN_VERSION,
+  HF_BROKER_VERSION,
+  DEFAULT_HF_BROKER_VERSION,
   DEFAULT_RUNTIME_IMAGE,
   OPENCLAW_BASE_IMAGE,
   OPENCLAW_VERSION,
@@ -16,31 +16,29 @@ describe("runtime image Dockerfile", () => {
     const dockerfile = await fs.readFile("Dockerfile", "utf8");
 
     expect(dockerfile).toContain(`ARG OPENCLAW_VERSION=${OPENCLAW_VERSION}`);
-    expect(dockerfile).toContain(`ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}`);
-    expect(dockerfile).toContain(`ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}`);
-    expect(BROKERKIT_VERSION).toMatch(/^hf-broker\/v\d+\.\d+\.\d+$/u);
-    expect(DEFAULT_BROKERKIT_VERSION).toBe(BROKERKIT_VERSION);
-    expect(
-      dockerfile.match(/git -C \/src fetch --depth=1 https:\/\/github\.com\/osolmaz\/brokerkit\.git/g),
-    ).toHaveLength(1);
+    expect(dockerfile).toContain(`ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}`);
+    expect(dockerfile).toContain(`ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}`);
+    expect(HF_BROKER_VERSION).toMatch(/^hf-broker\/v\d+\.\d+\.\d+$/u);
+    expect(DEFAULT_HF_BROKER_VERSION).toBe(HF_BROKER_VERSION);
+    expect(dockerfile.match(/git -C \/src fetch --depth=1 https:\/\/github\.com\/osolmaz\/unyolo\.git/g)).toHaveLength(
+      1,
+    );
     expect(OPENCLAW_BASE_IMAGE).toBe(`ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`);
     expect(dockerfile).toContain("ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}");
     expect(dockerfile).toContain(`ARG MLCLAW_RUNTIME_IMAGE=${DEFAULT_RUNTIME_IMAGE}`);
     expect(dockerfile).toContain("FROM ${OPENCLAW_BASE_IMAGE}");
     expect(dockerfile).toContain(
-      'git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION"',
+      'git -C /src fetch --depth=1 https://github.com/osolmaz/unyolo.git "refs/tags/$HF_BROKER_VERSION:refs/tags/$HF_BROKER_VERSION"',
     );
     expect(dockerfile).toContain(
-      'test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
+      'test "$(git -C /src rev-parse "refs/tags/$HF_BROKER_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)"',
     );
-    expect(dockerfile).toContain(`"openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"`);
+    expect(dockerfile).toContain(`"openclaw-unyolo@\${UNYOLO_PLUGIN_VERSION}"`);
     expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
     expect(dockerfile).not.toContain("@openai/codex");
-    expect(dockerfile).not.toContain("brokerkit-plugin-build");
-    expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json");
-    expect(dockerfile).toContain(
-      "ENV MLCLAW_BROKERKIT_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
-    );
+    expect(dockerfile).not.toContain("unyolo-plugin-build");
+    expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json");
+    expect(dockerfile).toContain("ENV MLCLAW_UNYOLO_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-unyolo");
     expect(dockerfile).toContain("/out/hf-broker policy render");
     expect(dockerfile).toContain("--preset request-all-agent-operations");
     expect(dockerfile).toContain("--client default");
@@ -119,9 +117,12 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('export MLCLAW_OPENCLAW_GID="$OPENCLAW_GID"');
     expect(entrypoint).toContain('RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"');
     expect(entrypoint).toContain('PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"');
-    expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"');
+    expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"');
+    expect(entrypoint).toContain('rm -rf "$PROTECTED_STATE_DIR/hf-broker"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"');
+    expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"');
     expect(entrypoint).toContain('chmod 0710 "$PROTECTED_STATE_DIR"');
+    expect(entrypoint).toContain("node /app/mlclaw-space-runtime.js prepare-unyolo-config");
     expect(entrypoint).not.toContain("printf '{\"grants\":[]}\\n'");
     expect(entrypoint).not.toContain("grant_store");
     expect(entrypoint).not.toContain('install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR/grants"');

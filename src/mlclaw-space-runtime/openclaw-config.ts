@@ -11,6 +11,14 @@ export const BROKER_MCP_REQUEST_TIMEOUT_MS = 45_000;
 // OpenClaw has no disabled reset mode. This valid idle window is over 4,000 years.
 export const AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2_147_483_647;
 
+export async function prepareUnyoloConfig(configPath: string): Promise<void> {
+  const parsed = objectValue(JSON.parse(await fs.readFile(configPath, "utf8")));
+  if (!parsed) throw new Error("OpenClaw configuration must be an object");
+  removeSupersededPluginConfig(parsed);
+  await fs.writeFile(configPath, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+  await fs.chmod(configPath, 0o600);
+}
+
 export async function configureOpenClawGateway(
   config: SpaceRuntimeConfig,
   options: { codexConfigured?: boolean; openAiConfigured?: boolean } = {},
@@ -44,7 +52,7 @@ export async function configureOpenClawGateway(
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
-  configureBrokerKitPlugin(openclawConfig, config);
+  configureUnyoloPlugin(openclawConfig, config);
 
   await fs.mkdir(path.dirname(config.openclawConfigPath), { recursive: true });
   await fs.writeFile(config.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}\n`, { mode: 0o600 });
@@ -160,17 +168,18 @@ function configureCodexRuntimePlugin(openclawConfig: Record<string, unknown>, en
   };
 }
 
-function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
+function configureUnyoloPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
+  removeSupersededPluginConfig(openclawConfig);
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
-  load.paths = uniqueStrings(load.paths, config.brokerKitPluginPath);
-  if (plugins.allow !== undefined) plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
+  load.paths = uniqueStrings(load.paths, config.unyoloPluginPath);
+  if (plugins.allow !== undefined) plugins.allow = uniqueStrings(plugins.allow, "unyolo");
   const entries = object(plugins, "entries");
-  entries.brokerkit = {
+  entries.unyolo = {
     enabled: true,
     config: {
       mode: "delegated-web",
-      delegatedWeb: { basePath: "/mlclaw/api/brokerkit" },
+      delegatedWeb: { basePath: "/trusted-host/api/unyolo" },
     },
   };
 }
@@ -423,4 +432,22 @@ function objectValue(value: unknown): Record<string, unknown> | undefined {
 function uniqueStrings(value: unknown, required: string): string[] {
   const current = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   return [...new Set([...current, required])];
+}
+
+function removeSupersededPluginConfig(openclawConfig: Record<string, unknown>): void {
+  const plugins = objectValue(openclawConfig.plugins);
+  if (!plugins) return;
+  const load = objectValue(plugins.load);
+  if (load?.paths !== undefined) {
+    load.paths = withoutString(load.paths, "/opt/openclaw-plugins/node_modules/openclaw-brokerkit");
+  }
+  if (plugins.allow !== undefined) plugins.allow = withoutString(plugins.allow, "brokerkit");
+  const entries = objectValue(plugins.entries);
+  if (entries) delete entries.brokerkit;
+}
+
+function withoutString(value: unknown, removed: string): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item !== removed)
+    : [];
 }

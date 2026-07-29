@@ -8,7 +8,7 @@ import {
   type BrokerRequest,
   type Discovery,
   type RequestPage,
-} from "openclaw-brokerkit/operator-v1";
+} from "openclaw-unyolo/operator-v1";
 
 const MAX_CONFIG_BYTES = 64 * 1024;
 const MAX_TOKEN_BYTES = 4096;
@@ -83,12 +83,7 @@ export class BrokerOperatorClient {
   }
 
   discover(signal?: AbortSignal): Promise<Discovery> {
-    return this.request(
-      "/.well-known/brokerkit-operator",
-      signal ? { signal } : undefined,
-      parseDescriptor,
-      "discovery",
-    );
+    return this.request("/.well-known/unyolo-operator", signal ? { signal } : undefined, parseDescriptor, "discovery");
   }
 
   list(
