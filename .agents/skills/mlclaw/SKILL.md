@@ -69,12 +69,16 @@ Collect or confirm:
   - `local`: Docker gateway on the user's machine.
 - Optional model override.
 - Optional Docker context for local mode.
-- Optional Telegram bot token and allowed user ID.
+- Optional Telegram conversation bot token, a separate unYOLO approval bot
+  token, and one positive private-chat user ID. Telegram deployments require
+  both bots.
 - Optional explicit owner, name, or bucket only when the user needs them.
 
-If a Telegram token is provided, ML Claw calls Telegram `getMe`, removes a
-trailing `_bot` from the bot username, and can derive the agent, bucket, and
-Space names from that.
+If a Telegram conversation token is provided, ML Claw calls Telegram `getMe`,
+removes a trailing `_bot` from the bot username, and can derive the agent,
+bucket, and Space names from that. It also verifies that the approval token
+belongs to a different bot. Ask the user to start a private chat with both bots
+before bootstrap.
 
 ## Install And Run
 
@@ -140,18 +144,32 @@ npx mlclaw@latest bootstrap --name mlclaw --public-space
 
 ## Optional Telegram
 
-Telegram is optional and should not be required for the default setup.
+Telegram is optional and should not be required for the default setup. A
+Telegram deployment uses two BotFather bots in the same private chat. OpenClaw
+owns the conversation bot. HF Broker and the supervised `unyolo-telegram`
+ingress own the approval bot.
 
 ```bash
 npx mlclaw@latest bootstrap \
-  --telegram-token-file ~/secrets/mlclaw_bot.env \
+  --telegram-token-file ~/secrets/mlclaw-chat-bot.env \
+  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
 ```
 
+The approval file may contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw
+token. Never reuse the conversation bot. Telegram permits one `getUpdates`
+poller per token, and the approval bot is a separate trust boundary. Use a
+positive user ID for a one-to-one chat; ML Claw rejects group and channel IDs.
+
+For an existing Telegram deployment, rerun bootstrap with
+`--approval-telegram-token-file` before updating. `mlclaw update` fails closed
+when the Space has a conversation token but lacks the approval token, and
+`mlclaw doctor` reports the mismatch.
+
 Free Hugging Face Spaces intentionally block outbound TLS to some messaging
-APIs for anti-abuse reasons. Telegram/Discord connectivity from a Space
+APIs for anti-abuse reasons. Telegram and Discord connectivity from a Space
 requires upgraded paid Space hardware today. Local gateway mode avoids that
 restriction because messaging traffic originates from the user's machine.
 

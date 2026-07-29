@@ -25,9 +25,11 @@ type SpaceRuntimeServerOptions = {
 
 export class SpaceRuntimeServer {
   private openclaw: ChildProcess | undefined;
+  private unyoloTelegram: ChildProcess | undefined;
   private readonly openclawGatewayPassword = randomBytes(48).toString("base64url");
   private openclawStarting = false;
   private openclawStopping = false;
+  private unyoloTelegramStopping = false;
   private readonly app: Hono;
   private readonly exitProcess: (code: number) => void;
   private readonly syncOAuthProfile: typeof syncOpenAiOAuthProfile;
@@ -80,7 +82,13 @@ export class SpaceRuntimeServer {
   async start(): Promise<http.Server> {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
-      await this.startOpenClaw();
+      try {
+        await this.startUnyoloTelegram();
+        await this.startOpenClaw();
+      } catch (err) {
+        await this.stop();
+        throw err;
+      }
     }
 
     const server = http.createServer((req, res) => {
@@ -135,7 +143,66 @@ export class SpaceRuntimeServer {
 
   async stop(): Promise<void> {
     await this.stopOpenClaw();
+    await this.stopUnyoloTelegram();
     await this.mcpIntegrations.stop();
+  }
+
+  private async startUnyoloTelegram(): Promise<void> {
+    const configPath = this.config.unyoloTelegramConfigPath;
+    if (!configPath || this.unyoloTelegram) return;
+    const command = this.config.unyoloTelegramCommand ?? "/usr/sbin/gosu";
+    const args = this.config.unyoloTelegramArgs ?? [
+      "unyolo-telegram",
+      "/usr/local/bin/unyolo-telegram",
+      "serve",
+      "--config",
+      configPath,
+    ];
+    const child = spawn(command, args, {
+      stdio: "inherit",
+      env: unyoloTelegramEnvironment(process.env),
+    });
+    this.unyoloTelegram = child;
+    let started = false;
+    const spawned = new Promise<void>((resolve, reject) => {
+      child.once("spawn", () => {
+        started = true;
+        resolve();
+      });
+      child.once("error", reject);
+    });
+    child.once("exit", (code, signal) => {
+      process.stdout.write(`[unyolo-telegram] exited code=${code ?? "null"} signal=${signal ?? "null"}\n`);
+      if (this.unyoloTelegram === child) this.unyoloTelegram = undefined;
+      if (started && !this.unyoloTelegramStopping) {
+        this.exitProcess(typeof code === "number" && code !== 0 ? code : 1);
+      }
+    });
+    try {
+      await spawned;
+    } catch (err) {
+      if (this.unyoloTelegram === child) this.unyoloTelegram = undefined;
+      throw err;
+    }
+    process.stdout.write("[unyolo-telegram] approval ingress started\n");
+  }
+
+  private async stopUnyoloTelegram(): Promise<void> {
+    const child = this.unyoloTelegram;
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      this.unyoloTelegram = undefined;
+      return;
+    }
+    this.unyoloTelegramStopping = true;
+    child.kill("SIGTERM");
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+      child.once("exit", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    this.unyoloTelegramStopping = false;
   }
 
   private async stopOpenClaw(): Promise<void> {
@@ -360,6 +427,33 @@ export class SpaceRuntimeServer {
     res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
     res.end(body);
   }
+}
+
+const UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
+  "PATH",
+  "TZ",
+  "LANG",
+  "LC_ALL",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+] as const;
+
+function unyoloTelegramEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    HOME: "/var/lib/unyolo-telegram",
+    USER: "unyolo-telegram",
+    LOGNAME: "unyolo-telegram",
+  };
+  for (const key of UNYOLO_TELEGRAM_ENV_ALLOWLIST) {
+    if (source[key] !== undefined) env[key] = source[key];
+  }
+  return env;
 }
 
 const OPENCLAW_ENV_ALLOWLIST = [

@@ -17,6 +17,13 @@ PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"
 HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"
 HF_BROKER_STATE_CONTRACT="unyolo-state-v1-grant-uses"
 HF_BROKER_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/hf-broker-state-contract"
+UNYOLO_TELEGRAM_ENABLED=0
+UNYOLO_TELEGRAM_RUN_DIR="/run/mlclaw-unyolo-telegram"
+UNYOLO_TELEGRAM_TOKEN_FILE="$UNYOLO_TELEGRAM_RUN_DIR/bot-token"
+UNYOLO_TELEGRAM_CONFIG_FILE="$UNYOLO_TELEGRAM_RUN_DIR/config.json"
+UNYOLO_TELEGRAM_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/telegram"
+UNYOLO_TELEGRAM_INBOX_FILE="$UNYOLO_TELEGRAM_STATE_DIR/callbacks.db"
+UNYOLO_TELEGRAM_INBOX_KEY_FILE="$PROTECTED_STATE_DIR/control/unyolo-telegram-inbox-key"
 
 prepare_hf_broker() {
   local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
@@ -65,8 +72,41 @@ prepare_hf_broker() {
   HF_BROKER_ENABLED=1
 }
 
+prepare_unyolo_telegram_secret() {
+  local approval_token="${MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN:-}"
+  local conversation_token="${TELEGRAM_BOT_TOKEN:-}"
+  local chat_id="${TELEGRAM_ALLOWED_USERS:-}"
+
+  if [ -z "$conversation_token" ]; then
+    if [ -n "$approval_token" ]; then
+      echo "[unyolo-telegram] approval bot requires the ML Claw Telegram channel" >&2
+      return 1
+    fi
+    return
+  fi
+  if [ -z "$approval_token" ]; then
+    echo "[unyolo-telegram] Telegram requires a separate MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN" >&2
+    return 1
+  fi
+  if [ "$approval_token" = "$conversation_token" ]; then
+    echo "[unyolo-telegram] approval and conversation bots must use different tokens" >&2
+    return 1
+  fi
+  if [[ ! "$chat_id" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[unyolo-telegram] TELEGRAM_ALLOWED_USERS must be one positive private-chat user ID" >&2
+    return 1
+  fi
+
+  install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"
+  printf '%s\n' "$approval_token" > "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  chown unyolo-telegram:mlclaw-protected "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  chmod 0640 "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  export MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH="$UNYOLO_TELEGRAM_CONFIG_FILE"
+  UNYOLO_TELEGRAM_ENABLED=1
+}
+
 restore_protected_state() {
-  install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"
+  install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR"
   if [ -d "$RESTORED_PROTECTED_STATE_DIR" ]; then
     find "$PROTECTED_STATE_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     cp -a "$RESTORED_PROTECTED_STATE_DIR/." "$PROTECTED_STATE_DIR/"
@@ -76,8 +116,8 @@ restore_protected_state() {
   # the broker state once for this contract, then preserve the new state across
   # restarts. Superseded state is removed instead of imported.
   rm -rf "$PROTECTED_STATE_DIR/hf-broker"
-  install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR/control"
-  install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"
+  install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/control"
+  install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/unyolo"
   if [ ! -f "$HF_BROKER_STATE_CONTRACT_FILE" ] || [ -L "$HF_BROKER_STATE_CONTRACT_FILE" ] || \
     [ "$(cat "$HF_BROKER_STATE_CONTRACT_FILE" 2>/dev/null || true)" != "$HF_BROKER_STATE_CONTRACT" ]; then
     rm -rf "$HF_BROKER_STATE_DIR"
@@ -96,8 +136,48 @@ restore_protected_state() {
     "$HF_BROKER_STATE_DIR/operations.json"
   chown -R root:root "$PROTECTED_STATE_DIR/control"
   chown -R hf-broker:hf-broker "$HF_BROKER_STATE_DIR"
-  chmod 0710 "$PROTECTED_STATE_DIR"
-  chmod 0700 "$PROTECTED_STATE_DIR/control" "$HF_BROKER_STATE_DIR"
+  chown root:mlclaw-protected "$PROTECTED_STATE_DIR" "$PROTECTED_STATE_DIR/control" "$PROTECTED_STATE_DIR/unyolo"
+  chmod 0710 "$PROTECTED_STATE_DIR" "$PROTECTED_STATE_DIR/control" "$PROTECTED_STATE_DIR/unyolo"
+  chmod 0700 "$HF_BROKER_STATE_DIR"
+}
+
+prepare_unyolo_telegram_state() {
+  if [ "$UNYOLO_TELEGRAM_ENABLED" != "1" ]; then
+    return
+  fi
+  if [ "$HF_BROKER_ENABLED" != "1" ]; then
+    echo "[unyolo-telegram] approval ingress requires HF Broker" >&2
+    return 1
+  fi
+
+  install -d -m 0700 -o unyolo-telegram -g unyolo-telegram "$UNYOLO_TELEGRAM_STATE_DIR"
+  chown -R unyolo-telegram:unyolo-telegram "$UNYOLO_TELEGRAM_STATE_DIR"
+  chmod 0700 "$UNYOLO_TELEGRAM_STATE_DIR"
+  if [ -L "$UNYOLO_TELEGRAM_INBOX_KEY_FILE" ]; then
+    echo "[unyolo-telegram] inbox key must not be a symlink" >&2
+    return 1
+  fi
+  if [ ! -e "$UNYOLO_TELEGRAM_INBOX_KEY_FILE" ]; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$UNYOLO_TELEGRAM_INBOX_KEY_FILE"
+  fi
+  if [ ! -f "$UNYOLO_TELEGRAM_INBOX_KEY_FILE" ] || \
+    ! grep -Eq '^[0-9a-f]{64}$' "$UNYOLO_TELEGRAM_INBOX_KEY_FILE"; then
+    echo "[unyolo-telegram] inbox key is invalid" >&2
+    return 1
+  fi
+  chown unyolo-telegram:unyolo-telegram "$UNYOLO_TELEGRAM_INBOX_KEY_FILE"
+  chmod 0600 "$UNYOLO_TELEGRAM_INBOX_KEY_FILE"
+
+  chown root:unyolo-telegram "$HF_BROKER_RUN_DIR/operator-secret"
+  chmod 0640 "$HF_BROKER_RUN_DIR/operator-secret"
+  printf '{"telegram_bot_token_file":"%s","telegram_chat_id":%s,"inbox_path":"%s","inbox_key_file":"%s","routes":{"h":{"operator_endpoint":"http://127.0.0.1:7864","operator_token_file":"%s"}}}\n' \
+    "$UNYOLO_TELEGRAM_TOKEN_FILE" \
+    "$TELEGRAM_ALLOWED_USERS" \
+    "$UNYOLO_TELEGRAM_INBOX_FILE" \
+    "$UNYOLO_TELEGRAM_INBOX_KEY_FILE" \
+    "$HF_BROKER_RUN_DIR/operator-secret" > "$UNYOLO_TELEGRAM_CONFIG_FILE"
+  chown unyolo-telegram:unyolo-telegram "$UNYOLO_TELEGRAM_CONFIG_FILE"
+  chmod 0600 "$UNYOLO_TELEGRAM_CONFIG_FILE"
 }
 
 render_hf_broker_policy() {
@@ -134,16 +214,29 @@ start_hf_broker() {
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
   chown -R hf-broker:hf-broker "$HF_BROKER_STATE_DIR"
   chmod 0700 "$HF_BROKER_STATE_DIR"
+  local telegram_env=()
+  if [ "$UNYOLO_TELEGRAM_ENABLED" = "1" ]; then
+    telegram_env=(
+      "HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE"
+      "HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS"
+    )
+  fi
 
-  HF_BROKER_HF_TOKEN_FILE="$HF_BROKER_RUN_DIR/hf-token" \
-  HF_BROKER_SECRETS_FILE="$HF_BROKER_RUN_DIR/agent-secrets.conf" \
-  HF_BROKER_OPERATOR_SECRETS_FILE="$HF_BROKER_RUN_DIR/operator-secrets.conf" \
-  HF_BROKER_AGENT_ENDPOINT=tcp://127.0.0.1:7863 \
-  HF_BROKER_OPERATOR_ENDPOINT=tcp://127.0.0.1:7864 \
-  HF_BROKER_SCOPE_FILE="$HF_BROKER_SCOPE_FILE" \
-  HF_BROKER_XET_PYTHON=/usr/bin/python3 \
-  HF_BROKER_STATE_DIR="$HF_BROKER_STATE_DIR" \
-  gosu hf-broker:hf-broker /usr/local/bin/hf-broker &
+  env \
+    -u TELEGRAM_BOT_TOKEN \
+    -u TELEGRAM_ALLOWED_USERS \
+    -u TELEGRAM_PROXY \
+    -u TELEGRAM_API_ROOT \
+    HF_BROKER_HF_TOKEN_FILE="$HF_BROKER_RUN_DIR/hf-token" \
+    HF_BROKER_SECRETS_FILE="$HF_BROKER_RUN_DIR/agent-secrets.conf" \
+    HF_BROKER_OPERATOR_SECRETS_FILE="$HF_BROKER_RUN_DIR/operator-secrets.conf" \
+    HF_BROKER_AGENT_ENDPOINT=tcp://127.0.0.1:7863 \
+    HF_BROKER_OPERATOR_ENDPOINT=tcp://127.0.0.1:7864 \
+    HF_BROKER_SCOPE_FILE="$HF_BROKER_SCOPE_FILE" \
+    HF_BROKER_XET_PYTHON=/usr/bin/python3 \
+    HF_BROKER_STATE_DIR="$HF_BROKER_STATE_DIR" \
+    "${telegram_env[@]}" \
+    gosu hf-broker /usr/local/bin/hf-broker &
   HF_BROKER_PID=$!
 
   for _ in $(seq 1 50); do
@@ -174,13 +267,14 @@ if [ "${MLCLAW_GATEWAY_DISABLED:-0}" = "1" ]; then
 fi
 
 prepare_hf_broker
+prepare_unyolo_telegram_secret
 export MLCLAW_PROTECTED_STATE_DIR="$PROTECTED_STATE_DIR"
 export MLCLAW_OPENAI_CREDENTIAL_STORE_FILE="$PROTECTED_STATE_DIR/control/openai-api-key.enc"
 # The broker token and legacy token variables must not enter the control plane
 # or OpenClaw. The broker token is already in its owned runtime file before the
 # environment is scrubbed; local bucket state sync receives a dedicated copy
 # only around trusted restore and supervisor execution.
-unset MLCLAW_BROKER_HF_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN HF_TOKEN HUGGINGFACE_HUB_TOKEN
+unset MLCLAW_BROKER_HF_TOKEN MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN MLCLAW_ROUTER_TOKEN HF_ROUTER_TOKEN HF_TOKEN HUGGINGFACE_HUB_TOKEN
 
 # State, workspace, and config paths are ALWAYS derived from the live dir,
 # never inherited: older deployments set OPENCLAW_STATE_DIR=/data/... as Space
@@ -216,8 +310,9 @@ fi
 
 mkdir -p "$LIVE_DIR" "$WORKSPACE_DIR" "$STATE_DIR"
 chown_openclaw_live
-install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"
-install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR/control"
+install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR"
+install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/control"
+prepare_unyolo_telegram_state
 render_hf_broker_policy
 start_hf_broker
 

@@ -115,6 +115,7 @@ RUN git init /src \\
   && test "$(git -C /src rev-parse "refs/tags/$HF_BROKER_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)" \\
   && cd /src \\
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \\
+  && GOWORK=off go build -trimpath -o /out/unyolo-telegram ./cmd/unyolo-telegram \\
   && /out/hf-broker policy render \\
     --preset request-all-agent-operations \\
     --client default \\
@@ -134,7 +135,9 @@ LABEL org.opencontainers.image.description="ML Claw runtime for OpenClaw on Hugg
 USER root
 RUN apt-get update \\
   && apt-get install -y --no-install-recommends ca-certificates gosu python3 python3-pip python3-venv zstd \\
-  && useradd --system --home-dir /var/lib/hf-broker --create-home --shell /usr/sbin/nologin hf-broker \\
+  && groupadd --system mlclaw-protected \\
+  && useradd --system --home-dir /var/lib/hf-broker --create-home --shell /usr/sbin/nologin --groups mlclaw-protected hf-broker \\
+  && useradd --system --home-dir /var/lib/unyolo-telegram --create-home --shell /usr/sbin/nologin --groups mlclaw-protected unyolo-telegram \\
   && rm -rf /var/lib/apt/lists/*
 RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "huggingface_hub==1.19.0" \\
@@ -158,6 +161,7 @@ COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
 COPY --chown=node:node runtime/mlclaw-space-runtime.js /app/mlclaw-space-runtime.js
 COPY --from=hf-broker-build /out/hf-broker /usr/local/bin/hf-broker
+COPY --from=hf-broker-build /out/unyolo-telegram /usr/local/bin/unyolo-telegram
 COPY --from=hf-broker-build /out/hf-broker.scope.json /app/hf-broker.scope.json
 COPY --from=hf-broker-build /out/hf-broker.policy-profile.json /app/hf-broker.policy-profile.json
 COPY --from=hf-broker-build /out/hf-broker.policy-manifest.json /app/hf-broker.policy-manifest.json

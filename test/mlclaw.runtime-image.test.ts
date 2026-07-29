@@ -39,6 +39,10 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).not.toContain("unyolo-plugin-build");
     expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json");
     expect(dockerfile).toContain("ENV MLCLAW_UNYOLO_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-unyolo");
+    expect(dockerfile).toContain("go build -trimpath -o /out/unyolo-telegram ./cmd/unyolo-telegram");
+    expect(dockerfile).toContain("COPY --from=hf-broker-build /out/unyolo-telegram /usr/local/bin/unyolo-telegram");
+    expect(dockerfile).toContain("groupadd --system mlclaw-protected");
+    expect(dockerfile).toContain("--groups mlclaw-protected unyolo-telegram");
     expect(dockerfile).toContain("/out/hf-broker policy render");
     expect(dockerfile).toContain("--preset request-all-agent-operations");
     expect(dockerfile).toContain("--client default");
@@ -128,9 +132,12 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('rm -rf "$HF_BROKER_STATE_DIR"');
     expect(entrypoint).toContain('rm -f "$HF_BROKER_STATE_CONTRACT_FILE"');
     expect(entrypoint).toContain("printf '%s\\n' \"$HF_BROKER_STATE_CONTRACT\"");
-    expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"');
-    expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"');
-    expect(entrypoint).toContain('chmod 0710 "$PROTECTED_STATE_DIR"');
+    expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR"');
+    expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/control"');
+    expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/unyolo"');
+    expect(entrypoint).toContain(
+      'chmod 0710 "$PROTECTED_STATE_DIR" "$PROTECTED_STATE_DIR/control" "$PROTECTED_STATE_DIR/unyolo"',
+    );
     expect(entrypoint).toContain("node /app/mlclaw-space-runtime.js prepare-unyolo-config");
     expect(entrypoint).not.toContain("printf '{\"grants\":[]}\\n'");
     expect(entrypoint).not.toContain("grant_store");
@@ -152,6 +159,18 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain("HF_BROKER_OPERATOR_ENDPOINT=tcp://127.0.0.1:7864");
     expect(entrypoint).toContain('HF_BROKER_SCOPE_FILE="$HF_BROKER_SCOPE_FILE"');
     expect(entrypoint).toContain("HF_BROKER_XET_PYTHON=/usr/bin/python3");
+    expect(entrypoint).toContain("gosu hf-broker /usr/local/bin/hf-broker &");
+    expect(entrypoint).toContain('local approval_token="${MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN:-}"');
+    expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"');
+    expect(entrypoint).toContain('if [ "$approval_token" = "$conversation_token" ]');
+    expect(entrypoint).toContain("unset MLCLAW_BROKER_HF_TOKEN MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
+    expect(entrypoint).toContain("HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE");
+    expect(entrypoint).toContain("HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS");
+    expect(entrypoint).toContain("-u TELEGRAM_BOT_TOKEN");
+    expect(entrypoint).toContain("-u TELEGRAM_ALLOWED_USERS");
+    expect(entrypoint).toContain('UNYOLO_TELEGRAM_INBOX_FILE="$UNYOLO_TELEGRAM_STATE_DIR/callbacks.db"');
+    expect(entrypoint).toContain('chown root:unyolo-telegram "$HF_BROKER_RUN_DIR/operator-secret"');
+    expect(entrypoint).toContain('export MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH="$UNYOLO_TELEGRAM_CONFIG_FILE"');
     expect(entrypoint).toContain('protected_target=(--protect-bucket "$state_bucket")');
     expect(entrypoint).toContain("/usr/local/bin/hf-broker policy render");
     expect(entrypoint).toContain("/usr/local/bin/hf-broker doctor policy");

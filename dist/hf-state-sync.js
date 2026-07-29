@@ -9421,6 +9421,7 @@ import fs7 from "node:fs/promises";
 import os3 from "node:os";
 import path7 from "node:path";
 import { pipeline as pipeline2 } from "node:stream/promises";
+var PROTECTED_SQLITE_DATABASES = ["unyolo/telegram/callbacks.db"];
 function unprivilegedStageArchive(params) {
   return async ({ liveDir, archivePath }) => {
     const child = spawn(process.execPath, [params.scriptPath, "stage-worker", liveDir], {
@@ -9465,13 +9466,38 @@ function protectedStageArchive(params) {
         recursive: true,
         force: false,
         preserveTimestamps: true,
-        filter: (source) => includeProtectedSnapshotPath(params.sourceDir, source)
+        filter: (source) => includeProtectedSnapshotPath(params.sourceDir, source) && !isProtectedDatabaseArtifact(params.sourceDir, source)
       });
+      let protectedDatabaseCount = 0;
+      for (const relative of PROTECTED_SQLITE_DATABASES) {
+        const source = path7.join(params.sourceDir, relative);
+        const sourceStat = await fs7.lstat(source).catch((err) => {
+          if (isNodeError(err, "ENOENT")) return void 0;
+          throw err;
+        });
+        if (!sourceStat) continue;
+        if (!sourceStat.isFile()) {
+          throw new Error(`protected database is not a regular file: ${relative}`);
+        }
+        const staged = path7.join(destination, relative);
+        await fs7.mkdir(path7.dirname(staged), { recursive: true });
+        vacuumInto(source, staged);
+        await fs7.chmod(staged, 384);
+        const integrity = checkIntegrity(staged);
+        if (integrity.kind === "corrupt") {
+          return {
+            kind: "corrupt-database",
+            database: path7.join(params.archiveName, relative),
+            detail: integrity.detail
+          };
+        }
+        protectedDatabaseCount += 1;
+      }
       await fs7.chmod(destination, 448);
       await fs7.rm(request.archivePath, { force: true });
       await createTarZst(stagingDir, request.archivePath);
       await fs7.chmod(request.archivePath, 384);
-      return outcome;
+      return { ...outcome, databaseCount: outcome.databaseCount + protectedDatabaseCount };
     } finally {
       await fs7.rm(workDir, { recursive: true, force: true });
     }
@@ -9480,6 +9506,13 @@ function protectedStageArchive(params) {
 function includeProtectedSnapshotPath(sourceDir, source) {
   const relative = path7.relative(sourceDir, source);
   return relative !== "unyolo/hf-broker/mirrors" && !relative.startsWith(`unyolo/hf-broker/mirrors${path7.sep}`);
+}
+function isProtectedDatabaseArtifact(sourceDir, source) {
+  const relative = path7.relative(sourceDir, source);
+  return PROTECTED_SQLITE_DATABASES.some((database) => relative === database || relative.startsWith(`${database}-`));
+}
+function isNodeError(err, code) {
+  return err instanceof Error && "code" in err && err.code === code;
 }
 function trustedStageArchive(config, scriptPath) {
   const canStageAsOpenClaw = process.getuid?.() === 0 && Boolean(scriptPath) && config.snapshotUid !== void 0 && config.snapshotGid !== void 0;

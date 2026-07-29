@@ -145,20 +145,54 @@ DeepSeek V4 Flash and Pro, and MiniMax M3. Use the provider suffix
 
 ## Optional Telegram
 
-Telegram is optional. If you provide a Telegram bot token, ML Claw calls
-Telegram `getMe`, removes a trailing `_bot` from the username, and can derive
-the Space and bucket names from the bot username.
+Telegram deployments use two BotFather bots in the same private chat. The first
+bot handles ordinary OpenClaw conversations. The second bot shows unYOLO
+approval requests and owns the Approve and Deny buttons. Separate bot identities
+keep approval credentials outside OpenClaw and avoid two `getUpdates` pollers
+competing for one token.
+
+Start a private chat with each bot before bootstrapping, then pass the same
+positive Telegram user ID as the chat ID for both:
 
 ```bash
 npx mlclaw@latest bootstrap \
-  --telegram-token-file ~/secrets/mlclaw_bot.env \
+  --telegram-token-file ~/secrets/mlclaw-chat-bot.env \
+  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
 ```
 
+The conversation file may contain `TELEGRAM_BOT_TOKEN=...` or a raw token. The
+approval file may contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw token.
+Interactive bootstrap asks for the approval token through a hidden prompt when
+the file is omitted. ML Claw verifies that the two tokens identify different
+bots and rejects group or channel chat IDs.
+
+The approval token is written to a protected runtime file for HF Broker and the
+single supervised `unyolo-telegram` ingress. It is removed from the wrapper
+environment before OpenClaw starts. Pending callbacks and their encryption key
+are included in durable state snapshots, so button decisions resume after a
+restart.
+
+Existing Telegram deployments need one reconfiguration run before they can use
+a runtime with approval routing:
+
+```bash
+npx mlclaw@latest bootstrap \
+  --name mlclaw \
+  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env
+```
+
+`mlclaw update` stops before changing an older Telegram Space that lacks the
+approval bot secret. `mlclaw doctor` reports the same condition.
+
+When a conversation token is provided, ML Claw calls Telegram `getMe`, removes
+a trailing `_bot` from the username, and can derive the Space and bucket names
+from the bot username.
+
 Hugging Face free Spaces intentionally block outbound TLS to some messaging
-APIs. Telegram/Discord connectivity therefore requires upgraded paid Space
+APIs. Telegram and Discord connectivity therefore requires upgraded paid Space
 hardware today. ML Claw warns before requesting paid hardware; pass `--yes`
 only for automation.
 

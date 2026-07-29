@@ -348,17 +348,21 @@ async function createRuntime(hub: HubApi, prompt: ReturnType<typeof createPrompt
   const podman = createFakeDocker("podman");
   const configRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-cli-test-"));
   return {
-    env: { MLCLAW_BROKER_HF_TOKEN: "hf_broker_test", MLCLAW_ROUTER_TOKEN: "hf_router_test" },
+    env: {
+      MLCLAW_BROKER_HF_TOKEN: "hf_broker_test",
+      MLCLAW_ROUTER_TOKEN: "hf_router_test",
+      MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN: "approval-telegram-token",
+    },
     stdout: { log: () => undefined },
     stderr: { error: (message: unknown) => stderr.push(String(message)) },
     readToken: async () => "hf_test_token",
     hubFactory: () => hub,
     pushTemplateToSpace: async () => ({ templateRev: "test-template" }),
-    getTelegramBot: async () => ({
-      id: 1,
+    getTelegramBot: async (token: string) => ({
+      id: token === "approval-telegram-token" ? 2 : 1,
       is_bot: true,
-      first_name: "Research",
-      username: "research_bot",
+      first_name: token === "approval-telegram-token" ? "Research Approvals" : "Research",
+      username: token === "approval-telegram-token" ? "research_approvals_bot" : "research_bot",
     }),
     dockerRunner: docker,
     podmanRunner: podman,
@@ -1802,6 +1806,133 @@ describe("mlclaw CLI", () => {
     await expect(readManifest(runtime.configRoot, "research")).rejects.toThrow();
   });
 
+  it("requires a separate unYOLO approval bot for Telegram", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    Reflect.deleteProperty(runtime.env, "MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
+
+    const code = await main(
+      [
+        "bootstrap",
+        "--gateway",
+        "local",
+        "--name",
+        "research",
+        "--telegram-token",
+        "conversation-token",
+        "--telegram-user-id",
+        "1234567890",
+        "--no-pull",
+      ],
+      runtime,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("Separate unYOLO approval bot token is required");
+    expect(runtime.dockerRunner.calls.some((call) => call.name === "runDetached")).toBe(false);
+  });
+
+  it("rejects one Telegram bot identity in both trust domains", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    runtime.getTelegramBot = async () => ({
+      id: 1,
+      is_bot: true,
+      first_name: "Shared",
+      username: "shared_bot",
+    });
+
+    const code = await main(
+      [
+        "bootstrap",
+        "--gateway",
+        "local",
+        "--name",
+        "research",
+        "--telegram-token",
+        "conversation-token",
+        "--telegram-user-id",
+        "1234567890",
+        "--no-pull",
+      ],
+      runtime,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("must be different Telegram bots");
+  });
+
+  it("loads the approval bot privately from a file and reuses the private chat ID", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+    Reflect.deleteProperty(runtime.env, "MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
+    const tokenFile = path.join(runtime.configRoot, "approval-token.env");
+    await fs.writeFile(tokenFile, "MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=approval-file-token\n", { mode: 0o600 });
+    runtime.getTelegramBot = async (token: string) => ({
+      id: token === "approval-file-token" ? 2 : 1,
+      is_bot: true,
+      first_name: token === "approval-file-token" ? "Approvals" : "Conversation",
+      username: token === "approval-file-token" ? "approval_bot" : "conversation_bot",
+    });
+
+    const code = await main(
+      [
+        "bootstrap",
+        "--gateway",
+        "local",
+        "--name",
+        "research",
+        "--telegram-token",
+        "conversation-token",
+        "--approval-telegram-token-file",
+        tokenFile,
+        "--telegram-user-id",
+        "1234567890",
+        "--no-pull",
+        "--yes",
+      ],
+      runtime,
+    );
+    expect(code, stderr.join("\n")).toBe(0);
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      TELEGRAM_BOT_TOKEN: "conversation-token",
+      MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN: "approval-file-token",
+      TELEGRAM_ALLOWED_USERS: "1234567890",
+    });
+  });
+
+  it("rejects group and multi-user approval chats", async () => {
+    const hub = createFakeHub();
+    const { prompt } = createPrompt([], false);
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, prompt, stderr);
+
+    const code = await main(
+      [
+        "bootstrap",
+        "--gateway",
+        "local",
+        "--name",
+        "research",
+        "--telegram-token",
+        "conversation-token",
+        "--telegram-user-id",
+        "123,456",
+        "--no-pull",
+      ],
+      runtime,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("one positive private-chat user ID");
+  });
+
   it("runs bootstrap as Space gateway when requested and prompts for paid hardware", async () => {
     const hub = createFakeHub();
     const { prompt, notes } = createPrompt([true]);
@@ -1857,6 +1988,10 @@ describe("mlclaw CLI", () => {
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
       args: ["alice/research", "TELEGRAM_BOT_TOKEN", "telegram-token"],
+    });
+    expect(hub.calls).toContainEqual({
+      name: "addSpaceSecret",
+      args: ["alice/research", "MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN", "approval-telegram-token"],
     });
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
@@ -3165,6 +3300,26 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("blocks an update that would strand a Telegram deployment without its approval bot", async () => {
+    const hub = createFakeHub();
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "old-template");
+    await hub.addSpaceSecret("alice/research", "TELEGRAM_BOT_TOKEN", "conversation-token");
+    const stderr: string[] = [];
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt, stderr);
+    let pushed = false;
+    runtime.pushTemplateToSpace = async () => {
+      pushed = true;
+      return { templateRev: "unexpected" };
+    };
+
+    const code = await main(["update", "alice/research"], runtime);
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("missing the separate unYOLO approval bot secret");
+    expect(stderr.join("\n")).toContain("mlclaw bootstrap --name research");
+    expect(pushed).toBe(false);
+  });
+
   it("upgrades a legacy Router Space to the broker credential during update", async () => {
     const hub = createFakeHub();
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_TEMPLATE_REV", "old-template");
@@ -3411,6 +3566,23 @@ describe("mlclaw CLI", () => {
     expect(output.join("\n")).not.toContain("secret HF_TOKEN");
     expect(hub.calls.some((call) => call.name === "fetchSpaceLogs")).toBe(false);
     expect(hub.calls.some((call) => call.name === "assertBucketAccessible")).toBe(false);
+  });
+
+  it("reports a Telegram deployment missing its distinct approval bot", async () => {
+    const hub = createFakeHub({ existingSpaces: ["alice/research"] });
+    await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
+    await hub.addSpaceVariable("alice/research", "MLCLAW_RUNTIME_IMAGE", DEFAULT_RUNTIME_IMAGE);
+    await hub.addSpaceSecret("alice/research", "TELEGRAM_BOT_TOKEN", "conversation-token");
+    const output: string[] = [];
+    const runtime = {
+      ...(await createRuntime(hub, createPrompt([], false).prompt)),
+      stdout: { log: (message: unknown) => output.push(String(message)) },
+    };
+
+    await expect(main(["doctor", "alice/research"], runtime)).resolves.toBe(0);
+    expect(output.join("\n")).toContain("Telegram is missing the separate unYOLO approval bot secret");
   });
 
   it("repairs app Space mounted state and removes stale broad Hub token secrets", async () => {

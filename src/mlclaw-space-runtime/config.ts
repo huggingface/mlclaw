@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { isAbsolute } from "node:path";
 import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 import { resolveBranding, type RuntimeBranding } from "./branding.js";
 import { DEFAULT_MODEL, normalizeModelChoices, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
@@ -56,6 +57,9 @@ export type SpaceRuntimeConfig = {
   openclawCommand: string;
   openclawArgs: string[];
   unyoloPluginPath: string;
+  unyoloTelegramConfigPath: string | undefined;
+  unyoloTelegramCommand?: string;
+  unyoloTelegramArgs?: string[];
   agentName: string | undefined;
   model: string;
   modelChoices: ModelChoice[];
@@ -187,6 +191,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     openclawCommand,
     openclawArgs,
     unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
+    unyoloTelegramConfigPath: optionalAbsolutePath(
+      env.MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH,
+      "MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH",
+    ),
     agentName,
     model,
     modelChoices: runtimeSettings.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
@@ -346,6 +354,12 @@ function splitArgs(value: string | undefined): string[] | undefined {
 function trim(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function optionalAbsolutePath(value: string | undefined, name: string): string | undefined {
+  const path = trim(value);
+  if (path && !isAbsolute(path)) throw new Error(`${name} must be absolute`);
+  return path;
 }
 
 function readRuntimeSettings(file: string): { model?: string; modelChoices?: ModelChoice[] } {

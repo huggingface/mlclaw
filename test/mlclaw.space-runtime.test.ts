@@ -92,6 +92,17 @@ describe("ML Claw Space runtime", () => {
     ).toThrow("MLCLAW_CREDENTIAL_KEY is required");
   });
 
+  it("requires an absolute unYOLO Telegram ingress config path", () => {
+    expect(() =>
+      loadConfig({
+        SPACE_ID: "alice/research",
+        MLCLAW_SESSION_SECRET: "x".repeat(48),
+        MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
+        MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH: "relative/config.json",
+      }),
+    ).toThrow("MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH must be absolute");
+  });
+
   it("includes the curated Router model presets", () => {
     expect(PRESET_MODEL_CHOICES.map((choice) => choice.openclawModel)).toEqual(
       expect.arrayContaining([
@@ -1703,6 +1714,68 @@ describe("ML Claw Space runtime", () => {
     }
   });
 
+  it("supervises unYOLO Telegram without exposing either bot token", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-unyolo-telegram-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const envFile = path.join(root, "env.json");
+    const pidFile = path.join(root, "pid");
+    const previousApprovalToken = process.env.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
+    const previousConversationToken = process.env.TELEGRAM_BOT_TOKEN;
+    process.env.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN = "approval-secret";
+    process.env.TELEGRAM_BOT_TOKEN = "conversation-secret";
+    cleanups.push(() => {
+      if (previousApprovalToken === undefined) delete process.env.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
+      else process.env.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN = previousApprovalToken;
+      if (previousConversationToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+      else process.env.TELEGRAM_BOT_TOKEN = previousConversationToken;
+    });
+    const config = await testConfig({
+      unyoloTelegramConfigPath: path.join(root, "config.json"),
+      unyoloTelegramCommand: process.execPath,
+      unyoloTelegramArgs: [
+        "-e",
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify(process.env));require("fs").writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>undefined,100000)`,
+      ],
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(() => fileExists(envFile));
+    const childEnv = JSON.parse(await fs.readFile(envFile, "utf8")) as Record<string, string>;
+    expect(childEnv.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN).toBeUndefined();
+    expect(childEnv.TELEGRAM_BOT_TOKEN).toBeUndefined();
+    expect(childEnv.HOME).toBe("/var/lib/unyolo-telegram");
+    expect(childEnv.USER).toBe("unyolo-telegram");
+
+    const pid = await readPidFile(pidFile);
+    await runtime.stop();
+    if (pid) await waitFor(() => !processIsAlive(pid));
+  });
+
+  it("exits the wrapper when unYOLO Telegram exits unexpectedly", async () => {
+    const exitCodes: number[] = [];
+    const config = await testConfig({
+      unyoloTelegramConfigPath: "/tmp/unyolo-telegram-test.json",
+      unyoloTelegramCommand: process.execPath,
+      unyoloTelegramArgs: ["-e", "setTimeout(()=>process.exit(9),20)"],
+    });
+    const runtime = new SpaceRuntimeServer(config, {
+      exitProcess: (code) => exitCodes.push(code),
+    });
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(() => exitCodes.length > 0);
+    expect(exitCodes).toEqual([9]);
+  });
+
   it("exits the wrapper when OpenClaw exits unexpectedly", async () => {
     const exitCodes: number[] = [];
     const config = await testConfig({
@@ -2713,6 +2786,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     openclawCommand: process.execPath,
     openclawArgs: ["-e", "setInterval(() => undefined, 100000)"],
     unyoloPluginPath: "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
+    unyoloTelegramConfigPath: undefined,
     agentName: "research",
     model: "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
     modelChoices: PRESET_MODEL_CHOICES,
