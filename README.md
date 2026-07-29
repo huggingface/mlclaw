@@ -54,7 +54,7 @@ app; the bootstrapper runs locally.
 
 The `hf` CLI login is a provisioning credential: ML Claw uses it to create and
 configure resources owned by your account. HF Broker uses a separate, durable
-fine-grained credential whose selected permissions form BrokerKit's hard
+fine-grained credential whose selected permissions form unYOLO's hard
 upstream authority ceiling. Interactive bootstrap opens an empty Hugging Face
 token form so you can choose those permissions and resources, then accepts the
 new token through a hidden local prompt. Creating or replacing this credential
@@ -285,7 +285,7 @@ mlclaw credentials repair mlclaw
 mlclaw credentials repair mlclaw --broker-hf-token-file ~/secrets/mlclaw-broker.env
 ```
 
-`status` performs a read-only verification and prints the account, BrokerKit
+`status` performs a read-only verification and prints the account, unYOLO
 profile, verification time, and a short SHA-256 fingerprint, never the token.
 `repair` validates the replacement before changing anything. Local running
 gateways are replaced transactionally and rolled back on failure; stopped local
@@ -307,17 +307,25 @@ Use the browser control UI for:
   and `MLCLAW_MODEL_CHOICES`, and request a Space restart.
 - `/mlclaw/status`: inspect runtime, bucket, model, OAuth, and integration status.
 
-OpenClaw's BrokerKit plugin adds an **Approvals** tab to the gateway. The tab
-merges every BrokerKit-compatible backend configured in
+OpenClaw's unYOLO plugin adds an **Approvals** tab to the gateway. The tab
+merges every unYOLO-compatible backend configured in
 `MLCLAW_OPERATOR_BROKERS_FILE` and lets administrators inspect, approve, deny,
-cancel, or revoke requests. The plugin registers the Gateway tab, while ML Claw
+or revoke requests. The plugin registers the Gateway tab, while ML Claw
 serves the immutable packaged UI from its trusted HTTP boundary and gives it a
 small popover inside the Gateway. Administrators decide requests directly in
 the sandboxed popover by default. Set
-`MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` only to make the popover read-only.
+`MLCLAW_UNYOLO_POPOVER_DECISIONS=false` only to make the popover read-only.
 The popover uses a renewable, short-lived, admin-bound browser token.
 Broker operator tokens remain in backend-only files and are never sent to the
-browser or OpenClaw. See
+browser or OpenClaw.
+
+ML Claw 0.7.0 adopts unYOLO's renamed version 1 contracts and starts HF Broker
+with fresh state, as required by HF Broker 0.7.0. Pending approvals, active
+grants, and broker audit records from earlier ML Claw releases are not imported.
+OpenClaw conversations, workspace files, model credentials, and deployment
+settings remain in the normal ML Claw snapshot.
+
+See
 [Operator Broker Configuration](docs/operator-brokers-config.md).
 
 - `/mlclaw/credentials`: connect or disconnect Hugging Face MCP and Research

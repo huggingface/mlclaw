@@ -268,9 +268,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// node_modules/openclaw-brokerkit/node_modules/ajv/dist/runtime/equal.js
+// node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/openclaw-brokerkit/node_modules/ajv/dist/runtime/equal.js"(exports) {
+  "node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var equal2 = require_fast_deep_equal();
@@ -279,9 +279,9 @@ var require_equal = __commonJS({
   }
 });
 
-// node_modules/openclaw-brokerkit/node_modules/ajv/dist/runtime/ucs2length.js
+// node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/openclaw-brokerkit/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length2(str) {
@@ -939,7 +939,7 @@ function positiveNumber(value) {
 import { isAbsolute } from "node:path";
 import { readFileSync } from "node:fs";
 
-// node_modules/openclaw-brokerkit/dist/src/generated/operator-validators.js
+// node_modules/openclaw-unyolo/dist/src/generated/operator-validators.js
 var import_formats = __toESM(require_formats(), 1);
 var import_equal = __toESM(require_equal(), 1);
 var import_ucs2length = __toESM(require_ucs2length(), 1);
@@ -965,13 +965,13 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
       if (data.api_version === void 0 && (missing0 = "api_version") || data.contract_digest === void 0 && (missing0 = "contract_digest") || data.build_id === void 0 && (missing0 = "build_id")) {
-        validate20.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
+        validate20.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
           if (!(key0 === "api_version" || key0 === "contract_digest" || key0 === "build_id")) {
-            validate20.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
+            validate20.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
           }
@@ -981,11 +981,11 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
             let data0 = data.api_version;
             const _errs3 = errors;
             if (typeof data0 !== "string") {
-              validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+              validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
               return false;
             }
-            if ("brokerkit.io/operator/v1" !== data0) {
-              validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/const", keyword: "const", params: { allowedValue: "brokerkit.io/operator/v1" }, message: "must be equal to constant" }];
+            if ("unyolo.io/operator/v1" !== data0) {
+              validate20.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/api_version/const", keyword: "const", params: { allowedValue: "unyolo.io/operator/v1" }, message: "must be equal to constant" }];
               return false;
             }
             var valid1 = _errs3 === errors;
@@ -999,11 +999,11 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
               if (errors === _errs5) {
                 if (typeof data1 === "string") {
                   if (!pattern4.test(data1)) {
-                    validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
+                    validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
                     return false;
                   }
                 } else {
-                  validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  validate20.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                   return false;
                 }
               }
@@ -1018,16 +1018,16 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
                 if (errors === _errs7) {
                   if (typeof data2 === "string") {
                     if (func1(data2) > 128) {
-                      validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                      validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
                       return false;
                     } else {
                       if (func1(data2) < 1) {
-                        validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                        validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
                         return false;
                       }
                     }
                   } else {
-                    validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                    validate20.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                     return false;
                   }
                 }
@@ -1040,7 +1040,7 @@ function validate20(data, { instancePath = "", parentData, parentDataProperty, r
         }
       }
     } else {
-      validate20.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Descriptor/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
+      validate20.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Descriptor/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
       return false;
     }
   }
@@ -1064,13 +1064,13 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
       if (data.status === void 0 && (missing0 = "status") || data.contract_digest === void 0 && (missing0 = "contract_digest") || data.build_id === void 0 && (missing0 = "build_id")) {
-        validate22.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
+        validate22.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
           if (!(key0 === "status" || key0 === "contract_digest" || key0 === "build_id")) {
-            validate22.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
+            validate22.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
           }
@@ -1082,16 +1082,16 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
             if (errors === _errs3) {
               if (typeof data0 === "string") {
                 if (func1(data0) > 128) {
-                  validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/status/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                  validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/status/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
                   return false;
                 } else {
                   if (func1(data0) < 1) {
-                    validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/status/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                    validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/status/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
                     return false;
                   }
                 }
               } else {
-                validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/status/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                validate22.errors = [{ instancePath: instancePath + "/status", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/status/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                 return false;
               }
             }
@@ -1106,11 +1106,11 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
               if (errors === _errs5) {
                 if (typeof data1 === "string") {
                   if (!pattern4.test(data1)) {
-                    validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
+                    validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/pattern", keyword: "pattern", params: { pattern: "^sha256:[0-9a-f]{64}$" }, message: 'must match pattern "^sha256:[0-9a-f]{64}$"' }];
                     return false;
                   }
                 } else {
-                  validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  validate22.errors = [{ instancePath: instancePath + "/contract_digest", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/contract_digest/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                   return false;
                 }
               }
@@ -1125,16 +1125,16 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
                 if (errors === _errs7) {
                   if (typeof data2 === "string") {
                     if (func1(data2) > 128) {
-                      validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                      validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
                       return false;
                     } else {
                       if (func1(data2) < 1) {
-                        validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                        validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
                         return false;
                       }
                     }
                   } else {
-                    validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                    validate22.errors = [{ instancePath: instancePath + "/build_id", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/properties/build_id/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                     return false;
                   }
                 }
@@ -1147,7 +1147,7 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
         }
       }
     } else {
-      validate22.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/Health/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
+      validate22.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/Health/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
       return false;
     }
   }
@@ -1156,10 +1156,10 @@ function validate22(data, { instancePath = "", parentData, parentDataProperty, r
 }
 validate22.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 var validateBrokerRequest = validate23;
-var schema37 = { "type": "object", "additionalProperties": false, "required": ["id", "revision", "requester", "operation", "status", "requested_at", "requested_duration_seconds", "requested_max_uses", "granted_max_uses", "used_count", "presentation", "allowed_actions"], "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 128 }, "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "requester": { "type": "string", "minLength": 1, "maxLength": 80 }, "operation": { "type": "string", "minLength": 1, "maxLength": 500 }, "status": { "$ref": "#/$defs/Status" }, "requested_at": { "type": "string", "format": "date-time" }, "pending_expires_at": { "type": "string", "format": "date-time" }, "active_expires_at": { "type": "string", "format": "date-time" }, "requested_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "requested_max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 }, "granted_max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 }, "used_count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }, "request_reason": { "type": "string", "maxLength": 2e3 }, "decided_at": { "type": "string", "format": "date-time" }, "decided_by": { "type": "string", "maxLength": 200 }, "decided_on_behalf_of": { "type": "string", "maxLength": 200 }, "presentation": { "$ref": "#/$defs/Presentation" }, "presentation_unavailable": { "type": "boolean" }, "allowed_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Action" } }, "approval_bounds": { "$ref": "#/$defs/ApprovalBounds" } } };
+var schema37 = { "type": "object", "additionalProperties": false, "required": ["id", "revision", "requester", "operation", "status", "requested_at", "requested_duration_seconds", "requested_max_uses", "granted_max_uses", "used_count", "presentation", "allowed_actions"], "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 128 }, "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "requester": { "type": "string", "minLength": 1, "maxLength": 80 }, "operation": { "type": "string", "minLength": 1, "maxLength": 500 }, "status": { "$ref": "#/$defs/Status" }, "requested_at": { "type": "string", "format": "date-time" }, "pending_expires_at": { "type": "string", "format": "date-time" }, "active_expires_at": { "type": "string", "format": "date-time" }, "requested_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "requested_max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 1e6 }, "granted_max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 1e6 }, "used_count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }, "request_reason": { "type": "string", "maxLength": 2e3 }, "decided_at": { "type": "string", "format": "date-time" }, "decided_by": { "type": "string", "maxLength": 200 }, "decided_on_behalf_of": { "type": "string", "maxLength": 200 }, "presentation": { "$ref": "#/$defs/Presentation" }, "presentation_unavailable": { "type": "boolean" }, "allowed_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Action" } }, "approval_bounds": { "$ref": "#/$defs/ApprovalBounds" } } };
 var schema38 = { "type": "string", "enum": ["pending", "active", "denied", "canceled", "expired", "consumed", "revoked"] };
 var schema44 = { "type": "string", "enum": ["approve", "deny", "revoke"] };
-var schema45 = { "type": "object", "additionalProperties": false, "required": ["max_duration_seconds", "max_uses"], "properties": { "max_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 } } };
+var schema45 = { "type": "object", "additionalProperties": false, "required": ["max_duration_seconds", "max_uses"], "properties": { "max_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "max_uses": { "type": ["integer", "null"], "minimum": 1, "maximum": 1e6 } } };
 var func7 = Object.prototype.hasOwnProperty;
 var func0 = equal;
 var formats0 = formats["date-time"];
@@ -1756,8 +1756,8 @@ function validate24(data, { instancePath = "", parentData, parentDataProperty, r
                               }
                               if (errors === _errs21) {
                                 if (typeof data9 == "number" && isFinite(data9)) {
-                                  if (data9 > 9007199254740991 || isNaN(data9)) {
-                                    validate24.errors = [{ instancePath: instancePath + "/requested_max_uses", schemaPath: "#/properties/requested_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                  if (data9 > 1e6 || isNaN(data9)) {
+                                    validate24.errors = [{ instancePath: instancePath + "/requested_max_uses", schemaPath: "#/properties/requested_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                     return false;
                                   } else {
                                     if (data9 < 1 || isNaN(data9)) {
@@ -1781,8 +1781,8 @@ function validate24(data, { instancePath = "", parentData, parentDataProperty, r
                                 }
                                 if (errors === _errs23) {
                                   if (typeof data10 == "number" && isFinite(data10)) {
-                                    if (data10 > 9007199254740991 || isNaN(data10)) {
-                                      validate24.errors = [{ instancePath: instancePath + "/granted_max_uses", schemaPath: "#/properties/granted_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                    if (data10 > 1e6 || isNaN(data10)) {
+                                      validate24.errors = [{ instancePath: instancePath + "/granted_max_uses", schemaPath: "#/properties/granted_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                       return false;
                                     } else {
                                       if (data10 < 1 || isNaN(data10)) {
@@ -2024,8 +2024,8 @@ function validate24(data, { instancePath = "", parentData, parentDataProperty, r
                                                               }
                                                               if (errors === _errs49) {
                                                                 if (typeof data22 == "number" && isFinite(data22)) {
-                                                                  if (data22 > 9007199254740991 || isNaN(data22)) {
-                                                                    validate24.errors = [{ instancePath: instancePath + "/approval_bounds/max_uses", schemaPath: "#/$defs/ApprovalBounds/properties/max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                                                  if (data22 > 1e6 || isNaN(data22)) {
+                                                                    validate24.errors = [{ instancePath: instancePath + "/approval_bounds/max_uses", schemaPath: "#/$defs/ApprovalBounds/properties/max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                                                     return false;
                                                                   } else {
                                                                     if (data22 < 1 || isNaN(data22)) {
@@ -2337,8 +2337,8 @@ function validate32(data, { instancePath = "", parentData, parentDataProperty, r
                               }
                               if (errors === _errs21) {
                                 if (typeof data9 == "number" && isFinite(data9)) {
-                                  if (data9 > 9007199254740991 || isNaN(data9)) {
-                                    validate32.errors = [{ instancePath: instancePath + "/requested_max_uses", schemaPath: "#/properties/requested_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                  if (data9 > 1e6 || isNaN(data9)) {
+                                    validate32.errors = [{ instancePath: instancePath + "/requested_max_uses", schemaPath: "#/properties/requested_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                     return false;
                                   } else {
                                     if (data9 < 1 || isNaN(data9)) {
@@ -2362,8 +2362,8 @@ function validate32(data, { instancePath = "", parentData, parentDataProperty, r
                                 }
                                 if (errors === _errs23) {
                                   if (typeof data10 == "number" && isFinite(data10)) {
-                                    if (data10 > 9007199254740991 || isNaN(data10)) {
-                                      validate32.errors = [{ instancePath: instancePath + "/granted_max_uses", schemaPath: "#/properties/granted_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                    if (data10 > 1e6 || isNaN(data10)) {
+                                      validate32.errors = [{ instancePath: instancePath + "/granted_max_uses", schemaPath: "#/properties/granted_max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                       return false;
                                     } else {
                                       if (data10 < 1 || isNaN(data10)) {
@@ -2605,8 +2605,8 @@ function validate32(data, { instancePath = "", parentData, parentDataProperty, r
                                                               }
                                                               if (errors === _errs49) {
                                                                 if (typeof data22 == "number" && isFinite(data22)) {
-                                                                  if (data22 > 9007199254740991 || isNaN(data22)) {
-                                                                    validate32.errors = [{ instancePath: instancePath + "/approval_bounds/max_uses", schemaPath: "#/$defs/ApprovalBounds/properties/max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                                                                  if (data22 > 1e6 || isNaN(data22)) {
+                                                                    validate32.errors = [{ instancePath: instancePath + "/approval_bounds/max_uses", schemaPath: "#/$defs/ApprovalBounds/properties/max_uses/maximum", keyword: "maximum", params: { comparison: "<=", limit: 1e6 }, message: "must be <= 1000000" }];
                                                                     return false;
                                                                   } else {
                                                                     if (data22 < 1 || isNaN(data22)) {
@@ -3342,8 +3342,8 @@ function validate46(data, { instancePath = "", parentData, parentDataProperty, r
               validate46.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "#/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
               return false;
             }
-            if ("brokerkit.io/operator-ui/v1" !== data0) {
-              validate46.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "#/properties/api_version/const", keyword: "const", params: { allowedValue: "brokerkit.io/operator-ui/v1" }, message: "must be equal to constant" }];
+            if ("unyolo.io/operator-ui/v1" !== data0) {
+              validate46.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "#/properties/api_version/const", keyword: "const", params: { allowedValue: "unyolo.io/operator-ui/v1" }, message: "must be equal to constant" }];
               return false;
             }
             var valid0 = _errs2 === errors;
@@ -3660,13 +3660,13 @@ function validate51(data, { instancePath = "", parentData, parentDataProperty, r
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
       if (data.api_version === void 0 && (missing0 = "api_version") || data.cursor === void 0 && (missing0 = "cursor") || data.changed === void 0 && (missing0 = "changed")) {
-        validate51.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
+        validate51.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
           if (!(key0 === "api_version" || key0 === "cursor" || key0 === "changed")) {
-            validate51.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
+            validate51.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
           }
@@ -3676,11 +3676,11 @@ function validate51(data, { instancePath = "", parentData, parentDataProperty, r
             let data0 = data.api_version;
             const _errs3 = errors;
             if (typeof data0 !== "string") {
-              validate51.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+              validate51.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
               return false;
             }
-            if ("brokerkit.io/operator-ui/v1" !== data0) {
-              validate51.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/api_version/const", keyword: "const", params: { allowedValue: "brokerkit.io/operator-ui/v1" }, message: "must be equal to constant" }];
+            if ("unyolo.io/operator-ui/v1" !== data0) {
+              validate51.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/api_version/const", keyword: "const", params: { allowedValue: "unyolo.io/operator-ui/v1" }, message: "must be equal to constant" }];
               return false;
             }
             var valid1 = _errs3 === errors;
@@ -3694,16 +3694,16 @@ function validate51(data, { instancePath = "", parentData, parentDataProperty, r
               if (errors === _errs5) {
                 if (typeof data1 === "string") {
                   if (func1(data1) > 128) {
-                    validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                    validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
                     return false;
                   } else {
                     if (func1(data1) < 1) {
-                      validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                      validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
                       return false;
                     }
                   }
                 } else {
-                  validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  validate51.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/cursor/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                   return false;
                 }
               }
@@ -3715,7 +3715,7 @@ function validate51(data, { instancePath = "", parentData, parentDataProperty, r
               if (data.changed !== void 0) {
                 const _errs7 = errors;
                 if (typeof data.changed !== "boolean") {
-                  validate51.errors = [{ instancePath: instancePath + "/changed", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/changed/type", keyword: "type", params: { type: "boolean" }, message: "must be boolean" }];
+                  validate51.errors = [{ instancePath: instancePath + "/changed", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/properties/changed/type", keyword: "type", params: { type: "boolean" }, message: "must be boolean" }];
                   return false;
                 }
                 var valid1 = _errs7 === errors;
@@ -3727,7 +3727,7 @@ function validate51(data, { instancePath = "", parentData, parentDataProperty, r
         }
       }
     } else {
-      validate51.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
+      validate51.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISnapshotEvent/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
       return false;
     }
   }
@@ -3751,13 +3751,13 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
     if (data && typeof data == "object" && !Array.isArray(data)) {
       let missing0;
       if (data.api_version === void 0 && (missing0 = "api_version") || data.cursor === void 0 && (missing0 = "cursor") || data.pending === void 0 && (missing0 = "pending") || data.healthy === void 0 && (missing0 = "healthy")) {
-        validate52.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
+        validate52.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/required", keyword: "required", params: { missingProperty: missing0 }, message: "must have required property '" + missing0 + "'" }];
         return false;
       } else {
         const _errs2 = errors;
         for (const key0 in data) {
           if (!(key0 === "api_version" || key0 === "cursor" || key0 === "pending" || key0 === "healthy")) {
-            validate52.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
+            validate52.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 }, message: "must NOT have additional properties" }];
             return false;
             break;
           }
@@ -3767,11 +3767,11 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
             let data0 = data.api_version;
             const _errs3 = errors;
             if (typeof data0 !== "string") {
-              validate52.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+              validate52.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/api_version/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
               return false;
             }
-            if ("brokerkit.io/operator-ui/v1" !== data0) {
-              validate52.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/api_version/const", keyword: "const", params: { allowedValue: "brokerkit.io/operator-ui/v1" }, message: "must be equal to constant" }];
+            if ("unyolo.io/operator-ui/v1" !== data0) {
+              validate52.errors = [{ instancePath: instancePath + "/api_version", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/api_version/const", keyword: "const", params: { allowedValue: "unyolo.io/operator-ui/v1" }, message: "must be equal to constant" }];
               return false;
             }
             var valid1 = _errs3 === errors;
@@ -3785,16 +3785,16 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
               if (errors === _errs5) {
                 if (typeof data1 === "string") {
                   if (func1(data1) > 128) {
-                    validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
+                    validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/maxLength", keyword: "maxLength", params: { limit: 128 }, message: "must NOT have more than 128 characters" }];
                     return false;
                   } else {
                     if (func1(data1) < 1) {
-                      validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
+                      validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/minLength", keyword: "minLength", params: { limit: 1 }, message: "must NOT have fewer than 1 characters" }];
                       return false;
                     }
                   }
                 } else {
-                  validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
+                  validate52.errors = [{ instancePath: instancePath + "/cursor", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/cursor/type", keyword: "type", params: { type: "string" }, message: "must be string" }];
                   return false;
                 }
               }
@@ -3807,17 +3807,17 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
                 let data2 = data.pending;
                 const _errs7 = errors;
                 if (!(typeof data2 == "number" && (!(data2 % 1) && !isNaN(data2)) && isFinite(data2))) {
-                  validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/type", keyword: "type", params: { type: "integer" }, message: "must be integer" }];
+                  validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/type", keyword: "type", params: { type: "integer" }, message: "must be integer" }];
                   return false;
                 }
                 if (errors === _errs7) {
                   if (typeof data2 == "number" && isFinite(data2)) {
                     if (data2 > 9007199254740991 || isNaN(data2)) {
-                      validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
+                      validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/maximum", keyword: "maximum", params: { comparison: "<=", limit: 9007199254740991 }, message: "must be <= 9007199254740991" }];
                       return false;
                     } else {
                       if (data2 < 0 || isNaN(data2)) {
-                        validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/minimum", keyword: "minimum", params: { comparison: ">=", limit: 0 }, message: "must be >= 0" }];
+                        validate52.errors = [{ instancePath: instancePath + "/pending", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/pending/minimum", keyword: "minimum", params: { comparison: ">=", limit: 0 }, message: "must be >= 0" }];
                         return false;
                       }
                     }
@@ -3831,7 +3831,7 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
                 if (data.healthy !== void 0) {
                   const _errs9 = errors;
                   if (typeof data.healthy !== "boolean") {
-                    validate52.errors = [{ instancePath: instancePath + "/healthy", schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/properties/healthy/type", keyword: "type", params: { type: "boolean" }, message: "must be boolean" }];
+                    validate52.errors = [{ instancePath: instancePath + "/healthy", schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/properties/healthy/type", keyword: "type", params: { type: "boolean" }, message: "must be boolean" }];
                     return false;
                   }
                   var valid1 = _errs9 === errors;
@@ -3844,7 +3844,7 @@ function validate52(data, { instancePath = "", parentData, parentDataProperty, r
         }
       }
     } else {
-      validate52.errors = [{ instancePath, schemaPath: "https://brokerkit.dev/schema/operator/v1/runtime/components#/$defs/UISummary/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
+      validate52.errors = [{ instancePath, schemaPath: "https://unyolo.io/schema/operator/v1/runtime/components#/$defs/UISummary/type", keyword: "type", params: { type: "object" }, message: "must be object" }];
       return false;
     }
   }
@@ -3999,7 +3999,7 @@ function validate53(data, { instancePath = "", parentData, parentDataProperty, r
 }
 validate53.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// node_modules/openclaw-brokerkit/dist/src/operator-v1.js
+// node_modules/openclaw-unyolo/dist/src/operator-v1.js
 function parseDescriptor(value) {
   return validated(validateDescriptor, value);
 }
@@ -4059,12 +4059,7 @@ var BrokerOperatorClient = class {
     return { id: this.options.id, label: this.options.label };
   }
   discover(signal) {
-    return this.request(
-      "/.well-known/brokerkit-operator",
-      signal ? { signal } : void 0,
-      parseDescriptor,
-      "discovery"
-    );
+    return this.request("/.well-known/unyolo-operator", signal ? { signal } : void 0, parseDescriptor, "discovery");
   }
   list(params = {}, signal) {
     const query = new URLSearchParams();
@@ -4421,7 +4416,7 @@ function loadConfig(env = process.env) {
     brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
     brokerAgentSecretFile: trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE),
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
-    brokerKitPopoverDecisions: env.MLCLAW_BROKERKIT_POPOVER_DECISIONS !== "0" && env.MLCLAW_BROKERKIT_POPOVER_DECISIONS !== "false",
+    unyoloPopoverDecisions: env.MLCLAW_UNYOLO_POPOVER_DECISIONS !== "0" && env.MLCLAW_UNYOLO_POPOVER_DECISIONS !== "false",
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
     openaiCredentialStoreFile,
@@ -4434,7 +4429,7 @@ function loadConfig(env = process.env) {
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
-    brokerKitPluginPath: trim(env.MLCLAW_BROKERKIT_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
+    unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
     agentName,
     model,
     modelChoices: runtimeSettings2.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
@@ -6713,7 +6708,7 @@ function signatureMatches(a, b) {
   return left.length === right.length && timingSafeEqual2(left, right);
 }
 
-// src/mlclaw-space-runtime/delegated-brokerkit.ts
+// src/mlclaw-space-runtime/delegated-unyolo.ts
 import { createHash as createHash2, createHmac as createHmac3, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 
 // src/mlclaw-space-runtime/delegated-revisions.ts
@@ -6730,14 +6725,14 @@ var DelegatedRevisions = class {
     this.revision += 1;
     this.current = value(this.cursor());
     for (const waiter of [...this.waiters])
-      this.finish(waiter, { api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: true });
+      this.finish(waiter, { api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: true });
     return this.current;
   }
   wait(cursor, waitSeconds, signal) {
     const observed = this.parse(cursor);
     if (observed === void 0) return Promise.reject(revisionError("cursor_expired"));
     if (observed !== this.revision) {
-      return Promise.resolve({ api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: true });
+      return Promise.resolve({ api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: true });
     }
     if (this.waiters.size >= 256) return Promise.reject(revisionError("source_unavailable"));
     if (signal?.aborted) return Promise.reject(abortError());
@@ -6746,7 +6741,7 @@ var DelegatedRevisions = class {
         resolve,
         reject,
         timer: setTimeout(() => {
-          this.finish(waiter, { api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: false });
+          this.finish(waiter, { api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: false });
         }, waitSeconds * 1e3),
         ...signal ? { signal } : {}
       };
@@ -6788,18 +6783,18 @@ function abortError() {
   return new DOMException("The operation was aborted", "AbortError");
 }
 
-// src/mlclaw-space-runtime/delegated-brokerkit.ts
-var API_VERSION = "brokerkit.io/delegated-web/v1";
+// src/mlclaw-space-runtime/delegated-unyolo.ts
+var API_VERSION = "unyolo.io/delegated-web/v1";
 var TOKEN_LIFETIME_SECONDS = 4 * 60;
 var MAX_PAGES_PER_SOURCE = 32;
 var MAX_HANDLES = 4096;
 var SOURCE_DEADLINE_MS = 15e3;
-var DelegatedBrokerKit = class {
+var DelegatedUnyolo = class {
   constructor(registry, sessionSecret, now = () => /* @__PURE__ */ new Date(), sourceDeadlineMs = SOURCE_DEADLINE_MS) {
     this.registry = registry;
     this.now = now;
     this.sourceDeadlineMs = sourceDeadlineMs;
-    this.key = createHmac3("sha256", sessionSecret).update("mlclaw/brokerkit-delegated-web/v1", "utf8").digest();
+    this.key = createHmac3("sha256", sessionSecret).update("mlclaw/unyolo-delegated-web/v1", "utf8").digest();
   }
   key;
   handles = /* @__PURE__ */ new Map();
@@ -6811,7 +6806,7 @@ var DelegatedBrokerKit = class {
     const expiresAt = issuedAt + TOKEN_LIFETIME_SECONDS;
     const payload = {
       version: 1,
-      audience: "brokerkit-delegated-web",
+      audience: "unyolo-delegated-web",
       subject: actor,
       issuedAt,
       expiresAt,
@@ -6869,7 +6864,7 @@ var DelegatedBrokerKit = class {
       requests
     });
     return this.revisions.publish(material, (cursor) => ({
-      api_version: "brokerkit.io/operator-ui/v1",
+      api_version: "unyolo.io/operator-ui/v1",
       cursor,
       sources,
       requests,
@@ -7070,14 +7065,14 @@ function reconcileRequests(pages) {
   }
   return [...requests.values()];
 }
-var DelegatedBrokerKitError = class extends Error {
+var DelegatedUnyoloError = class extends Error {
   constructor(code) {
     super(code);
     this.code = code;
   }
 };
 function delegatedError(code) {
-  return new DelegatedBrokerKitError(code);
+  return new DelegatedUnyoloError(code);
 }
 function project(source, request, handle) {
   return { source_id: source.id, source_label: source.label, handle, request };
@@ -7091,7 +7086,7 @@ function handleExpiry(request) {
 }
 function decisionKey(record, action, actor) {
   return createHash2("sha256").update(
-    ["mlclaw-brokerkit-decision-v1", record.sourceId, record.requestId, String(record.revision), action, actor].join(
+    ["mlclaw-unyolo-decision-v1", record.sourceId, record.requestId, String(record.revision), action, actor].join(
       "\0"
     ),
     "utf8"
@@ -7152,7 +7147,7 @@ function hasExactTokenFields(record) {
   return Object.keys(record).sort().join(",") === "access,audience,expiresAt,issuedAt,nonce,subject,version";
 }
 function validTokenIdentity(record) {
-  return record.version === 1 && record.audience === "brokerkit-delegated-web" && (record.access === "read" || record.access === "decide") && typeof record.subject === "string" && record.subject.length >= 1 && record.subject.length <= 200;
+  return record.version === 1 && record.audience === "unyolo-delegated-web" && (record.access === "read" || record.access === "decide") && typeof record.subject === "string" && record.subject.length >= 1 && record.subject.length <= 200;
 }
 function validTokenTimes(record) {
   return typeof record.issuedAt === "number" && Number.isSafeInteger(record.issuedAt) && typeof record.expiresAt === "number" && Number.isSafeInteger(record.expiresAt);
@@ -7166,7 +7161,7 @@ function safeEqual(left, right) {
   return a.length === b.length && timingSafeEqual3(a, b);
 }
 function safeSourceError(error) {
-  const code = error instanceof BrokerOperatorError ? error.code : error instanceof DelegatedBrokerKitError ? error.code : void 0;
+  const code = error instanceof BrokerOperatorError ? error.code : error instanceof DelegatedUnyoloError ? error.code : void 0;
   if (code === "broker_timeout" || code === "unavailable" || code === "source_unavailable") return code;
   return "source_unavailable";
 }
@@ -11815,16 +11810,12 @@ function managedMcpServerConfig(config2) {
       url: `http://127.0.0.1:${config2.mcpPort}/mcp/huggingface`,
       transport: "streamable-http",
       headers,
-      timeout: 120,
-      connectTimeout: 10,
       supportsParallelToolCalls: true
     },
     "research-agent": {
       url: `http://127.0.0.1:${config2.mcpPort}/mcp/research`,
       transport: "streamable-http",
       headers,
-      timeout: Math.ceil(config2.researchTimeoutMs / 1e3) + 30,
-      connectTimeout: 10,
       supportsParallelToolCalls: false
     }
   };
@@ -12137,7 +12128,7 @@ async function configureOpenClawGateway(config2, options = {}) {
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
-  configureBrokerKitPlugin(openclawConfig, config2);
+  configureUnyoloPlugin(openclawConfig, config2);
   await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
   await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
@@ -12237,17 +12228,23 @@ function configureCodexRuntimePlugin(openclawConfig, enabled) {
     }
   };
 }
-function configureBrokerKitPlugin(openclawConfig, config2) {
+function configureUnyoloPlugin(openclawConfig, config2) {
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
-  load.paths = uniqueStrings(load.paths, config2.brokerKitPluginPath);
-  if (plugins.allow !== void 0) plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
+  load.paths = uniqueStrings(
+    withoutString(load.paths, "/opt/openclaw-plugins/node_modules/openclaw-brokerkit"),
+    config2.unyoloPluginPath
+  );
+  if (plugins.allow !== void 0) {
+    plugins.allow = uniqueStrings(withoutString(plugins.allow, "brokerkit"), "unyolo");
+  }
   const entries = object(plugins, "entries");
-  entries.brokerkit = {
+  delete entries.brokerkit;
+  entries.unyolo = {
     enabled: true,
     config: {
       mode: "delegated-web",
-      delegatedWeb: { basePath: "/mlclaw/api/brokerkit" }
+      delegatedWeb: { basePath: "/trusted-host/api/unyolo" }
     }
   };
 }
@@ -12434,6 +12431,9 @@ function objectValue2(value) {
 function uniqueStrings(value, required) {
   const current = Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
   return [.../* @__PURE__ */ new Set([...current, required])];
+}
+function withoutString(value, removed) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item !== removed) : [];
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
@@ -13008,8 +13008,8 @@ function normalizeNext(value) {
 var SHELL_MARKER = "data-mlclaw-shell";
 var BRANDING_MARKER = "data-mlclaw-branding";
 var CONTROL_BRANDING_MARKER = "data-mlclaw-control-branding";
-var BROKERKIT_DELEGATED_UI_BOOTSTRAP = Buffer.from(
-  JSON.stringify({ version: 1, mode: "delegated-web", basePath: "/mlclaw/api/brokerkit" }),
+var UNYOLO_DELEGATED_UI_BOOTSTRAP = Buffer.from(
+  JSON.stringify({ version: 1, mode: "delegated-web", basePath: "/trusted-host/api/unyolo" }),
   "utf8"
 ).toString("base64url");
 var CONTROL_BRANDING_SCRIPT_PATH = "/assets/mlclaw-control-branding.js";
@@ -13091,7 +13091,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
     button.setAttribute("data-ready", "1");
     function invalidateFrame() {
       if (frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "brokerkit.operator-ui.invalidate", version: 1 }, "*");
+        frame.contentWindow.postMessage({ type: "unyolo.operator-ui.invalidate", version: 1 }, "*");
       }
     }
     var lastRebootstrapAt = 0;
@@ -13127,7 +13127,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
         data &&
         typeof data === "object" &&
         Object.keys(data).sort().join(",") === "type,version" &&
-        data.type === "brokerkit.delegated-web.rebootstrap" &&
+        data.type === "unyolo.delegated-web.rebootstrap" &&
         data.version === 1
       ) {
         rebootstrapFrame();
@@ -13138,12 +13138,12 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
         !data ||
         typeof data !== "object" ||
         Object.keys(data).sort().join(",") !== "nonce,type,version" ||
-        data.type !== "brokerkit.delegated-web.open" ||
+        data.type !== "unyolo.delegated-web.open" ||
         data.version !== 1 ||
         typeof data.nonce !== "string" ||
         !/^[a-f0-9]{32}$/.test(data.nonce)
       ) return;
-      window.location.assign("/plugins/brokerkit/ui/#${BROKERKIT_DELEGATED_UI_BOOTSTRAP}");
+      window.location.assign("/plugins/unyolo/ui/#${UNYOLO_DELEGATED_UI_BOOTSTRAP}");
     });
     var summaryCursor = "";
     var stopped = false;
@@ -13152,7 +13152,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
         !summary ||
         typeof summary !== "object" ||
         Object.keys(summary).sort().join(",") !== "api_version,cursor,healthy,pending" ||
-        summary.api_version !== "brokerkit.io/operator-ui/v1" ||
+        summary.api_version !== "unyolo.io/operator-ui/v1" ||
         typeof summary.cursor !== "string" ||
         summary.cursor.length < 1 ||
         summary.cursor.length > 128 ||
@@ -13172,7 +13172,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
       return true;
     }
     function refresh() {
-      return fetch("/mlclaw/api/brokerkit/summary", { credentials: "same-origin", cache: "no-store" })
+      return fetch("/trusted-host/api/unyolo/summary", { credentials: "same-origin", cache: "no-store" })
         .then(function (response) { return response.ok ? response.json() : null; })
         .then(acceptSummary)
         .catch(function () { return false; });
@@ -13183,7 +13183,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
         refresh().then(function () { window.setTimeout(function () { watch(250); }, delay); });
         return;
       }
-      fetch("/mlclaw/api/brokerkit/summary/events?cursor=" + encodeURIComponent(summaryCursor) + "&wait_seconds=25", {
+      fetch("/trusted-host/api/unyolo/summary/events?cursor=" + encodeURIComponent(summaryCursor) + "&wait_seconds=25", {
         credentials: "same-origin",
         cache: "no-store"
       }).then(function (response) {
@@ -13198,7 +13198,7 @@ var CONTROL_BRANDING_SCRIPT = `(function () {
           event &&
           typeof event === "object" &&
           Object.keys(event).sort().join(",") === "api_version,changed,cursor" &&
-          event.api_version === "brokerkit.io/operator-ui/v1" &&
+          event.api_version === "unyolo.io/operator-ui/v1" &&
           typeof event.cursor === "string" &&
           event.cursor.length >= 1 &&
           event.cursor.length <= 128 &&
@@ -13271,7 +13271,7 @@ function injectMlClawShell(html, branding) {
       <span>Approvals</span>
       <button data-mlclaw-approvals-close type="button" aria-label="Close approval requests" style="display:grid;width:30px;height:30px;place-items:center;border:0;border-radius:7px;background:transparent;color:#475569;cursor:pointer;font:20px/1 system-ui;">&times;</button>
     </header>
-    <iframe data-mlclaw-approvals-frame data-src="/plugins/brokerkit/ui/?embed=popover#${BROKERKIT_DELEGATED_UI_BOOTSTRAP}" title="Approval requests" sandbox="allow-scripts" style="display:block;width:100%;height:calc(100% - 42px);border:0;background:white;"></iframe>
+    <iframe data-mlclaw-approvals-frame data-src="/plugins/unyolo/ui/?embed=popover#${UNYOLO_DELEGATED_UI_BOOTSTRAP}" title="Approval requests" sandbox="allow-scripts" style="display:block;width:100%;height:calc(100% - 42px);border:0;background:white;"></iframe>
   </section>
   <div style="display:flex;gap:8px;align-items:center;">
   <a href="/mlclaw" aria-label="Open ${escapeHtml2(branding.name)} settings" title="${escapeHtml2(branding.name)}" style="box-sizing:border-box;display:flex;width:34px;height:34px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;text-decoration:none;">
@@ -13321,14 +13321,14 @@ function escapeHtml2(value) {
 }
 
 // src/mlclaw-space-runtime/app.ts
-var BROKERKIT_SESSION_HEADER = "brokerkit-session";
+var UNYOLO_SESSION_HEADER = "unyolo-session";
 function createSpaceRuntimeApp(config2, controls) {
   const app = new Hono2();
   const operatorBrokers = new OperatorBrokerRegistry(config2.operatorBrokers);
-  const delegatedBrokerKit = new DelegatedBrokerKit(operatorBrokers, config2.sessionSecret);
+  const delegatedUnyolo = new DelegatedUnyolo(operatorBrokers, config2.sessionSecret);
   const allowDelegatedSessionSnapshot = fixedWindowRateLimit(12, 6e4);
   const allowDelegatedActorSnapshot = fixedWindowRateLimit(60, 6e4);
-  const allowBrokerKitSummary = fixedWindowRateLimit(12, 6e4);
+  const allowUnyoloSummary = fixedWindowRateLimit(12, 6e4);
   const allowDelegatedEvents = fixedWindowRateLimit(60, 6e4);
   const allowSummaryEvents = fixedWindowRateLimit(60, 6e4);
   const allowLocalLogin = fixedWindowRateLimit(10, 6e4);
@@ -13348,8 +13348,8 @@ function createSpaceRuntimeApp(config2, controls) {
     async () => serveFile(path4.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
-  app.get("/plugins/brokerkit/ui", (c) => c.redirect("/plugins/brokerkit/ui/", 308));
-  app.get("/plugins/brokerkit/ui/*", (c) => trustedBrokerKitUi(c, config2, delegatedBrokerKit));
+  app.get("/plugins/unyolo/ui", (c) => c.redirect("/plugins/unyolo/ui/", 308));
+  app.get("/plugins/unyolo/ui/*", (c) => trustedUnyoloUi(c, config2, delegatedUnyolo));
   app.get("/assets/brand/logo", async () => serveBrandAsset(config2, config2.branding.logoAsset));
   app.get("/favicon.svg", async () => serveBrandAsset(config2, config2.branding.faviconSvgAsset));
   app.get("/favicon-32.png", async () => serveBrandAsset(config2, config2.branding.favicon32Asset));
@@ -13449,70 +13449,70 @@ function createSpaceRuntimeApp(config2, controls) {
     }
     return c.json(await statusPayload(config2, controls));
   });
-  app.get("/mlclaw/api/brokerkit/summary", async (c) => {
+  app.get("/trusted-host/api/unyolo/summary", async (c) => {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
-    if (!allowBrokerKitSummary(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
+    if (!allowUnyoloSummary(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
     try {
-      return c.json(await delegatedBrokerKit.summary());
+      return c.json(await delegatedUnyolo.summary());
     } catch {
       return c.json({ ok: false, error: "operator inbox unavailable" }, 503);
     }
   });
-  app.get("/mlclaw/api/brokerkit/summary/events", async (c) => {
+  app.get("/trusted-host/api/unyolo/summary/events", async (c) => {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
     if (!allowSummaryEvents(auth.username)) return c.json({ ok: false, error: "rate limited" }, 429);
     const input = delegatedEventQuery(c.req.url);
     if (!input) return c.json({ ok: false, error: "invalid request" }, 400);
     try {
-      return c.json(await delegatedBrokerKit.events(input.cursor, input.waitSeconds, c.req.raw.signal));
+      return c.json(await delegatedUnyolo.events(input.cursor, input.waitSeconds, c.req.raw.signal));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
-  app.options("/mlclaw/api/brokerkit/*", (c) => delegatedPreflight(c));
-  app.post("/mlclaw/api/brokerkit/session", (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.options("/trusted-host/api/unyolo/*", (c) => delegatedPreflight(c));
+  app.post("/trusted-host/api/unyolo/session", (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
-    return delegatedJson(c, delegatedBrokerKit.issueSession(identity.actor, identity.access));
+    return delegatedJson(c, delegatedUnyolo.issueSession(identity.actor, identity.access));
   });
-  app.get("/mlclaw/api/brokerkit/snapshot", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/snapshot", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     if (!allowDelegatedSessionSnapshot(identity.sessionId) || !allowDelegatedActorSnapshot(identity.actor)) {
       return delegatedErrorResponse(c, "rate_limited", 429);
     }
     try {
-      return delegatedJson(c, await delegatedBrokerKit.snapshot());
+      return delegatedJson(c, await delegatedUnyolo.snapshot());
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
-  app.get("/mlclaw/api/brokerkit/events", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/events", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     if (!allowDelegatedEvents(identity.sessionId)) return delegatedErrorResponse(c, "rate_limited", 429);
     const input = delegatedEventQuery(c.req.url);
     if (!input) return delegatedErrorResponse(c, "invalid_input", 400);
     try {
-      return delegatedJson(c, await delegatedBrokerKit.events(input.cursor, input.waitSeconds, c.req.raw.signal));
+      return delegatedJson(c, await delegatedUnyolo.events(input.cursor, input.waitSeconds, c.req.raw.signal));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
-  app.get("/mlclaw/api/brokerkit/requests/:handle", async (c) => {
-    const identity = delegatedIdentity(c, delegatedBrokerKit);
+  app.get("/trusted-host/api/unyolo/requests/:handle", async (c) => {
+    const identity = delegatedIdentity(c, delegatedUnyolo);
     if (!identity) return delegatedErrorResponse(c, "not_authorized", 401);
     try {
-      return delegatedJson(c, await delegatedBrokerKit.detail(c.req.param("handle")));
+      return delegatedJson(c, await delegatedUnyolo.detail(c.req.param("handle")));
     } catch (error) {
       return delegatedFailure(c, error);
     }
   });
   for (const action of ["approve", "deny", "revoke"]) {
-    app.post(`/mlclaw/api/brokerkit/requests/:handle/${action}`, async (c) => {
-      const identity = delegatedIdentity(c, delegatedBrokerKit);
+    app.post(`/trusted-host/api/unyolo/requests/:handle/${action}`, async (c) => {
+      const identity = delegatedIdentity(c, delegatedUnyolo);
       if (!identity || identity.access !== "decide") return delegatedErrorResponse(c, "not_authorized", 401);
       const body = await readBoundedJson(c, 16384);
       if (!body || Object.keys(body).some((key) => !["expectedRevision", "constraints"].includes(key))) {
@@ -13528,7 +13528,7 @@ function createSpaceRuntimeApp(config2, controls) {
       try {
         return delegatedJson(
           c,
-          await delegatedBrokerKit.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
+          await delegatedUnyolo.decide(c.req.param("handle"), action, expectedRevision, identity.actor, {
             ...typeof durationSeconds === "number" ? { durationSeconds } : {},
             ...typeof maxUses === "number" || maxUses === null ? { maxUses } : {}
           })
@@ -13538,7 +13538,7 @@ function createSpaceRuntimeApp(config2, controls) {
       }
     });
   }
-  app.all("/mlclaw/api/brokerkit/*", (c) => delegatedErrorResponse(c, "not_found", 404));
+  app.all("/trusted-host/api/unyolo/*", (c) => delegatedErrorResponse(c, "not_found", 404));
   app.post("/mlclaw/api/integrations/huggingface/disconnect", async (c) => {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) {
@@ -13801,12 +13801,12 @@ async function controlUi(c, config2) {
   }
   return serveFile(path4.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
-async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
-  const prefix = "/plugins/brokerkit/ui/";
+async function trustedUnyoloUi(c, config2, delegatedUnyolo) {
+  const prefix = "/plugins/unyolo/ui/";
   const requested = c.req.path.slice(prefix.length);
   const relative = requested ? safeRelativePath(requested) : "index.html";
   if (!relative) return c.text("not found\n", 404);
-  const uiDir = path4.join(config2.brokerKitPluginPath, "dist", "ui");
+  const uiDir = path4.join(config2.unyoloPluginPath, "dist", "ui");
   const file = path4.join(uiDir, relative);
   if (relative === "index.html") {
     const destination = c.req.header("sec-fetch-dest");
@@ -13819,17 +13819,17 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
     try {
       const template = await fs4.readFile(file, "utf8");
       const delegatedSession = destination === "document" || embeddedPopover;
-      const marker = !delegatedSession ? '<meta name="brokerkit-delegated-top-level">' : `<meta name="brokerkit-delegated-session" content="${Buffer.from(
+      const marker = !delegatedSession ? '<meta name="unyolo-delegated-top-level">' : `<meta name="unyolo-delegated-session" content="${Buffer.from(
         JSON.stringify(
-          delegatedBrokerKit.issueSession(
+          delegatedUnyolo.issueSession(
             auth.username,
-            embeddedPopover && !config2.brokerKitPopoverDecisions ? "read" : "decide"
+            embeddedPopover && !config2.unyoloPopoverDecisions ? "read" : "decide"
           )
         ),
         "utf8"
       ).toString("base64url")}">`;
       if (!template.includes("</head>")) return c.text("not found\n", 404);
-      const headers2 = trustedBrokerKitHeaders(
+      const headers2 = trustedUnyoloHeaders(
         embeddedPopover ? "popover" : destination === "iframe" ? "launcher" : "top-level",
         new URL(c.req.url).origin
       );
@@ -13841,11 +13841,11 @@ async function trustedBrokerKitUi(c, config2, delegatedBrokerKit) {
   }
   const response = await serveFile(file, contentType(file), true);
   if (response.status !== 200) return response;
-  const headers = trustedBrokerKitHeaders("asset", new URL(c.req.url).origin);
+  const headers = trustedUnyoloHeaders("asset", new URL(c.req.url).origin);
   headers.set("content-type", response.headers.get("content-type") ?? "application/octet-stream");
   return new Response(response.body, { status: response.status, headers });
 }
-function trustedBrokerKitHeaders(mode, origin) {
+function trustedUnyoloHeaders(mode, origin) {
   const asset = mode === "asset";
   const sandbox = mode === "top-level" || mode === "popover" ? "sandbox allow-scripts; " : "";
   const headers = new Headers({
@@ -13917,12 +13917,12 @@ function delegatedEventQuery(urlValue) {
 }
 function delegatedIdentity(c, delegated) {
   if (!delegatedOriginAllowed(c)) return void 0;
-  return delegated.authorizeSession(c.req.header(BROKERKIT_SESSION_HEADER));
+  return delegated.authorizeSession(c.req.header(UNYOLO_SESSION_HEADER));
 }
 function delegatedPreflight(c) {
   if (!delegatedOriginAllowed(c)) return delegatedErrorResponse(c, "not_authorized", 403);
   delegatedHeaders(c);
-  c.header("access-control-allow-headers", `${BROKERKIT_SESSION_HEADER}, content-type`);
+  c.header("access-control-allow-headers", `${UNYOLO_SESSION_HEADER}, content-type`);
   c.header("access-control-allow-methods", "GET, POST, OPTIONS");
   c.header("access-control-max-age", "300");
   return c.body(null, 204);
@@ -13936,7 +13936,7 @@ function delegatedErrorResponse(c, code, status) {
   return c.json({ error: { code } }, status);
 }
 function delegatedFailure(c, error) {
-  if (error instanceof DelegatedBrokerKitError) {
+  if (error instanceof DelegatedUnyoloError) {
     const status = error.code === "request_not_found" ? 404 : error.code === "cursor_expired" ? 410 : error.code === "revision_stale" || error.code === "action_not_allowed" ? 409 : 502;
     return delegatedErrorResponse(c, error.code, status);
   }
@@ -13946,7 +13946,7 @@ function delegatedFailure(c, error) {
     return delegatedErrorResponse(c, code, status);
   }
   process.stderr.write(
-    `[mlclaw] delegated BrokerKit request failed: route=${delegatedRouteLabel(c)} status=502 class=${safeErrorClass(error)}
+    `[mlclaw] delegated unYOLO request failed: route=${delegatedRouteLabel(c)} status=502 class=${safeErrorClass(error)}
 `
   );
   return delegatedErrorResponse(c, "source_unavailable", 502);
@@ -20309,7 +20309,7 @@ var SpaceRuntimeServer = class {
     await proxyHttp(req, res, this.config, { username: session.username });
   }
   shouldRouteToMlClaw(pathname) {
-    return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/sw.js" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/assistant-avatar.svg" || pathname === "/assets/mlclaw-control-branding.js" || pathname === "/assets/brand/logo" || pathname === "/plugins/brokerkit/ui" || pathname.startsWith("/plugins/brokerkit/ui/") || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
+    return pathname === "/health" || pathname === "/healthz" || pathname === "/favicon.svg" || pathname === "/favicon-32.png" || pathname === "/favicon.ico" || pathname === "/apple-touch-icon.png" || pathname === "/manifest.webmanifest" || pathname === "/sw.js" || pathname === "/assets/hf-logo.svg" || pathname === "/assets/mlclaw.svg" || pathname === "/assets/assistant-avatar.svg" || pathname === "/assets/mlclaw-control-branding.js" || pathname === "/assets/brand/logo" || pathname === "/plugins/unyolo/ui" || pathname.startsWith("/plugins/unyolo/ui/") || pathname === "/trusted-host/api/unyolo" || pathname.startsWith("/trusted-host/api/unyolo/") || pathname === "/login" || pathname === "/logout" || pathname.startsWith("/oauth/") || pathname === "/mlclaw" || pathname.startsWith("/mlclaw/");
   }
   async startOpenClaw(extraEnv = {}) {
     if (this.openclawStarting || this.openclaw && !this.openclaw.killed) {

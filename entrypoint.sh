@@ -14,7 +14,7 @@ HF_BROKER_SCOPE_FILE="$HF_BROKER_POLICY_DIR/scope.json"
 STATE_HF_TOKEN=""
 RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"
 PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"
-HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/hf-broker"
+HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"
 
 prepare_hf_broker() {
   local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
@@ -70,7 +70,12 @@ restore_protected_state() {
     cp -a "$RESTORED_PROTECTED_STATE_DIR/." "$PROTECTED_STATE_DIR/"
     rm -rf "$RESTORED_PROTECTED_STATE_DIR"
   fi
+  # HF Broker v0.7.0 replaces its pre-release state contract and requires fresh
+  # state. The renamed path preserves new unYOLO state across later restarts
+  # while the superseded state is removed instead of imported.
+  rm -rf "$PROTECTED_STATE_DIR/hf-broker"
   install -d -m 0700 -o root -g root "$PROTECTED_STATE_DIR/control"
+  install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
   rm -rf -- \
     "$HF_BROKER_STATE_DIR/grants" \

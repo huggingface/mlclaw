@@ -42,7 +42,7 @@ export type SpaceRuntimeConfig = {
   brokerAgentSecret: string | undefined;
   brokerAgentSecretFile: string | undefined;
   operatorBrokers: OperatorBrokerConfig[];
-  brokerKitPopoverDecisions: boolean;
+  unyoloPopoverDecisions: boolean;
   hubUrl: string;
   openaiCredentialFile: string;
   openaiCredentialStoreFile: string;
@@ -55,7 +55,7 @@ export type SpaceRuntimeConfig = {
   openclawConfigPath: string;
   openclawCommand: string;
   openclawArgs: string[];
-  brokerKitPluginPath: string;
+  unyoloPluginPath: string;
   agentName: string | undefined;
   model: string;
   modelChoices: ModelChoice[];
@@ -172,8 +172,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     brokerAgentSecret: readOptionalSecret(trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE)),
     brokerAgentSecretFile: trim(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE),
     operatorBrokers: loadOperatorBrokers(trim(env.MLCLAW_OPERATOR_BROKERS_FILE)),
-    brokerKitPopoverDecisions:
-      env.MLCLAW_BROKERKIT_POPOVER_DECISIONS !== "0" && env.MLCLAW_BROKERKIT_POPOVER_DECISIONS !== "false",
+    unyoloPopoverDecisions:
+      env.MLCLAW_UNYOLO_POPOVER_DECISIONS !== "0" && env.MLCLAW_UNYOLO_POPOVER_DECISIONS !== "false",
     hubUrl: trim(env.HF_ENDPOINT) ?? "https://huggingface.co",
     openaiCredentialFile: trim(env.MLCLAW_OPENAI_CREDENTIAL_FILE) ?? "/tmp/mlclaw-secrets/openai.env",
     openaiCredentialStoreFile,
@@ -186,8 +186,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
-    brokerKitPluginPath:
-      trim(env.MLCLAW_BROKERKIT_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
+    unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
     agentName,
     model,
     modelChoices: runtimeSettings.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),

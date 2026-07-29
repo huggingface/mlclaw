@@ -6,17 +6,17 @@ Status: complete
 
 ## Objective
 
-Adopt BrokerKit's transcript-safe MCP contract in MLClaw, pin the exact
-implementing BrokerKit revision, and prove that an OpenClaw agent can submit,
+Adopt unYOLO's transcript-safe MCP contract in MLClaw, pin the exact
+implementing unYOLO revision, and prove that an OpenClaw agent can submit,
 recover, approve, and complete broker operations without reusing redacted
 identifiers or losing operations behind MCP timeouts.
 
 This is one coordinated pre-release cutover. MLClaw does not patch OpenClaw,
-carry old BrokerKit MCP fields, translate legacy tool calls, or support mixed
-old/new runtime pairs. The test deployment starts with fresh BrokerKit state.
+carry old unYOLO MCP fields, translate legacy tool calls, or support mixed
+old/new runtime pairs. The test deployment starts with fresh unYOLO state.
 
 The companion provider and shared-contract work belongs to
-`osolmaz/brokerkit:docs/2026-07-14-agent-tool-compatibility-cutover-plan.md`.
+`osolmaz/unyolo:docs/2026-07-14-agent-tool-compatibility-cutover-plan.md`.
 
 ## Confirmed Failure
 
@@ -44,7 +44,7 @@ request-ID lookup with which to recover it.
 
 ## Ownership
 
-BrokerKit owns:
+unYOLO owns:
 
 - the transcript-safe MCP request and response schemas;
 - server-generated request identity;
@@ -57,7 +57,7 @@ BrokerKit owns:
 
 MLClaw owns:
 
-- pinning one immutable compatible BrokerKit revision;
+- pinning one immutable compatible unYOLO revision;
 - installing the matching HF Broker binary and OpenClaw plugin in the image;
 - writing a bounded OpenClaw MCP server configuration;
 - seeding concise agent guidance for the submit/status workflow;
@@ -70,10 +70,10 @@ MLClaw owns:
 OpenClaw core is not modified. MLClaw relies only on its published MCP server
 configuration and tool execution behavior.
 
-## Required BrokerKit Contract
+## Required unYOLO Contract
 
-MLClaw consumes the following version 1 behavior from its pinned BrokerKit
-revision. The BrokerKit plan is authoritative for implementation details.
+MLClaw consumes the following version 1 behavior from its pinned unYOLO
+revision. The unYOLO plan is authoritative for implementation details.
 
 ### Submission tools
 
@@ -89,8 +89,8 @@ Every agent-facing provider operation:
 - uses transcript-safe names for every non-secret input and output field.
 
 Immediate, get, and wait results use the closed
-`brokerkit.io/mcp-operation/v1` projection. Bounded list results use
-`brokerkit.io/mcp-operation-page/v1`. MLClaw must reject a pinned BrokerKit
+`unyolo.io/mcp-operation/v1` projection. Bounded list results use
+`unyolo.io/mcp-operation-page/v1`. MLClaw must reject a pinned unYOLO
 build that labels the renamed MCP projection as an unchanged Agent V1
 document.
 
@@ -149,7 +149,7 @@ Update `src/mlclaw-space-runtime/openclaw-config.ts` so the managed
 to its command, arguments, and protected environment:
 
 - set `connectionTimeoutMs` to a documented bounded startup value;
-- set `requestTimeoutMs` above BrokerKit's maximum 25-second operation and
+- set `requestTimeoutMs` above unYOLO's maximum 25-second operation and
   temporary-grant decision wait but well below an approval lifetime;
 - preserve an explicit user disablement;
 - do not preserve user overrides of the managed command, protected
@@ -158,7 +158,7 @@ to its command, arguments, and protected environment:
   metadata.
 
 Use one exported constant for each timeout so source, tests, generated runtime
-bundle, and documentation cannot drift. The BrokerKit MCP server must cap both
+bundle, and documentation cannot drift. The unYOLO MCP server must cap both
 operation waits and temporary-grant decision waits at 25 seconds. A recommended
 request timeout is 45 seconds, leaving room for transport overhead around that
 bounded broker wait.
@@ -196,25 +196,25 @@ broker restart for client request conflicts. Distinguish these classes:
 - operator source unavailable.
 
 Diagnostics may include a safe operation ID or request ID returned by
-BrokerKit. They must not include agent credentials, operator credentials,
+unYOLO. They must not include agent credentials, operator credentials,
 sealed payload references, raw secret values, or unbounded broker responses.
 
 ### Immutable runtime pin
 
-After BrokerKit is green:
+After unYOLO is green:
 
-- update `package.json` `config.brokerkitVersion` to the exact implementing
+- update `package.json` `config.hfBrokerVersion` to the exact implementing
   commit;
-- update the matching `ARG BROKERKIT_VERSION` default in `Dockerfile`;
+- update the matching `ARG HF_BROKER_VERSION` default in `Dockerfile`;
 - keep the pre-publication plugin package format at version 1;
 - rebuild `dist/mlclaw-space-runtime.js`, `dist/mlclaw.mjs`, and all tracked
   generated assets from source;
 - verify the image contains the HF Broker binary and OpenClaw plugin from the
-  same BrokerKit commit; and
+  same unYOLO commit; and
 - make runtime-image tests fail when either pin drifts.
 
 Do not build from a branch, moving tag, uncommitted checkout, or locally
-modified BrokerKit tree.
+modified unYOLO tree.
 
 ## Automated Verification
 
@@ -225,7 +225,7 @@ tests to prove:
 
 - the HF Broker MCP entry contains the canonical command, protected
   environment, connection timeout, and request timeout;
-- the request timeout exceeds the bounded BrokerKit wait;
+- the request timeout exceeds the bounded unYOLO wait;
 - a user cannot replace the managed binary, agent-secret path, broker URL, or
   timeout contract through stale config;
 - explicit disablement remains respected; and
@@ -236,7 +236,7 @@ tests to prove:
 Extend `test/mlclaw.runtime-image.test.ts`,
 `test/mlclaw.generate-space.test.ts`, and bundle checks to prove:
 
-- the BrokerKit commit pin is identical in package metadata and Docker build
+- the unYOLO commit pin is identical in package metadata and Docker build
   input;
 - the built `hf-broker` advertises `request_id` and no agent-facing
   `idempotency_key`;
@@ -276,17 +276,17 @@ Add an integration test in which:
 - repeated 25-second waits return the same operation without transport error;
 - one injected ambiguous transport failure occurs after durable admission;
 - bounded operation listing or request-ID lookup recovers the operation;
-- approval through the delegated BrokerKit UI completes it; and
+- approval through the delegated unYOLO UI completes it; and
 - the next get/wait returns the terminal result without a duplicate operation.
 
 ## Live Test-Space Verification
 
 Deploy only to `osolmaz/mlclaw-test` after both repositories are green.
 
-1. Recreate the test deployment's BrokerKit state from scratch; do not write a
+1. Recreate the test deployment's unYOLO state from scratch; do not write a
    pre-release state converter.
 2. Confirm `mlclaw doctor osolmaz/mlclaw-test` reports the runtime, mounted
-   bucket, OpenClaw Gateway, BrokerKit plugin, and HF Broker listeners healthy.
+   bucket, OpenClaw Gateway, unYOLO plugin, and HF Broker listeners healthy.
 3. Start a fresh OpenClaw chat so it receives the updated tool catalog and
    managed guidance.
 4. Create a uniquely named private dataset repository request without a
@@ -313,7 +313,7 @@ after verification.
 ### Live validation result
 
 Completed on 2026-07-15 against `osolmaz/mlclaw-test` with MLClaw commit
-`9b50892092ef9dcbd9cf7a8122a8b7f6a7732166` and BrokerKit commit
+`9b50892092ef9dcbd9cf7a8122a8b7f6a7732166` and unYOLO commit
 `f40b902e6c37544bc001f8ad39ca818263f608ff`.
 
 - A fresh private dataset request returned durable operation and request IDs,
@@ -360,12 +360,12 @@ Do not run mutation testing for this cutover.
 
 Complete the work in this order without publishing an intermediate pairing:
 
-1. merge the BrokerKit MCP contract, projections, recovery tools, and
+1. merge the unYOLO MCP contract, projections, recovery tools, and
    conformance tests;
-2. pin that exact BrokerKit commit in MLClaw;
+2. pin that exact unYOLO commit in MLClaw;
 3. update managed OpenClaw configuration and agent guidance;
 4. rebuild and verify all tracked distributions and the runtime image;
-5. recreate only the test deployment's BrokerKit state;
+5. recreate only the test deployment's unYOLO state;
 6. deploy only `osolmaz/mlclaw-test`;
 7. run the live end-to-end matrix; and
 8. publish no package release until every acceptance criterion passes.
@@ -391,6 +391,6 @@ There is no compatibility mode. A runtime that mixes the old required
   client request identity.
 - The approval badge and popover render and decide a newly submitted request
   without refresh.
-- Runtime image, BrokerKit binary, plugin, package metadata, and tracked bundles
-  use one immutable BrokerKit commit.
+- Runtime image, unYOLO binary, plugin, package metadata, and tracked bundles
+  use one immutable unYOLO commit.
 - All MLClaw quality gates pass, and `mlclaw doctor` is clean on the test Space.

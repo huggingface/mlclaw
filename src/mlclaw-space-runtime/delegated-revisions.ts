@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 export type DelegatedSnapshotEvent = {
-  api_version: "brokerkit.io/operator-ui/v1";
+  api_version: "unyolo.io/operator-ui/v1";
   cursor: string;
   changed: boolean;
 };
@@ -27,7 +27,7 @@ export class DelegatedRevisions<T> {
     this.revision += 1;
     this.current = value(this.cursor());
     for (const waiter of [...this.waiters])
-      this.finish(waiter, { api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: true });
+      this.finish(waiter, { api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: true });
     return this.current;
   }
 
@@ -35,7 +35,7 @@ export class DelegatedRevisions<T> {
     const observed = this.parse(cursor);
     if (observed === undefined) return Promise.reject(revisionError("cursor_expired"));
     if (observed !== this.revision) {
-      return Promise.resolve({ api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: true });
+      return Promise.resolve({ api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: true });
     }
     if (this.waiters.size >= 256) return Promise.reject(revisionError("source_unavailable"));
     if (signal?.aborted) return Promise.reject(abortError());
@@ -44,7 +44,7 @@ export class DelegatedRevisions<T> {
         resolve,
         reject,
         timer: setTimeout(() => {
-          this.finish(waiter, { api_version: "brokerkit.io/operator-ui/v1", cursor: this.cursor(), changed: false });
+          this.finish(waiter, { api_version: "unyolo.io/operator-ui/v1", cursor: this.cursor(), changed: false });
         }, waitSeconds * 1_000),
         ...(signal ? { signal } : {}),
       };

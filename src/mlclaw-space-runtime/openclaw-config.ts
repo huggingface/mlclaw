@@ -44,7 +44,7 @@ export async function configureOpenClawGateway(
   disableAutomaticSessionResets(openclawConfig);
   configureManagedMcpServers(openclawConfig, config);
   configureBrokerMcpServer(openclawConfig, config);
-  configureBrokerKitPlugin(openclawConfig, config);
+  configureUnyoloPlugin(openclawConfig, config);
 
   await fs.mkdir(path.dirname(config.openclawConfigPath), { recursive: true });
   await fs.writeFile(config.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}\n`, { mode: 0o600 });
@@ -160,17 +160,23 @@ function configureCodexRuntimePlugin(openclawConfig: Record<string, unknown>, en
   };
 }
 
-function configureBrokerKitPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
+function configureUnyoloPlugin(openclawConfig: Record<string, unknown>, config: SpaceRuntimeConfig): void {
   const plugins = object(openclawConfig, "plugins");
   const load = object(plugins, "load");
-  load.paths = uniqueStrings(load.paths, config.brokerKitPluginPath);
-  if (plugins.allow !== undefined) plugins.allow = uniqueStrings(plugins.allow, "brokerkit");
+  load.paths = uniqueStrings(
+    withoutString(load.paths, "/opt/openclaw-plugins/node_modules/openclaw-brokerkit"),
+    config.unyoloPluginPath,
+  );
+  if (plugins.allow !== undefined) {
+    plugins.allow = uniqueStrings(withoutString(plugins.allow, "brokerkit"), "unyolo");
+  }
   const entries = object(plugins, "entries");
-  entries.brokerkit = {
+  delete entries.brokerkit;
+  entries.unyolo = {
     enabled: true,
     config: {
       mode: "delegated-web",
-      delegatedWeb: { basePath: "/mlclaw/api/brokerkit" },
+      delegatedWeb: { basePath: "/trusted-host/api/unyolo" },
     },
   };
 }
@@ -423,4 +429,10 @@ function objectValue(value: unknown): Record<string, unknown> | undefined {
 function uniqueStrings(value: unknown, required: string): string[] {
   const current = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   return [...new Set([...current, required])];
+}
+
+function withoutString(value: unknown, removed: string): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item !== removed)
+    : [];
 }

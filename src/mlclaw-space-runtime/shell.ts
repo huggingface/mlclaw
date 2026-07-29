@@ -3,8 +3,8 @@ import type { RuntimeBranding } from "./branding.js";
 const SHELL_MARKER = "data-mlclaw-shell";
 const BRANDING_MARKER = "data-mlclaw-branding";
 const CONTROL_BRANDING_MARKER = "data-mlclaw-control-branding";
-const BROKERKIT_DELEGATED_UI_BOOTSTRAP = Buffer.from(
-  JSON.stringify({ version: 1, mode: "delegated-web", basePath: "/mlclaw/api/brokerkit" }),
+const UNYOLO_DELEGATED_UI_BOOTSTRAP = Buffer.from(
+  JSON.stringify({ version: 1, mode: "delegated-web", basePath: "/trusted-host/api/unyolo" }),
   "utf8",
 ).toString("base64url");
 
@@ -88,7 +88,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
     button.setAttribute("data-ready", "1");
     function invalidateFrame() {
       if (frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "brokerkit.operator-ui.invalidate", version: 1 }, "*");
+        frame.contentWindow.postMessage({ type: "unyolo.operator-ui.invalidate", version: 1 }, "*");
       }
     }
     var lastRebootstrapAt = 0;
@@ -124,7 +124,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
         data &&
         typeof data === "object" &&
         Object.keys(data).sort().join(",") === "type,version" &&
-        data.type === "brokerkit.delegated-web.rebootstrap" &&
+        data.type === "unyolo.delegated-web.rebootstrap" &&
         data.version === 1
       ) {
         rebootstrapFrame();
@@ -135,12 +135,12 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
         !data ||
         typeof data !== "object" ||
         Object.keys(data).sort().join(",") !== "nonce,type,version" ||
-        data.type !== "brokerkit.delegated-web.open" ||
+        data.type !== "unyolo.delegated-web.open" ||
         data.version !== 1 ||
         typeof data.nonce !== "string" ||
         !/^[a-f0-9]{32}$/.test(data.nonce)
       ) return;
-      window.location.assign("/plugins/brokerkit/ui/#${BROKERKIT_DELEGATED_UI_BOOTSTRAP}");
+      window.location.assign("/plugins/unyolo/ui/#${UNYOLO_DELEGATED_UI_BOOTSTRAP}");
     });
     var summaryCursor = "";
     var stopped = false;
@@ -149,7 +149,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
         !summary ||
         typeof summary !== "object" ||
         Object.keys(summary).sort().join(",") !== "api_version,cursor,healthy,pending" ||
-        summary.api_version !== "brokerkit.io/operator-ui/v1" ||
+        summary.api_version !== "unyolo.io/operator-ui/v1" ||
         typeof summary.cursor !== "string" ||
         summary.cursor.length < 1 ||
         summary.cursor.length > 128 ||
@@ -169,7 +169,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
       return true;
     }
     function refresh() {
-      return fetch("/mlclaw/api/brokerkit/summary", { credentials: "same-origin", cache: "no-store" })
+      return fetch("/trusted-host/api/unyolo/summary", { credentials: "same-origin", cache: "no-store" })
         .then(function (response) { return response.ok ? response.json() : null; })
         .then(acceptSummary)
         .catch(function () { return false; });
@@ -180,7 +180,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
         refresh().then(function () { window.setTimeout(function () { watch(250); }, delay); });
         return;
       }
-      fetch("/mlclaw/api/brokerkit/summary/events?cursor=" + encodeURIComponent(summaryCursor) + "&wait_seconds=25", {
+      fetch("/trusted-host/api/unyolo/summary/events?cursor=" + encodeURIComponent(summaryCursor) + "&wait_seconds=25", {
         credentials: "same-origin",
         cache: "no-store"
       }).then(function (response) {
@@ -195,7 +195,7 @@ export const CONTROL_BRANDING_SCRIPT = `(function () {
           event &&
           typeof event === "object" &&
           Object.keys(event).sort().join(",") === "api_version,changed,cursor" &&
-          event.api_version === "brokerkit.io/operator-ui/v1" &&
+          event.api_version === "unyolo.io/operator-ui/v1" &&
           typeof event.cursor === "string" &&
           event.cursor.length >= 1 &&
           event.cursor.length <= 128 &&
@@ -282,7 +282,7 @@ export function injectMlClawShell(html: string, branding: RuntimeBranding): stri
       <span>Approvals</span>
       <button data-mlclaw-approvals-close type="button" aria-label="Close approval requests" style="display:grid;width:30px;height:30px;place-items:center;border:0;border-radius:7px;background:transparent;color:#475569;cursor:pointer;font:20px/1 system-ui;">&times;</button>
     </header>
-    <iframe data-mlclaw-approvals-frame data-src="/plugins/brokerkit/ui/?embed=popover#${BROKERKIT_DELEGATED_UI_BOOTSTRAP}" title="Approval requests" sandbox="allow-scripts" style="display:block;width:100%;height:calc(100% - 42px);border:0;background:white;"></iframe>
+    <iframe data-mlclaw-approvals-frame data-src="/plugins/unyolo/ui/?embed=popover#${UNYOLO_DELEGATED_UI_BOOTSTRAP}" title="Approval requests" sandbox="allow-scripts" style="display:block;width:100%;height:calc(100% - 42px);border:0;background:white;"></iframe>
   </section>
   <div style="display:flex;gap:8px;align-items:center;">
   <a href="/mlclaw" aria-label="Open ${escapeHtml(branding.name)} settings" title="${escapeHtml(branding.name)}" style="box-sizing:border-box;display:flex;width:34px;height:34px;aspect-ratio:1/1;align-items:center;justify-content:center;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 8px 18px rgba(15,23,42,.14);color:#111827;text-decoration:none;">

@@ -45,7 +45,7 @@ describe("Hugging Face tooling baseline", () => {
     expect(manifest.skills.installed).toEqual(BASELINE_SKILLS);
     expect(manifest.skills.managed).toContainEqual({
       name: "hf-broker",
-      source: "https://github.com/osolmaz/brokerkit",
+      source: "https://github.com/osolmaz/unyolo",
       revision: "hf-broker/v0.6.2",
     });
     for (const skill of BASELINE_SKILLS) {

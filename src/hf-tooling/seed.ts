@@ -223,7 +223,7 @@ an operation after an ambiguous transport timeout.
 
 Never reuse a request ID for a different target or argument set. A request-ID
 conflict is durable: inspect the existing operation instead of restarting the
-broker. Protected actions appear in the ML Claw BrokerKit control and may also
+broker. Protected actions appear in the ML Claw unYOLO control and may also
 be sent through configured OpenClaw channels.
 
 For repeated repository or bucket writes, request the narrowest temporary grant

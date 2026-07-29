@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-brokerkit/operator-v1";
+import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-unyolo/operator-v1";
 import { createSignedCookie } from "../src/mlclaw-space-runtime/cookies.js";
 import { createCsrfToken } from "../src/mlclaw-space-runtime/csrf.js";
 import { resolveBranding } from "../src/mlclaw-space-runtime/branding.js";
@@ -27,7 +27,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 function operatorDiscovery() {
   return {
-    api_version: "brokerkit.io/operator/v1",
+    api_version: "unyolo.io/operator/v1",
     contract_digest: OPERATOR_V1_SCHEMA_SHA256,
     build_id: "test",
   };
@@ -198,13 +198,13 @@ describe("ML Claw Space runtime", () => {
     });
   });
 
-  it("delegates the packaged BrokerKit tab to authenticated admin authority", async () => {
-    const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-brokerkit-delegated-ui-"));
+  it("delegates the packaged unYOLO tab to authenticated admin authority", async () => {
+    const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-unyolo-delegated-ui-"));
     cleanups.push(() => fs.rm(pluginRoot, { recursive: true, force: true }));
     await fs.mkdir(path.join(pluginRoot, "dist", "ui"), { recursive: true });
     await fs.writeFile(
       path.join(pluginRoot, "dist", "ui", "index.html"),
-      "<!doctype html><html><head><title>BrokerKit</title></head><body></body></html>",
+      "<!doctype html><html><head><title>unYOLO</title></head><body></body></html>",
     );
     const brokerPort = await freePort();
     const brokerRequests: Array<{ method: string; url: string; authorization?: string; body: string }> = [];
@@ -219,7 +219,7 @@ describe("ML Claw Space runtime", () => {
         body,
       });
       res.setHeader("content-type", "application/json");
-      if (req.url === "/.well-known/brokerkit-operator") {
+      if (req.url === "/.well-known/unyolo-operator") {
         res.writeHead(200);
         res.end(JSON.stringify(operatorDiscovery()));
       } else if (req.method === "POST") {
@@ -259,8 +259,8 @@ describe("ML Claw Space runtime", () => {
     const config = await testConfig({
       allowedUsers: ["alice", "bob"],
       adminUsers: ["alice"],
-      brokerKitPluginPath: pluginRoot,
-      brokerKitPopoverDecisions: true,
+      unyoloPluginPath: pluginRoot,
+      unyoloPopoverDecisions: true,
       operatorBrokers: [
         {
           id: "hf-broker",
@@ -280,8 +280,8 @@ describe("ML Claw Space runtime", () => {
     const hostEdge = identityAwareHostEdge(config.port);
     await listen(hostEdge, hostEdgePort);
     cleanups.push(() => closeServer(hostEdge));
-    const base = `http://127.0.0.1:${hostEdgePort}/mlclaw/api/brokerkit`;
-    const ui = `http://127.0.0.1:${hostEdgePort}/plugins/brokerkit/ui/`;
+    const base = `http://127.0.0.1:${hostEdgePort}/trusted-host/api/unyolo`;
+    const ui = `http://127.0.0.1:${hostEdgePort}/plugins/unyolo/ui/`;
     const iframeHeaders = { "sec-fetch-dest": "iframe" };
     const anonymous = await fetch(ui, { headers: iframeHeaders });
     const member = await fetch(ui, {
@@ -304,11 +304,11 @@ describe("ML Claw Space runtime", () => {
     expect(fetchedDocument.status).toBe(404);
     expect(launcher.status).toBe(200);
     const launcherHtml = await launcher.text();
-    expect(launcherHtml).toContain('name="brokerkit-delegated-top-level"');
-    expect(launcherHtml).not.toContain("brokerkit-delegated-session");
+    expect(launcherHtml).toContain('name="unyolo-delegated-top-level"');
+    expect(launcherHtml).not.toContain("unyolo-delegated-session");
     expect(popover.status).toBe(200);
     const popoverHtml = await popover.text();
-    const popoverEmbedded = popoverHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    const popoverEmbedded = popoverHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     const popoverSessionBody = JSON.parse(Buffer.from(popoverEmbedded ?? "", "base64url").toString("utf8")) as {
       token: string;
       access: string;
@@ -325,7 +325,7 @@ describe("ML Claw Space runtime", () => {
     );
     expect(session.headers.get("x-frame-options")).toBe("DENY");
     const sessionHtml = await session.text();
-    const embedded = sessionHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    const embedded = sessionHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     expect(embedded).toBeDefined();
     const sessionBody = JSON.parse(Buffer.from(embedded ?? "", "base64url").toString("utf8")) as {
       token: string;
@@ -346,11 +346,11 @@ describe("ML Claw Space runtime", () => {
     });
     expect(delegatedAuthorization.status).toBe(404);
     const prefixedSession = await fetch(`${base}/snapshot`, {
-      headers: { origin: "null", "brokerkit-session": `Bearer ${sessionBody.token}` },
+      headers: { origin: "null", "unyolo-session": `Bearer ${sessionBody.token}` },
     });
     expect(prefixedSession.status).toBe(401);
     const combinedSession = await fetch(`${base}/snapshot`, {
-      headers: { origin: "null", "brokerkit-session": `${sessionBody.token}, ${sessionBody.token}` },
+      headers: { origin: "null", "unyolo-session": `${sessionBody.token}, ${sessionBody.token}` },
     });
     expect(combinedSession.status).toBe(401);
     const preflight = await fetch(`${base}/snapshot`, {
@@ -358,18 +358,18 @@ describe("ML Claw Space runtime", () => {
       headers: {
         origin: "null",
         "access-control-request-method": "GET",
-        "access-control-request-headers": "brokerkit-session, content-type",
+        "access-control-request-headers": "unyolo-session, content-type",
       },
     });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("access-control-allow-origin")).toBe("null");
-    expect(preflight.headers.get("access-control-allow-headers")).toBe("brokerkit-session, content-type");
+    expect(preflight.headers.get("access-control-allow-headers")).toBe("unyolo-session, content-type");
     expect(preflight.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
     expect(preflight.headers.get("access-control-allow-credentials")).toBeNull();
     const authorizedHeaders = {
       origin: "null",
       authorization: "Bearer simulated-host-credential",
-      "brokerkit-session": sessionBody.token,
+      "unyolo-session": sessionBody.token,
     };
     const snapshot = await fetch(`${base}/snapshot`, { headers: authorizedHeaders });
     expect(snapshot.status).toBe(200);
@@ -379,21 +379,21 @@ describe("ML Claw Space runtime", () => {
       cursor: string;
       requests: Array<{ handle: string; request: { id: string } }>;
     };
-    expect(snapshotBody.api_version).toBe("brokerkit.io/operator-ui/v1");
+    expect(snapshotBody.api_version).toBe("unyolo.io/operator-ui/v1");
     expect(snapshotBody.cursor).toMatch(/^[A-Za-z0-9_-]{22}\.[0-9a-z]+$/u);
     expect(snapshotBody.requests).toHaveLength(1);
     expect(snapshotBody.requests[0]?.request.id).toBe("request-1");
     expect(snapshotBody.requests[0]?.handle).toMatch(/^[A-Za-z0-9_-]{24}$/u);
     const popoverHeaders = {
       origin: "null",
-      "brokerkit-session": popoverSessionBody.token,
+      "unyolo-session": popoverSessionBody.token,
     };
     const popoverSnapshot = await fetch(`${base}/snapshot`, { headers: popoverHeaders });
     expect(popoverSnapshot.status).toBe(200);
     const summary = await fetch(`${base}/summary`, { headers: { cookie: sessionCookie(config, "alice") } });
     expect(summary.status).toBe(200);
     expect(await summary.json()).toEqual({
-      api_version: "brokerkit.io/operator-ui/v1",
+      api_version: "unyolo.io/operator-ui/v1",
       cursor: snapshotBody.cursor,
       pending: 1,
       healthy: true,
@@ -428,12 +428,12 @@ describe("ML Claw Space runtime", () => {
       headers: { "sec-fetch-dest": "document", cookie: sessionCookie(config, "alice") },
     });
     const anotherHtml = await anotherSession.text();
-    const anotherEmbedded = anotherHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    const anotherEmbedded = anotherHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     const anotherSessionBody = JSON.parse(Buffer.from(anotherEmbedded ?? "", "base64url").toString("utf8")) as {
       token: string;
     };
     const independentTab = await fetch(`${base}/snapshot`, {
-      headers: { origin: "null", "brokerkit-session": anotherSessionBody.token },
+      headers: { origin: "null", "unyolo-session": anotherSessionBody.token },
     });
     expect(independentTab.status).toBe(200);
     for (const requestCount of [12, 12, 12, 10]) {
@@ -441,21 +441,21 @@ describe("ML Claw Space runtime", () => {
         headers: { "sec-fetch-dest": "document", cookie: sessionCookie(config, "alice") },
       });
       const actorHtml = await actorSession.text();
-      const actorEmbedded = actorHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+      const actorEmbedded = actorHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
       const actorBody = JSON.parse(Buffer.from(actorEmbedded ?? "", "base64url").toString("utf8")) as {
         token: string;
       };
       const responses = await Promise.all(
         Array.from({ length: requestCount }, () =>
           fetch(`${base}/snapshot`, {
-            headers: { origin: "null", "brokerkit-session": actorBody.token },
+            headers: { origin: "null", "unyolo-session": actorBody.token },
           }),
         ),
       );
       expect(responses.every((response) => response.status === 200)).toBe(true);
     }
     const actorLimited = await fetch(`${base}/snapshot`, {
-      headers: { origin: "null", "brokerkit-session": renewedSessionBody.token },
+      headers: { origin: "null", "unyolo-session": renewedSessionBody.token },
     });
     expect(actorLimited.status).toBe(429);
     brokerRequests.length = 0;
@@ -1453,12 +1453,12 @@ describe("ML Claw Space runtime", () => {
     const popoverSrc = body.match(/data-mlclaw-approvals-frame data-src="([^"]+)"/u)?.[1];
     expect(popoverSrc).toBeDefined();
     const popoverUrl = new URL(popoverSrc ?? "", "http://mlclaw.test");
-    expect(popoverUrl.pathname).toBe("/plugins/brokerkit/ui/");
+    expect(popoverUrl.pathname).toBe("/plugins/unyolo/ui/");
     expect(popoverUrl.search).toBe("?embed=popover");
     expect(JSON.parse(Buffer.from(popoverUrl.hash.slice(1), "base64url").toString("utf8"))).toEqual({
       version: 1,
       mode: "delegated-web",
-      basePath: "/mlclaw/api/brokerkit",
+      basePath: "/trusted-host/api/unyolo",
     });
     expect(body).toContain("width:min(420px,calc(100vw - 24px))");
     expect(body).toContain('src="/assets/mlclaw-control-branding.js"');
@@ -1490,27 +1490,27 @@ describe("ML Claw Space runtime", () => {
     expect(branding.headers.get("cache-control")).toContain("no-store");
     const brandingScript = await branding.text();
     expect(brandingScript).toContain('var productName = "ML Claw"');
-    expect(brandingScript).not.toContain("brokerkit.delegated-web.session.request");
-    expect(brandingScript).not.toContain("brokerKitSession");
-    expect(brandingScript).toContain('data.type !== "brokerkit.delegated-web.open"');
+    expect(brandingScript).not.toContain("unyolo.delegated-web.session.request");
+    expect(brandingScript).not.toContain("unyoloSession");
+    expect(brandingScript).toContain('data.type !== "unyolo.delegated-web.open"');
     expect(brandingScript).toContain("event.source !== frame.contentWindow");
-    expect(brandingScript).toContain('data.type === "brokerkit.delegated-web.rebootstrap"');
+    expect(brandingScript).toContain('data.type === "unyolo.delegated-web.rebootstrap"');
     expect(brandingScript).toContain("now - lastRebootstrapAt < 30000");
     expect(brandingScript).toContain('frame.removeAttribute("src")');
-    expect(brandingScript).not.toContain("brokerkit.delegated-web.session.response");
+    expect(brandingScript).not.toContain("unyolo.delegated-web.session.response");
     const topLevelPath = brandingScript.match(/window\.location\.assign\("([^"]+)"\)/u)?.[1];
     expect(topLevelPath).toBeDefined();
     const topLevelUrl = new URL(topLevelPath ?? "", "http://mlclaw.test");
-    expect(topLevelUrl.pathname).toBe("/plugins/brokerkit/ui/");
+    expect(topLevelUrl.pathname).toBe("/plugins/unyolo/ui/");
     expect(JSON.parse(Buffer.from(topLevelUrl.hash.slice(1), "base64url").toString("utf8"))).toEqual({
       version: 1,
       mode: "delegated-web",
-      basePath: "/mlclaw/api/brokerkit",
+      basePath: "/trusted-host/api/unyolo",
     });
     expect(brandingScript).toContain("installApprovals");
-    expect(brandingScript).toContain('fetch("/mlclaw/api/brokerkit/summary"');
-    expect(brandingScript).toContain('fetch("/mlclaw/api/brokerkit/summary/events?cursor="');
-    expect(brandingScript).toContain('frame.contentWindow.postMessage({ type: "brokerkit.operator-ui.invalidate"');
+    expect(brandingScript).toContain('fetch("/trusted-host/api/unyolo/summary"');
+    expect(brandingScript).toContain('fetch("/trusted-host/api/unyolo/summary/events?cursor="');
+    expect(brandingScript).toContain('frame.contentWindow.postMessage({ type: "unyolo.operator-ui.invalidate"');
     expect(brandingScript).toContain("window.setInterval(refresh, 300000)");
     expect(brandingScript).not.toContain("window.setInterval(refresh, 15000)");
 
@@ -1521,20 +1521,20 @@ describe("ML Claw Space runtime", () => {
     expect(await sw.text()).toContain("registration.unregister");
   });
 
-  it("serves the packaged BrokerKit UI from the trusted ML Claw boundary", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-brokerkit-ui-"));
+  it("serves the packaged unYOLO UI from the trusted ML Claw boundary", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-unyolo-ui-"));
     cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
     const uiDir = path.join(root, "dist", "ui", "assets");
     await fs.mkdir(uiDir, { recursive: true });
     await fs.writeFile(
       path.join(root, "dist", "ui", "index.html"),
-      "<!doctype html><html><head><title>Trusted BrokerKit</title></head><body></body></html>",
+      "<!doctype html><html><head><title>Trusted unYOLO</title></head><body></body></html>",
     );
-    await fs.writeFile(path.join(uiDir, "app.js"), "globalThis.trustedBrokerKit = true;");
+    await fs.writeFile(path.join(uiDir, "app.js"), "globalThis.trustedUnyolo = true;");
     const config = await testConfig({
       allowedUsers: ["alice", "bob"],
       adminUsers: ["alice"],
-      brokerKitPluginPath: root,
+      unyoloPluginPath: root,
     });
     const runtime = new SpaceRuntimeServer(config);
     const server = await runtime.start();
@@ -1543,16 +1543,16 @@ describe("ML Claw Space runtime", () => {
       () => runtime.stop(),
     );
 
-    const base = `http://127.0.0.1:${config.port}/plugins/brokerkit/ui/`;
+    const base = `http://127.0.0.1:${config.port}/plugins/unyolo/ui/`;
     const page = await fetch(base, {
       headers: { "sec-fetch-dest": "iframe", cookie: sessionCookie(config, "alice") },
     });
     expect(page.status).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html");
     const launcherHtml = await page.text();
-    expect(launcherHtml).toContain("Trusted BrokerKit");
-    expect(launcherHtml).toContain('name="brokerkit-delegated-top-level"');
-    expect(launcherHtml).not.toContain("brokerkit-delegated-session");
+    expect(launcherHtml).toContain("Trusted unYOLO");
+    expect(launcherHtml).toContain('name="unyolo-delegated-top-level"');
+    expect(launcherHtml).not.toContain("unyolo-delegated-session");
     expect(page.headers.get("cache-control")).toBe("no-store");
     expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
     expect(page.headers.get("content-security-policy")).not.toContain("sandbox");
@@ -1564,26 +1564,26 @@ describe("ML Claw Space runtime", () => {
     });
     const popoverHtml = await popover.text();
     expect(popover.status).toBe(200);
-    expect(popoverHtml).toContain('name="brokerkit-delegated-session"');
-    expect(popoverHtml).not.toContain("brokerkit-delegated-top-level");
-    const popoverSession = popoverHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    expect(popoverHtml).toContain('name="unyolo-delegated-session"');
+    expect(popoverHtml).not.toContain("unyolo-delegated-top-level");
+    const popoverSession = popoverHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     const popoverSessionBody = JSON.parse(Buffer.from(popoverSession ?? "", "base64url").toString("utf8")) as {
       access: string;
       token: string;
     };
     expect(popoverSessionBody).toMatchObject({
-      api_version: "brokerkit.io/delegated-web/v1",
+      api_version: "unyolo.io/delegated-web/v1",
       access: "read",
       renewal_transport: "direct",
     });
     const readOnlyDecision = await fetch(
-      `http://127.0.0.1:${config.port}/mlclaw/api/brokerkit/requests/opaque/approve`,
+      `http://127.0.0.1:${config.port}/trusted-host/api/unyolo/requests/opaque/approve`,
       {
         method: "POST",
         headers: {
           origin: "null",
           "content-type": "application/json",
-          "brokerkit-session": popoverSessionBody.token,
+          "unyolo-session": popoverSessionBody.token,
         },
         body: JSON.stringify({ expectedRevision: 1 }),
       },
@@ -1603,11 +1603,11 @@ describe("ML Claw Space runtime", () => {
     });
     const topLevelHtml = await topLevel.text();
     expect(topLevel.status).toBe(200);
-    expect(topLevelHtml).toContain('name="brokerkit-delegated-session"');
-    expect(topLevelHtml).not.toContain("brokerkit-delegated-top-level");
-    const topLevelSession = topLevelHtml.match(/name="brokerkit-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
+    expect(topLevelHtml).toContain('name="unyolo-delegated-session"');
+    expect(topLevelHtml).not.toContain("unyolo-delegated-top-level");
+    const topLevelSession = topLevelHtml.match(/name="unyolo-delegated-session" content="([A-Za-z0-9_-]+)"/u)?.[1];
     expect(JSON.parse(Buffer.from(topLevelSession ?? "", "base64url").toString("utf8"))).toMatchObject({
-      api_version: "brokerkit.io/delegated-web/v1",
+      api_version: "unyolo.io/delegated-web/v1",
       access: "decide",
       renewal_transport: "direct",
     });
@@ -1622,7 +1622,7 @@ describe("ML Claw Space runtime", () => {
     expect(asset.headers.get("cache-control")).toContain("immutable");
     expect(asset.headers.get("access-control-allow-origin")).toBe("null");
     expect(asset.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
-    expect(await asset.text()).toContain("trustedBrokerKit");
+    expect(await asset.text()).toContain("trustedUnyolo");
 
     const member = await fetch(base, {
       headers: { "sec-fetch-dest": "iframe", cookie: sessionCookie(config, "bob") },
@@ -2093,9 +2093,14 @@ describe("ML Claw Space runtime", () => {
           },
         },
         plugins: {
-          allow: ["custom"],
-          load: { paths: ["/opt/custom-plugin"] },
-          entries: { custom: { enabled: true } },
+          allow: ["custom", "brokerkit"],
+          load: {
+            paths: ["/opt/custom-plugin", "/opt/openclaw-plugins/node_modules/openclaw-brokerkit"],
+          },
+          entries: {
+            custom: { enabled: true },
+            brokerkit: { enabled: true, config: { mode: "delegated-web" } },
+          },
         },
       }),
     );
@@ -2176,19 +2181,20 @@ describe("ML Claw Space runtime", () => {
     });
     expect(rewritten.mcp.servers.codex).toBeUndefined();
     expect(rewritten.plugins).toEqual({
-      allow: ["custom", "brokerkit"],
-      load: { paths: ["/opt/custom-plugin", config.brokerKitPluginPath] },
+      allow: ["custom", "unyolo"],
+      load: { paths: ["/opt/custom-plugin", config.unyoloPluginPath] },
       entries: {
         custom: { enabled: true },
-        brokerkit: {
+        unyolo: {
           enabled: true,
           config: {
             mode: "delegated-web",
-            delegatedWeb: { basePath: "/mlclaw/api/brokerkit" },
+            delegatedWeb: { basePath: "/trusted-host/api/unyolo" },
           },
         },
       },
     });
+    expect(JSON.stringify(rewritten.plugins)).not.toContain("brokerkit");
     expect(JSON.stringify(rewritten.plugins)).not.toContain("operator-secret");
   });
 
@@ -2292,7 +2298,7 @@ describe("ML Claw Space runtime", () => {
     await configureOpenClawGateway(config, { codexConfigured: true });
 
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
-    expect(rewritten.plugins.allow).toEqual(["custom", "openai", "codex", "brokerkit"]);
+    expect(rewritten.plugins.allow).toEqual(["custom", "openai", "codex", "unyolo"]);
     expect(rewritten.plugins.entries.codex).toEqual({
       enabled: true,
       config: {
@@ -2316,7 +2322,7 @@ describe("ML Claw Space runtime", () => {
     const rewritten = JSON.parse(await fs.readFile(configPath, "utf8"));
     expect(rewritten.plugins.allow).toBeUndefined();
     expect(rewritten.plugins.entries.telegram).toEqual({ enabled: true });
-    expect(rewritten.plugins.entries.brokerkit.enabled).toBe(true);
+    expect(rewritten.plugins.entries.unyolo.enabled).toBe(true);
   });
 
   it("configures OpenClaw inference with only the broker agent credential", async () => {
@@ -2428,18 +2434,18 @@ describe("ML Claw Space runtime", () => {
 
     expect(config.adminUsers).toEqual(["osolmaz"]);
     expect(config.allowedUsers).toEqual(["alice", "bob", "osolmaz"]);
-    expect(config.brokerKitPopoverDecisions).toBe(true);
+    expect(config.unyoloPopoverDecisions).toBe(true);
   });
 
   it("allows explicit opt-out from decisions inside the Gateway popover", () => {
     const config = loadConfig({
       SPACE_ID: "osolmaz/research",
-      MLCLAW_BROKERKIT_POPOVER_DECISIONS: "false",
+      MLCLAW_UNYOLO_POPOVER_DECISIONS: "false",
       MLCLAW_SESSION_SECRET: "x".repeat(48),
       MLCLAW_CREDENTIAL_KEY: "k".repeat(48),
     });
 
-    expect(config.brokerKitPopoverDecisions).toBe(false);
+    expect(config.unyoloPopoverDecisions).toBe(false);
   });
 
   it("loads the trusted local integration token from a protected file", async () => {
@@ -2659,7 +2665,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     brokerAgentSecret: undefined,
     brokerAgentSecretFile: undefined,
     operatorBrokers: [],
-    brokerKitPopoverDecisions: false,
+    unyoloPopoverDecisions: false,
     hubUrl: "https://huggingface.co",
     openaiCredentialFile: path.join(root, "secrets", "openai.env"),
     openaiCredentialStoreFile: path.join(root, "durable", "openai-api-key.enc"),
@@ -2672,7 +2678,7 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     openclawConfigPath: configPath,
     openclawCommand: process.execPath,
     openclawArgs: ["-e", "setInterval(() => undefined, 100000)"],
-    brokerKitPluginPath: "/opt/openclaw-plugins/node_modules/openclaw-brokerkit",
+    unyoloPluginPath: "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
     agentName: "research",
     model: "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
     modelChoices: PRESET_MODEL_CHOICES,

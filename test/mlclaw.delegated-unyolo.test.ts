@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-brokerkit/operator-v1";
-import { DelegatedBrokerKit } from "../src/mlclaw-space-runtime/delegated-brokerkit.js";
+import { OPERATOR_V1_SCHEMA_SHA256 } from "openclaw-unyolo/operator-v1";
+import { DelegatedUnyolo } from "../src/mlclaw-space-runtime/delegated-unyolo.js";
 import { OperatorBrokerRegistry } from "../src/mlclaw-space-runtime/operator-brokers.js";
 
 function request(id: string, revision = 1, status = "pending") {
@@ -33,7 +33,7 @@ function request(id: string, revision = 1, status = "pending") {
 
 function operatorDiscovery() {
   return {
-    api_version: "brokerkit.io/operator/v1",
+    api_version: "unyolo.io/operator/v1",
     contract_digest: OPERATOR_V1_SCHEMA_SHA256,
     build_id: "test",
   };
@@ -49,13 +49,13 @@ function registry(fetchImpl: typeof fetch): OperatorBrokerRegistry {
   );
 }
 
-describe("DelegatedBrokerKit", () => {
+describe("DelegatedUnyolo", () => {
   it("issues short-lived audience-bound tokens and rejects tampering and expiry", () => {
     let now = new Date("2026-07-12T00:00:00Z");
     const secret = "s".repeat(48);
-    const delegated = new DelegatedBrokerKit(new OperatorBrokerRegistry([]), secret, () => now);
+    const delegated = new DelegatedUnyolo(new OperatorBrokerRegistry([]), secret, () => now);
     const session = delegated.issueSession("alice", "decide");
-    expect(session.api_version).toBe("brokerkit.io/delegated-web/v1");
+    expect(session.api_version).toBe("unyolo.io/delegated-web/v1");
     expect(session.access).toBe("decide");
     expect(session.renewal_transport).toBe("direct");
     expect(delegated.authorize(session.token)).toBe("alice");
@@ -95,17 +95,13 @@ describe("DelegatedBrokerKit", () => {
           { status: 503 },
         );
       }
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       return Response.json({ requests: [request("shared-id")] });
     });
-    const delegated = new DelegatedBrokerKit(
-      registry(fetchImpl),
-      "s".repeat(48),
-      () => new Date("2026-07-12T00:00:00Z"),
-    );
+    const delegated = new DelegatedUnyolo(registry(fetchImpl), "s".repeat(48), () => new Date("2026-07-12T00:00:00Z"));
     const snapshot = await delegated.snapshot();
     expect(snapshot.sources).toEqual([
       expect.objectContaining({ id: "hf-broker", healthy: true }),
@@ -120,14 +116,14 @@ describe("DelegatedBrokerKit", () => {
     let visible = true;
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.pathname.endsWith("/request-1")) return Response.json(request("request-1"));
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       return Response.json({ requests: visible ? [request("request-1")] : [] });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -156,7 +152,7 @@ describe("DelegatedBrokerKit", () => {
     });
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "pending") {
@@ -166,7 +162,7 @@ describe("DelegatedBrokerKit", () => {
       }
       return Response.json({ requests: [] });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -187,13 +183,13 @@ describe("DelegatedBrokerKit", () => {
     let visible = true;
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       return Response.json({ requests: visible ? [request("request-1")] : [] });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -204,7 +200,7 @@ describe("DelegatedBrokerKit", () => {
     visible = false;
     const changed = await delegated.events(first.cursor, 2);
     expect(changed).toEqual({
-      api_version: "brokerkit.io/operator-ui/v1",
+      api_version: "unyolo.io/operator-ui/v1",
       cursor: expect.not.stringMatching(first.cursor),
       changed: true,
     });
@@ -219,7 +215,7 @@ describe("DelegatedBrokerKit", () => {
     let approveAttempts = 0;
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.pathname.endsWith("/approve")) {
@@ -238,7 +234,7 @@ describe("DelegatedBrokerKit", () => {
       }
       return Response.json({ requests: approved ? [] : [request("request-1")] });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -278,7 +274,7 @@ describe("DelegatedBrokerKit", () => {
     let round = 0;
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         round += 1;
         return Response.json(operatorDiscovery());
       }
@@ -299,7 +295,7 @@ describe("DelegatedBrokerKit", () => {
       });
       return Response.json({ requests: items, ...(page + 1 < pageCount ? { next_cursor: String(page + 1) } : {}) });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -322,14 +318,14 @@ describe("DelegatedBrokerKit", () => {
   it("keeps bounded partial pages instead of discarding a busy source", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       if (url.searchParams.get("status") === "active") return Response.json({ requests: [] });
       const page = Number(url.searchParams.get("cursor") ?? "0");
       return Response.json({ requests: [request(`pending-${page}`)], next_cursor: String(page + 1) });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -344,7 +340,7 @@ describe("DelegatedBrokerKit", () => {
   it("shares a capped inbox fairly across sources and statuses", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       const status = url.searchParams.get("status") ?? "pending";
@@ -354,7 +350,7 @@ describe("DelegatedBrokerKit", () => {
       );
       return Response.json({ requests: items, ...(page < 31 ? { next_cursor: String(page + 1) } : {}) });
     });
-    const delegated = new DelegatedBrokerKit(registry(fetchImpl), "s".repeat(48));
+    const delegated = new DelegatedUnyolo(registry(fetchImpl), "s".repeat(48));
     const snapshot = await delegated.snapshot();
     expect(snapshot.requests).toHaveLength(4_096);
     for (const sourceId of ["hf-broker", "gh-broker"]) {
@@ -369,7 +365,7 @@ describe("DelegatedBrokerKit", () => {
   it("bounds slow pagination per source and keeps pages fetched before the deadline", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       const page = Number(url.searchParams.get("cursor") ?? "0");
@@ -386,7 +382,7 @@ describe("DelegatedBrokerKit", () => {
       });
       return Response.json({ requests: [] });
     });
-    const delegated = new DelegatedBrokerKit(registry(fetchImpl), "s".repeat(48), () => new Date(), 25);
+    const delegated = new DelegatedUnyolo(registry(fetchImpl), "s".repeat(48), () => new Date(), 25);
     const started = Date.now();
     const snapshot = await delegated.snapshot();
     expect(Date.now() - started).toBeLessThan(500);
@@ -405,7 +401,7 @@ describe("DelegatedBrokerKit", () => {
   it("keeps only the newest revision returned across status queries", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname === "/.well-known/brokerkit-operator") {
+      if (url.pathname === "/.well-known/unyolo-operator") {
         return Response.json(operatorDiscovery());
       }
       return Response.json({
@@ -416,7 +412,7 @@ describe("DelegatedBrokerKit", () => {
         ],
       });
     });
-    const delegated = new DelegatedBrokerKit(
+    const delegated = new DelegatedUnyolo(
       new OperatorBrokerRegistry(
         [{ id: "hf-broker", label: "Hugging Face", baseUrl: "https://hf.example", token: "h".repeat(32) }],
         fetchImpl,
@@ -432,7 +428,7 @@ describe("DelegatedBrokerKit", () => {
 });
 
 function signedSessionToken(secret: string, payload: Record<string, unknown>): string {
-  const key = createHmac("sha256", secret).update("mlclaw/brokerkit-delegated-web/v1", "utf8").digest();
+  const key = createHmac("sha256", secret).update("mlclaw/unyolo-delegated-web/v1", "utf8").digest();
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   const signature = createHmac("sha256", key).update(encoded, "utf8").digest("base64url");
   return `${encoded}.${signature}`;

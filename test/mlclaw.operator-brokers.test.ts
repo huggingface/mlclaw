@@ -42,7 +42,7 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
-describe("Brokerkit operator backends", () => {
+describe("unYOLO operator backends", () => {
   it("uses only fixed operator routes with the operator bearer token", async () => {
     const requests: Array<{ method: string; url: string; authorization?: string; body: string }> = [];
     const server = http.createServer(async (req, res) => {

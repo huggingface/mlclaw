@@ -15383,10 +15383,10 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.6.1",
-  "openclawVersion": "2026.7.1",
-  "brokerkitVersion": "hf-broker/v0.6.2",
-  "brokerkitPluginVersion": "0.4.1",
+  "packageVersion": "0.7.0",
+  "openclawVersion": "2026.7.2-beta.5",
+  "hfBrokerVersion": "hf-broker/v0.7.0",
+  "unyoloPluginVersion": "0.5.1",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 
@@ -15394,8 +15394,8 @@ var RELEASE_CONFIG = {
 var PACKAGE_VERSION = RELEASE_CONFIG.packageVersion;
 var OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
-var BROKERKIT_PLUGIN_VERSION = RELEASE_CONFIG.brokerkitPluginVersion;
-var BROKERKIT_VERSION = RELEASE_CONFIG.brokerkitVersion;
+var UNYOLO_PLUGIN_VERSION = RELEASE_CONFIG.unyoloPluginVersion;
+var HF_BROKER_VERSION = RELEASE_CONFIG.hfBrokerVersion;
 var RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
@@ -15496,15 +15496,15 @@ function imageDockerfile(runtimeImage) {
 `;
 }
 function bundledDockerfile() {
-  return `ARG BROKERKIT_PLUGIN_VERSION=${BROKERKIT_PLUGIN_VERSION}
-ARG BROKERKIT_VERSION=${BROKERKIT_VERSION}
+  return `ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}
+ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
-ARG BROKERKIT_VERSION
+ARG HF_BROKER_VERSION
 RUN git init /src \\
-  && git -C /src fetch --depth=1 https://github.com/osolmaz/brokerkit.git "refs/tags/$BROKERKIT_VERSION:refs/tags/$BROKERKIT_VERSION" \\
-  && git -C /src checkout --detach "$BROKERKIT_VERSION" \\
-  && test "$(git -C /src rev-parse "refs/tags/$BROKERKIT_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)" \\
+  && git -C /src fetch --depth=1 https://github.com/osolmaz/unyolo.git "refs/tags/$HF_BROKER_VERSION:refs/tags/$HF_BROKER_VERSION" \\
+  && git -C /src checkout --detach "$HF_BROKER_VERSION" \\
+  && test "$(git -C /src rev-parse "refs/tags/$HF_BROKER_VERSION^{commit}")" = "$(git -C /src rev-parse HEAD)" \\
   && cd /src \\
   && GOWORK=off go build -trimpath -o /out/hf-broker ./brokers/huggingface/cmd/hf-broker \\
   && /out/hf-broker policy render \\
@@ -15541,8 +15541,8 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uvicorn==0.49.0" \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
-ARG BROKERKIT_PLUGIN_VERSION
-RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-brokerkit@\${BROKERKIT_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-brokerkit/openclaw.plugin.json
+ARG UNYOLO_PLUGIN_VERSION
+RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-unyolo@\${UNYOLO_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json
 
 COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
@@ -15565,7 +15565,7 @@ ENV OPENCLAW_STATE_DIR=/home/node/.local/share/mlclaw/live/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/home/node/.local/share/mlclaw/live/workspace
 ENV OPENCLAW_CONFIG_PATH=/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json
 ENV OPENCLAW_DISABLE_BONJOUR=1
-ENV MLCLAW_BROKERKIT_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-brokerkit
+ENV MLCLAW_UNYOLO_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-unyolo
 
 EXPOSE 7860
 

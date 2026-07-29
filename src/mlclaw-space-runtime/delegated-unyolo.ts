@@ -9,7 +9,7 @@ import {
 } from "./operator-brokers.js";
 import { DelegatedRevisions, type DelegatedSnapshotEvent } from "./delegated-revisions.js";
 
-const API_VERSION = "brokerkit.io/delegated-web/v1" as const;
+const API_VERSION = "unyolo.io/delegated-web/v1" as const;
 const TOKEN_LIFETIME_SECONDS = 4 * 60;
 const MAX_PAGES_PER_SOURCE = 32;
 const MAX_HANDLES = 4_096;
@@ -32,7 +32,7 @@ export type DelegatedRequest = {
 };
 
 export type DelegatedSnapshot = {
-  api_version: "brokerkit.io/operator-ui/v1";
+  api_version: "unyolo.io/operator-ui/v1";
   cursor: string;
   sources: DelegatedSourceHealth[];
   requests: DelegatedRequest[];
@@ -48,7 +48,7 @@ type HandleRecord = {
 
 type TokenPayload = {
   version: 1;
-  audience: "brokerkit-delegated-web";
+  audience: "unyolo-delegated-web";
   subject: string;
   issuedAt: number;
   expiresAt: number;
@@ -62,7 +62,7 @@ export type DelegatedSessionIdentity = {
   access: DelegatedAccess;
 };
 
-export class DelegatedBrokerKit {
+export class DelegatedUnyolo {
   private readonly key: Buffer;
   private readonly handles = new Map<string, HandleRecord>();
   private readonly handlesByIdentity = new Map<string, string>();
@@ -75,7 +75,7 @@ export class DelegatedBrokerKit {
     private readonly now: () => Date = () => new Date(),
     private readonly sourceDeadlineMs = SOURCE_DEADLINE_MS,
   ) {
-    this.key = createHmac("sha256", sessionSecret).update("mlclaw/brokerkit-delegated-web/v1", "utf8").digest();
+    this.key = createHmac("sha256", sessionSecret).update("mlclaw/unyolo-delegated-web/v1", "utf8").digest();
   }
 
   issueSession(
@@ -92,7 +92,7 @@ export class DelegatedBrokerKit {
     const expiresAt = issuedAt + TOKEN_LIFETIME_SECONDS;
     const payload: TokenPayload = {
       version: 1,
-      audience: "brokerkit-delegated-web",
+      audience: "unyolo-delegated-web",
       subject: actor,
       issuedAt,
       expiresAt,
@@ -156,7 +156,7 @@ export class DelegatedBrokerKit {
       requests,
     });
     return this.revisions.publish(material, (cursor) => ({
-      api_version: "brokerkit.io/operator-ui/v1",
+      api_version: "unyolo.io/operator-ui/v1",
       cursor,
       sources,
       requests,
@@ -186,7 +186,7 @@ export class DelegatedBrokerKit {
   }
 
   async summary(): Promise<{
-    api_version: "brokerkit.io/operator-ui/v1";
+    api_version: "unyolo.io/operator-ui/v1";
     cursor: string;
     pending: number;
     healthy: boolean;
@@ -415,14 +415,14 @@ function reconcileRequests(pages: BrokerApproval[][]): BrokerApproval[] {
   return [...requests.values()];
 }
 
-export class DelegatedBrokerKitError extends Error {
+export class DelegatedUnyoloError extends Error {
   constructor(readonly code: string) {
     super(code);
   }
 }
 
-function delegatedError(code: string): DelegatedBrokerKitError {
-  return new DelegatedBrokerKitError(code);
+function delegatedError(code: string): DelegatedUnyoloError {
+  return new DelegatedUnyoloError(code);
 }
 
 function project(source: OperatorBrokerSummary, request: BrokerApproval, handle: string): DelegatedRequest {
@@ -441,7 +441,7 @@ function handleExpiry(request: BrokerApproval): string {
 function decisionKey(record: HandleRecord, action: DelegatedAction, actor: string): string {
   return createHash("sha256")
     .update(
-      ["mlclaw-brokerkit-decision-v1", record.sourceId, record.requestId, String(record.revision), action, actor].join(
+      ["mlclaw-unyolo-decision-v1", record.sourceId, record.requestId, String(record.revision), action, actor].join(
         "\0",
       ),
       "utf8",
@@ -541,7 +541,7 @@ function hasExactTokenFields(record: Record<string, unknown>): boolean {
 function validTokenIdentity(record: Record<string, unknown>): boolean {
   return (
     record.version === 1 &&
-    record.audience === "brokerkit-delegated-web" &&
+    record.audience === "unyolo-delegated-web" &&
     (record.access === "read" || record.access === "decide") &&
     typeof record.subject === "string" &&
     record.subject.length >= 1 &&
@@ -570,11 +570,7 @@ function safeEqual(left: string, right: string): boolean {
 
 function safeSourceError(error: unknown): string {
   const code =
-    error instanceof BrokerOperatorError
-      ? error.code
-      : error instanceof DelegatedBrokerKitError
-        ? error.code
-        : undefined;
+    error instanceof BrokerOperatorError ? error.code : error instanceof DelegatedUnyoloError ? error.code : undefined;
   if (code === "broker_timeout" || code === "unavailable" || code === "source_unavailable") return code;
   return "source_unavailable";
 }

@@ -1,6 +1,6 @@
 # Operator Broker Configuration
 
-ML Claw reads one JSON file that names the Brokerkit operator APIs available to
+ML Claw reads one JSON file that names the unYOLO operator APIs available to
 its trusted backend. The file contains paths to operator token files, never the
 tokens themselves.
 
@@ -37,7 +37,7 @@ the HF Broker entry yourself when using a custom file.
 | `brokers`              | Yes      | array   | Zero to 16 operator API entries.           |
 | `brokers[].id`         | Yes      | string  | Stable URL-safe broker ID.                 |
 | `brokers[].label`      | Yes      | string  | Short operator-facing broker name.         |
-| `brokers[].url`        | Yes      | string  | Brokerkit operator API origin.             |
+| `brokers[].url`        | Yes      | string  | unYOLO operator API origin.                |
 | `brokers[].token_file` | Yes      | string  | Absolute file containing its bearer token. |
 
 ### Broker IDs
@@ -53,7 +53,7 @@ rejected. Labels are display text only and do not grant authority.
 ### URLs
 
 The URL must be one `http` or `https` origin with no username, password, query,
-fragment, or non-root path. ML Claw appends only fixed Brokerkit operator API
+fragment, or non-root path. ML Claw appends only fixed unYOLO operator API
 paths. Duplicate URLs are rejected.
 
 ### Token Files
@@ -100,7 +100,7 @@ ML Claw validates the complete file and every referenced token before opening
 its HTTP listener. It does not reload either file during requests. A restart is
 required after changing broker entries or rotating tokens.
 
-The backend discovers and validates each broker's BrokerKit Operator V1 API,
+The backend discovers and validates each broker's unYOLO Operator V1 API,
 then exposes only fixed list, detail, approve, deny, and revoke
 operations to the packaged OpenClaw plugin UI. Browser actions address
 short-lived opaque handles; canonical broker and request IDs are display and
@@ -118,23 +118,23 @@ hosting edge can receive its own access cookie, but ML Claw never treats that
 cookie as delegated authorization. The
 OpenClaw process cannot read broker credentials or delegated decision tokens.
 Decisions are enabled in the popover by default. Set
-`MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` to make the popover read-only.
+`MLCLAW_UNYOLO_POPOVER_DECISIONS=false` to make the popover read-only.
 
 If a tab remains suspended until its delegated token is no longer renewable,
-the packaged UI sends the credential-free BrokerKit rebootstrap message. ML
-Claw accepts it only from the mounted BrokerKit frame, rate-limits it, and
+the packaged UI sends the credential-free unYOLO rebootstrap message. ML
+Claw accepts it only from the mounted unYOLO frame, rate-limits it, and
 reloads only that frame so the protected HTML response can issue a fresh
 session. The token is never sent through the parent page or `postMessage`.
 
-The sandbox sends the raw delegated token only in `BrokerKit-Session`. ML Claw
+The sandbox sends the raw delegated token only in `unyolo-session`. ML Claw
 does not accept it from `Authorization`, cookies, URLs, or request bodies. This
 keeps standard authorization available to an identity-aware hosting edge and
 avoids collisions with host credentials. Delegated requests require the opaque
-`Origin: null`, permit only `brokerkit-session` and `content-type` during CORS
-preflight, and enable credentialed CORS for the private hosting edge.
+`Origin: null`, permit only `unyolo-session` and `content-type` during CORS
+preflight, and omit ambient browser credentials.
 
 The delegated browser API returns a complete
-`brokerkit.io/operator-ui/v1` snapshot with an opaque revision cursor. Request
+`unyolo.io/operator-ui/v1` snapshot with an opaque revision cursor. Request
 payloads remain nested under their source metadata. Authenticated `/events`
 waits return only the next cursor and a `changed` flag; the UI then fetches a
 new complete snapshot. The Gateway badge uses the same cursor through a

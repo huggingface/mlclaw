@@ -60,31 +60,31 @@ jobs:
         run: |
           version="$(node -p 'require("./package.json").version')"
           openclaw_version="$(node -p 'require("./package.json").config.openclawVersion')"
-          brokerkit_plugin_version="$(node -p 'require("./package.json").config.brokerkitPluginVersion')"
-          brokerkit_version="$(node -p 'require("./package.json").config.brokerkitVersion')"
+          unyolo_plugin_version="$(node -p 'require("./package.json").config.unyoloPluginVersion')"
+          hf_broker_version="$(node -p 'require("./package.json").config.hfBrokerVersion')"
           runtime_image="$(node -p 'require("./package.json").config.runtimeImageRepository')"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "openclaw_version=${openclaw_version}" >> "$GITHUB_OUTPUT"
-          echo "brokerkit_plugin_version=${brokerkit_plugin_version}" >> "$GITHUB_OUTPUT"
-          echo "brokerkit_version=${brokerkit_version}" >> "$GITHUB_OUTPUT"
+          echo "unyolo_plugin_version=${unyolo_plugin_version}" >> "$GITHUB_OUTPUT"
+          echo "hf_broker_version=${hf_broker_version}" >> "$GITHUB_OUTPUT"
           echo "runtime_image=${runtime_image}" >> "$GITHUB_OUTPUT"
           echo "runtime_tag=${version}-openclaw-${openclaw_version}" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run release:check
       - name: Build pinned HF Broker
         run: |
-          git init "$RUNNER_TEMP/brokerkit"
-          git -C "$RUNNER_TEMP/brokerkit" fetch --depth=1 https://github.com/osolmaz/brokerkit.git \
-            "refs/tags/${{ steps.runtime-config.outputs.brokerkit_version }}:refs/tags/${{ steps.runtime-config.outputs.brokerkit_version }}"
-          git -C "$RUNNER_TEMP/brokerkit" checkout --detach "${{ steps.runtime-config.outputs.brokerkit_version }}"
-          test "$(git -C "$RUNNER_TEMP/brokerkit" rev-parse \
-            "refs/tags/${{ steps.runtime-config.outputs.brokerkit_version }}^{commit}")" = \
-            "$(git -C "$RUNNER_TEMP/brokerkit" rev-parse HEAD)"
-          go build -C "$RUNNER_TEMP/brokerkit" -o "$RUNNER_TEMP/hf-broker" ./brokers/huggingface/cmd/hf-broker
-      - name: Test pinned BrokerKit agent tools
+          git init "$RUNNER_TEMP/unyolo"
+          git -C "$RUNNER_TEMP/unyolo" fetch --depth=1 https://github.com/osolmaz/unyolo.git \
+            "refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}:refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}"
+          git -C "$RUNNER_TEMP/unyolo" checkout --detach "${{ steps.runtime-config.outputs.hf_broker_version }}"
+          test "$(git -C "$RUNNER_TEMP/unyolo" rev-parse \
+            "refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}^{commit}")" = \
+            "$(git -C "$RUNNER_TEMP/unyolo" rev-parse HEAD)"
+          go build -C "$RUNNER_TEMP/unyolo" -o "$RUNNER_TEMP/hf-broker" ./brokers/huggingface/cmd/hf-broker
+      - name: Test pinned unYOLO agent tools
         env:
           MLCLAW_HF_BROKER_BINARY: ${{ runner.temp }}/hf-broker
-        run: npm test -- --run test/mlclaw.brokerkit-agent-tools.test.ts
+        run: npm test -- --run test/mlclaw.unyolo-agent-tools.test.ts
       - run: npm run build
       - run: npm run format
       - run: npm run lint
@@ -130,8 +130,8 @@ jobs:
           build-args: |
             OPENCLAW_VERSION=${{ steps.runtime-config.outputs.openclaw_version }}
             OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${{ steps.runtime-config.outputs.openclaw_version }}
-            BROKERKIT_PLUGIN_VERSION=${{ steps.runtime-config.outputs.brokerkit_plugin_version }}
-            BROKERKIT_VERSION=${{ steps.runtime-config.outputs.brokerkit_version }}
+            UNYOLO_PLUGIN_VERSION=${{ steps.runtime-config.outputs.unyolo_plugin_version }}
+            HF_BROKER_VERSION=${{ steps.runtime-config.outputs.hf_broker_version }}
             MLCLAW_RUNTIME_IMAGE=${{ steps.runtime-config.outputs.runtime_image }}:${{ steps.runtime-config.outputs.runtime_tag }}
           tags: |
             ${{ steps.runtime-config.outputs.runtime_image }}:${{ steps.runtime-config.outputs.runtime_tag }}

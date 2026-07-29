@@ -1,4 +1,4 @@
-# BrokerKit Delegated Session Transport Implementation Plan
+# unYOLO Delegated Session Transport Implementation Plan
 
 Date: 2026-07-14
 
@@ -6,28 +6,28 @@ Status: ready to implement
 
 ## Target Request
 
-MLClaw's trusted browser boundary accepts BrokerKit delegated sessions through
+MLClaw's trusted browser boundary accepts unYOLO delegated sessions through
 one dedicated HTTP field:
 
 ```http
-GET /mlclaw/api/brokerkit/snapshot HTTP/1.1
+GET /trusted-host/api/unyolo/snapshot HTTP/1.1
 Origin: null
-BrokerKit-Session: eyJ2ZXJzaW9uIjoxLCJhdWRpZW5jZSI6Ii4uLiJ9.signature
+unyolo-session: eyJ2ZXJzaW9uIjoxLCJhdWRpZW5jZSI6Ii4uLiJ9.signature
 Accept: application/json
 ```
 
-`BrokerKit-Session` contains the raw opaque session token. It has no `Bearer`
+`unyolo-session` contains the raw opaque session token. It has no `Bearer`
 prefix. MLClaw does not accept a delegated token from `Authorization`, a
 cookie, a query parameter, or a request body.
 
 This replaces the current pre-release behavior in place. MLClaw and its pinned
-BrokerKit plugin use only the resulting version 1 contract. Do not add fallback
+unYOLO plugin use only the resulting version 1 contract. Do not add fallback
 parsing, dual-header support, compatibility aliases, a second format version,
 or migration code.
 
 ## Objective
 
-Adopt BrokerKit's host-neutral delegated-web session transport at the MLClaw
+Adopt unYOLO's host-neutral delegated-web session transport at the MLClaw
 trusted boundary, rebuild the pinned runtime, and prove that approvals work
 from both ordinary Hugging Face authentication and signed Space chat links.
 
@@ -51,15 +51,15 @@ Approvals are unavailable
 ```
 
 The same deployment's authenticated backend reported a healthy HF Broker and
-a pending repo-create request. A clean top-level BrokerKit UI using a separate
+a pending repo-create request. A clean top-level unYOLO UI using a separate
 Hugging Face credential rendered that request correctly.
 
 In the signed chat context, the isolated popover resource records showed:
 
 ```text
-/plugins/brokerkit/ui/                  200
-/mlclaw/api/brokerkit/snapshot          404
-/mlclaw/api/brokerkit/snapshot          404
+/plugins/unyolo/ui/                  200
+/trusted-host/api/unyolo/snapshot          404
+/trusted-host/api/unyolo/snapshot          404
 ```
 
 The packaged delegated client sends `Authorization: Bearer <delegated-token>`.
@@ -70,18 +70,18 @@ sees it.
 
 ## Ownership
 
-BrokerKit owns the fixed `BrokerKit-Session` delegated-web contract and the
+unYOLO owns the fixed `unyolo-session` delegated-web contract and the
 packaged browser client. Its companion plan is
-`osolmaz/brokerkit:docs/2026-07-14-browser-session-transport-plan.md`.
+`osolmaz/unyolo:docs/2026-07-14-browser-session-transport-plan.md`.
 
 MLClaw owns:
 
-- serving protected BrokerKit UI HTML and immutable packaged assets;
+- serving protected unYOLO UI HTML and immutable packaged assets;
 - issuing and verifying delegated sessions;
 - enforcing the opaque-origin CORS boundary;
 - aggregating configured Operator V1 sources;
 - translating browser handles and decisions to the selected broker;
-- pinning an immutable compatible BrokerKit revision;
+- pinning an immutable compatible unYOLO revision;
 - building the combined runtime image; and
 - exercising the real Hugging Face signed-link path.
 
@@ -92,8 +92,8 @@ provider-specific policy change belongs in this implementation.
 
 ### Accepted credential
 
-All protected routes under `/mlclaw/api/brokerkit` authenticate the delegated
-browser with exactly one `BrokerKit-Session` field. Header names are
+All protected routes under `/trusted-host/api/unyolo` authenticate the delegated
+browser with exactly one `unyolo-session` field. Header names are
 case-insensitive, but tests and documentation use that canonical spelling.
 
 The backend:
@@ -117,17 +117,17 @@ Apply the credential rule to:
 
 | Method | Path                                             | Required access                                    |
 | ------ | ------------------------------------------------ | -------------------------------------------------- |
-| `POST` | `/mlclaw/api/brokerkit/session`                  | current `read` or `decide`; preserve it on renewal |
-| `GET`  | `/mlclaw/api/brokerkit/snapshot`                 | `read` or `decide`                                 |
-| `GET`  | `/mlclaw/api/brokerkit/events`                   | `read` or `decide`                                 |
-| `GET`  | `/mlclaw/api/brokerkit/requests/:handle`         | `read` or `decide`                                 |
-| `POST` | `/mlclaw/api/brokerkit/requests/:handle/approve` | `decide`                                           |
-| `POST` | `/mlclaw/api/brokerkit/requests/:handle/deny`    | `decide`                                           |
-| `POST` | `/mlclaw/api/brokerkit/requests/:handle/revoke`  | `decide`                                           |
+| `POST` | `/trusted-host/api/unyolo/session`                  | current `read` or `decide`; preserve it on renewal |
+| `GET`  | `/trusted-host/api/unyolo/snapshot`                 | `read` or `decide`                                 |
+| `GET`  | `/trusted-host/api/unyolo/events`                   | `read` or `decide`                                 |
+| `GET`  | `/trusted-host/api/unyolo/requests/:handle`         | `read` or `decide`                                 |
+| `POST` | `/trusted-host/api/unyolo/requests/:handle/approve` | `decide`                                           |
+| `POST` | `/trusted-host/api/unyolo/requests/:handle/deny`    | `decide`                                           |
+| `POST` | `/trusted-host/api/unyolo/requests/:handle/revoke`  | `decide`                                           |
 
 The summary and summary-event routes remain authenticated by the ordinary
 MLClaw administrator session because they are called by the trusted parent
-page, not the opaque BrokerKit frame.
+page, not the opaque unYOLO frame.
 
 ### CORS and cookie behavior
 
@@ -136,7 +136,7 @@ Delegated requests originate from the scripts-only sandbox and therefore send
 
 - requires the exact opaque origin;
 - returns `Access-Control-Allow-Origin: null`;
-- returns `Access-Control-Allow-Headers: brokerkit-session, content-type` on
+- returns `Access-Control-Allow-Headers: unyolo-session, content-type` on
   preflight;
 - allows only `GET`, `POST`, and `OPTIONS`;
 - returns `Cache-Control: no-store`, `Vary: Origin`, and
@@ -148,7 +148,7 @@ Delegated requests originate from the scripts-only sandbox and therefore send
 The protected HTML request still requires an authenticated MLClaw admin and
 may rely on Hugging Face OAuth, the Space's signed-link access, and the MLClaw
 session cookie as appropriate. That request issues the short-lived delegated
-session. Subsequent iframe API calls use only `BrokerKit-Session` for MLClaw's
+session. Subsequent iframe API calls use only `unyolo-session` for MLClaw's
 delegated authorization while the Hugging Face edge remains free to process
 its own authentication state.
 
@@ -178,11 +178,11 @@ an alias.
 
 Do not rewrite the standard request `Authorization` field, forward arbitrary
 headers, or add a general reverse proxy. The browser API remains an explicit
-adapter over `DelegatedBrokerKit`.
+adapter over `DelegatedUnyolo`.
 
 ### Delegated session implementation
 
-Keep `src/mlclaw-space-runtime/delegated-brokerkit.ts` responsible for token
+Keep `src/mlclaw-space-runtime/delegated-unyolo.ts` responsible for token
 issue and validation. No token schema version change is required. Tighten its
 public entry point if needed so the app passes one already-bounded raw field
 value and validation still fails closed for duplicated or combined input.
@@ -190,7 +190,7 @@ value and validation still fails closed for duplicated or combined input.
 Preserve:
 
 - four-minute token lifetime;
-- `brokerkit-delegated-web` audience binding;
+- `unyolo-delegated-web` audience binding;
 - exact closed token payload fields;
 - `read` and `decide` access;
 - per-token nonce/session identity;
@@ -208,18 +208,18 @@ Do not describe the change as Hugging Face-specific. Hugging Face supplied the
 reproduction, while the corrected boundary is intentionally portable across
 identity-aware proxies.
 
-## BrokerKit Pin And Runtime Image
+## unYOLO Pin And Runtime Image
 
-After the BrokerKit implementation is reviewed and green:
+After the unYOLO implementation is reviewed and green:
 
-- replace `brokerkitVersion` in `package.json` with the exact implementing
+- replace `hfBrokerVersion` in `package.json` with the exact implementing
   commit;
-- keep `brokerkitPluginVersion` at its pre-publication package value unless the
+- keep `unyoloPluginVersion` at its pre-publication package value unless the
   package build itself requires a coordinated package-version change;
 - regenerate `dist/mlclaw-space-runtime.js` and all other tracked bundles from
   source;
 - build the runtime image from the immutable MLClaw commit and immutable
-  BrokerKit commit;
+  unYOLO commit;
 - verify the installed tarball contains the matching `dist/ui` assets; and
 - record both revisions in the runtime metadata used by doctor/status.
 
@@ -234,7 +234,7 @@ Extend `test/mlclaw.space-runtime.test.ts` to cover the complete HTTP boundary:
 
 - an embedded popover receives a `read` session;
 - a trusted top-level view receives a `decide` session;
-- `BrokerKit-Session` authenticates snapshot, events, detail, renewal, approve,
+- `unyolo-session` authenticates snapshot, events, detail, renewal, approve,
   deny, and revoke;
 - the removed delegated cancel route returns `404`;
 - delegated `Authorization` is rejected even when it contains a valid token;
@@ -248,7 +248,7 @@ Extend `test/mlclaw.space-runtime.test.ts` to cover the complete HTTP boundary:
 - CSP, frame ancestry, sandbox, immutable assets, and top-level navigation
   behavior remain intact.
 
-Extend `test/mlclaw.delegated-brokerkit.test.ts` only where token validation or
+Extend `test/mlclaw.delegated-unyolo.test.ts` only where token validation or
 access behavior needs focused coverage. Preserve the existing multi-source,
 bounded pagination, revision, decision, and error-isolation tests.
 
@@ -260,7 +260,7 @@ behaves like an identity-aware hosting edge:
 - the outer document is admitted by simulated host authentication;
 - a request carrying delegated `Authorization` is intercepted and returned as
   `404` before the app;
-- an otherwise identical request carrying `BrokerKit-Session` reaches MLClaw;
+- an otherwise identical request carrying `unyolo-session` reaches MLClaw;
 - the opaque-origin preflight succeeds; and
 - a pending fake Operator V1 request renders and can be decided.
 
@@ -289,7 +289,7 @@ Do not run mutation testing during this implementation.
 
 ## Live Signed-Link Verification
 
-Deploy only after BrokerKit and MLClaw checks pass and the candidate runtime
+Deploy only after unYOLO and MLClaw checks pass and the candidate runtime
 image is available. Use `osolmaz/mlclaw-test`; do not change another deployment
 or its bucket.
 
@@ -312,37 +312,37 @@ Verify in fresh browser contexts:
     banner.
 
 Run `mlclaw doctor osolmaz/mlclaw-test` after deployment and confirm the Space,
-runtime image, mounted bucket, OAuth, OpenClaw Gateway, BrokerKit plugin, HF
+runtime image, mounted bucket, OAuth, OpenClaw Gateway, unYOLO plugin, HF
 Broker agent listener, and HF Broker operator listener are healthy.
 
 ## Coordinated Commit And Cutover
 
 Complete the change as one coordinated pre-release cutover:
 
-1. merge the BrokerKit contract and packaged UI implementation;
+1. merge the unYOLO contract and packaged UI implementation;
 2. implement MLClaw against that exact reviewed commit;
-3. advance the immutable BrokerKit pin;
+3. advance the immutable unYOLO pin;
 4. rebuild and publish the MLClaw runtime image;
 5. update only `osolmaz/mlclaw-test`;
 6. run ordinary and signed-link end-to-end verification; and
 7. publish no package release until all acceptance criteria pass.
 
 There is no supported mixed pairing. A runtime with the new MLClaw adapter and
-an old BrokerKit UI, or a new BrokerKit UI and an old MLClaw adapter, is invalid
+an old unYOLO UI, or a new unYOLO UI and an old MLClaw adapter, is invalid
 and must fail the build or deployment verification.
 
 ## Acceptance Criteria
 
 - The exact signed-link reproduction no longer displays `0 sources` or
   `Approvals are unavailable` while a healthy source exists.
-- Every delegated browser route authorizes only with `BrokerKit-Session`.
+- Every delegated browser route authorizes only with `unyolo-session`.
 - MLClaw never reads a delegated credential from standard `Authorization`.
 - Hugging Face remains free to own standard authorization at the Space edge.
 - The opaque iframe can forward a private hosting-edge cookie and receives the
   matching credentialed-CORS grant, while MLClaw still requires
-  `BrokerKit-Session` for every delegated route.
+  `unyolo-session` for every delegated route.
 - The popover receives decision access by default, while an explicit
-  `MLCLAW_BROKERKIT_POPOVER_DECISIONS=false` opt-out remains read-only.
+  `MLCLAW_UNYOLO_POPOVER_DECISIONS=false` opt-out remains read-only.
 - Broker operator credentials remain server-only and never enter browser
   responses or OpenClaw state.
 - Pending requests stream into the mounted popover without page or iframe
@@ -350,7 +350,7 @@ and must fail the build or deployment verification.
 - A recovered connection clears its availability banner.
 - Unit, integration, coverage, build, package, secret, and Slophammer checks
   pass.
-- The runtime pins the exact compatible BrokerKit revision.
+- The runtime pins the exact compatible unYOLO revision.
 - `mlclaw doctor` is clean after deployment.
 - Ordinary OAuth and signed Space chat URLs both render and decide a disposable
   approval end to end.
