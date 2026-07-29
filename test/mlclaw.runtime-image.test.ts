@@ -122,6 +122,7 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g hf-broker "$PROTECTED_STATE_DIR/unyolo"');
     expect(entrypoint).toContain('chmod 0710 "$PROTECTED_STATE_DIR"');
+    expect(entrypoint).toContain("node /app/mlclaw-space-runtime.js prepare-unyolo-config");
     expect(entrypoint).not.toContain("printf '{\"grants\":[]}\\n'");
     expect(entrypoint).not.toContain("grant_store");
     expect(entrypoint).not.toContain('install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR/grants"');

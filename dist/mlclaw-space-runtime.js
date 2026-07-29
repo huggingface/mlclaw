@@ -4564,6 +4564,1102 @@ function readRuntimeSettings(file) {
   }
 }
 
+// src/mlclaw-space-runtime/openclaw-config.ts
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
+
+// src/mlclaw-space-runtime/openai-models.ts
+var LEGACY_CODEX_MODEL_REF = "mlclaw-codex/gpt-5.4";
+var DEFAULT_OPENAI_MODEL_REF = "openai/gpt-5.4";
+
+// src/mlclaw-space-runtime/openclaw-oauth-profile.ts
+import { constants as fsConstants } from "node:fs";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { spawn } from "node:child_process";
+var OPENAI_OAUTH_PROFILE_ID = "openai:mlclaw";
+var MAX_HELPER_OUTPUT_BYTES = 64 * 1024;
+var PROFILE_HELPER_SCRIPT = String.raw`
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const input = fs.readFileSync(0, "utf8");
+const payload = JSON.parse(input);
+const require = createRequire(pathToFileURL(payload.openclawEntry));
+const sdkPath = require.resolve("openclaw/plugin-sdk/provider-auth");
+const { updateAuthProfileStoreWithLock } = await import(pathToFileURL(sdkPath).href);
+
+const result = await updateAuthProfileStoreWithLock({
+  agentDir: payload.agentDir,
+  saveOptions: { filterExternalAuthProfiles: false, syncExternalCli: false },
+  updater(store) {
+    const profileId = payload.profileId;
+    const existing = store.profiles[profileId];
+    if (payload.operation === "remove") {
+      let changed = false;
+      if (existing) {
+        delete store.profiles[profileId];
+        changed = true;
+      }
+      if (store.usageStats?.[profileId]) {
+        delete store.usageStats[profileId];
+        changed = true;
+      }
+      if (store.lastGood) {
+        for (const [provider, value] of Object.entries(store.lastGood)) {
+          if (value === profileId) {
+            delete store.lastGood[provider];
+            changed = true;
+          }
+        }
+      }
+      if (store.order) {
+        for (const [provider, order] of Object.entries(store.order)) {
+          const next = Array.isArray(order) ? order.filter((value) => value !== profileId) : order;
+          if (Array.isArray(order) && next.length !== order.length) {
+            changed = true;
+            if (next.length > 0) store.order[provider] = next;
+            else delete store.order[provider];
+          }
+        }
+      }
+      return changed;
+    }
+
+    const incoming = payload.credential;
+    if (
+      existing?.type === "oauth" &&
+      existing.provider === "openai" &&
+      existing.accountId === incoming.accountId &&
+      Number(existing.expires) >= Number(incoming.expires)
+    ) {
+      return false;
+    }
+    store.profiles[profileId] = incoming;
+    const currentOrder = Array.isArray(store.order?.openai) ? store.order.openai : [];
+    store.order = {
+      ...store.order,
+      openai: [profileId, ...currentOrder.filter((value) => value !== profileId)],
+    };
+    return true;
+  },
+});
+
+if (!result) throw new Error("OpenClaw auth profile store was unavailable");
+process.stdout.write(JSON.stringify({ ok: true }) + "\n");
+`;
+async function syncOpenAiOAuthProfile(params) {
+  const openclawEntry = await resolveOpenClawEntry(params.config.openclawCommand, params.env.PATH);
+  if (!openclawEntry) return false;
+  const agentDir = path.join(path.dirname(params.config.openclawConfigPath), "agents", "main", "agent");
+  const credential = params.credential ? {
+    type: "oauth",
+    provider: "openai",
+    access: params.credential.access,
+    refresh: params.credential.refresh,
+    expires: params.credential.expires,
+    accountId: params.credential.accountId,
+    ...params.credential.idToken ? { idToken: params.credential.idToken } : {},
+    displayName: "MLClaw ChatGPT"
+  } : void 0;
+  await runProfileHelper({
+    openclawEntry,
+    agentDir,
+    env: params.env,
+    payload: {
+      operation: credential ? "upsert" : "remove",
+      profileId: OPENAI_OAUTH_PROFILE_ID,
+      ...credential ? { credential } : {}
+    },
+    ...process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}
+  });
+  return true;
+}
+async function resolveOpenClawEntry(command, pathValue) {
+  const candidate = command.includes(path.sep) ? path.resolve(command) : await findOnPath(command, pathValue);
+  if (!candidate) return void 0;
+  try {
+    const real = await fs.realpath(candidate);
+    if (path.basename(real) !== "openclaw.mjs") return void 0;
+    return real;
+  } catch {
+    return void 0;
+  }
+}
+async function findOnPath(command, pathValue) {
+  for (const directory of (pathValue ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, command);
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+    }
+  }
+  return void 0;
+}
+async function runProfileHelper(params) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", PROFILE_HELPER_SCRIPT], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: params.env,
+      ...params.uid !== void 0 ? { uid: params.uid } : {},
+      ...params.gid !== void 0 ? { gid: params.gid } : {}
+    });
+    let stdout = "";
+    let stderr = "";
+    const append = (current, chunk) => `${current}${chunk.toString("utf8")}`.slice(-MAX_HELPER_OUTPUT_BYTES);
+    child.stdout.on("data", (chunk) => {
+      stdout = append(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = append(stderr, chunk);
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0 && stdout.includes('"ok":true')) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `OpenClaw OAuth profile update failed (code=${code ?? "null"}, signal=${signal ?? "null"}): ${sanitizeHelperError(stderr)}`
+        )
+      );
+    });
+    child.stdin.end(
+      JSON.stringify({
+        ...params.payload,
+        openclawEntry: params.openclawEntry,
+        agentDir: params.agentDir
+      })
+    );
+  });
+}
+function sanitizeHelperError(value) {
+  return value.replace(/[\r\n\t]+/gu, " ").trim().slice(0, 512) || "unknown error";
+}
+
+// src/mlclaw-space-runtime/mcp-integrations.ts
+import { createHmac as createHmac2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import http from "node:http";
+import { Readable } from "node:stream";
+var MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+var UPSTREAM_TIMEOUT_MS = 12e4;
+var INTERNAL_HEADER = "x-mlclaw-mcp-key";
+var McpIntegrationServer = class {
+  constructor(config2, credentials, fetchFn = fetch) {
+    this.config = config2;
+    this.credentials = credentials;
+    this.fetchFn = fetchFn;
+    this.internalToken = deriveInternalToken(config2.sessionSecret);
+  }
+  server;
+  internalToken;
+  activeRequests = /* @__PURE__ */ new Set();
+  managedServerConfig() {
+    return managedMcpServerConfig(this.config);
+  }
+  async start() {
+    if (this.server) {
+      return;
+    }
+    const server2 = http.createServer((req, res) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      this.activeRequests.add(controller);
+      req.once("aborted", abort);
+      res.once("close", abort);
+      this.handle(req, res, controller.signal).catch((err) => {
+        if (controller.signal.aborted) {
+          res.destroy();
+          return;
+        }
+        process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}
+`);
+        if (!res.headersSent) {
+          writeJson(res, 502, mcpError(null, -32603, "MCP integration request failed"));
+        } else {
+          res.end();
+        }
+      }).finally(() => {
+        req.off("aborted", abort);
+        res.off("close", abort);
+        this.activeRequests.delete(controller);
+      });
+    });
+    await new Promise((resolve, reject) => {
+      server2.once("error", reject);
+      server2.listen(this.config.mcpPort, "127.0.0.1", () => {
+        server2.off("error", reject);
+        resolve();
+      });
+    });
+    this.server = server2;
+    process.stdout.write(`[mlclaw] MCP integrations listening on 127.0.0.1:${this.config.mcpPort}
+`);
+  }
+  async stop() {
+    const server2 = this.server;
+    this.server = void 0;
+    if (!server2) {
+      return;
+    }
+    const closed = new Promise((resolve) => server2.close(() => resolve()));
+    for (const controller of this.activeRequests) {
+      controller.abort();
+    }
+    server2.closeAllConnections();
+    await closed;
+  }
+  async handle(req, res, signal) {
+    const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+    if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
+      writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
+      return;
+    }
+    const body = await readBody(req, MAX_REQUEST_BYTES);
+    if (pathname !== "/mcp/huggingface" && pathname !== "/mcp/research") {
+      writeJson(res, 404, mcpError(null, -32601, "Not found"));
+      return;
+    }
+    let accessToken;
+    try {
+      accessToken = await this.integrationAccessToken();
+    } catch (err) {
+      writeJson(res, 503, mcpError(null, -32002, safeError(err)));
+      return;
+    }
+    if (pathname === "/mcp/research" && req.method === "POST") {
+      const parsed = parseJsonRpc(body);
+      if (parsed?.method === "tools/call" && toolName(parsed) === "research") {
+        await this.handleResearchCall(req, res, body, parsed, accessToken, signal);
+        return;
+      }
+    }
+    await forwardStreaming({
+      req,
+      res,
+      body,
+      url: pathname === "/mcp/huggingface" ? this.config.hfMcpUrl : this.config.researchMcpUrl,
+      accessToken,
+      signal
+    });
+  }
+  async handleResearchCall(req, res, body, request, accessToken, signal) {
+    const deadline = Date.now() + this.config.researchTimeoutMs;
+    const initial = await forwardBuffered({
+      method: req.method ?? "POST",
+      requestHeaders: req.headers,
+      body,
+      url: this.config.researchMcpUrl,
+      accessToken,
+      timeoutMs: remainingUpstreamTimeout(deadline),
+      signal
+    });
+    const message = parseMcpResponse(initial.body);
+    const prefab = prefabJob(message);
+    if (!prefab) {
+      writeBuffered(res, initial);
+      return;
+    }
+    const sessionId = requestHeader(req.headers, "mcp-session-id");
+    const protocolVersion = requestHeader(req.headers, "mcp-protocol-version");
+    if (!sessionId) {
+      writeJson(res, 502, mcpError(request.id ?? null, -32603, "Research Agent did not establish an MCP session"));
+      return;
+    }
+    try {
+      const startToken = await this.integrationAccessToken();
+      await this.callResearchBackend({
+        sessionId,
+        tool: prefab.startTool,
+        arguments: { job_id: prefab.jobId },
+        accessToken: startToken,
+        id: `${String(request.id ?? "research")}:start`,
+        protocolVersion,
+        timeoutMs: remainingUpstreamTimeout(deadline),
+        signal
+      });
+      let status;
+      while (Date.now() < deadline) {
+        if (res.destroyed) {
+          return;
+        }
+        const pollToken = await this.integrationAccessToken();
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        const deadlineBound = remainingMs <= UPSTREAM_TIMEOUT_MS;
+        let result;
+        try {
+          result = await this.callResearchBackend({
+            sessionId,
+            tool: prefab.statusTool,
+            arguments: { job_id: prefab.jobId },
+            accessToken: pollToken,
+            id: `${String(request.id ?? "research")}:status`,
+            protocolVersion,
+            timeoutMs: Math.min(UPSTREAM_TIMEOUT_MS, remainingMs),
+            signal
+          });
+        } catch (err) {
+          if (deadlineBound && isTimeoutError(err) && !signal.aborted) {
+            break;
+          }
+          throw err;
+        }
+        status = toolResultObject(result);
+        if (status?.done === true) {
+          const error = stringValue2(status.error);
+          const resultText = stringValue2(status.result);
+          writeJson(res, 200, {
+            jsonrpc: "2.0",
+            id: request.id ?? null,
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: error ? `Research failed: ${error}` : resultText ?? `Research completed. Job: ${prefab.jobId}`
+                }
+              ],
+              structuredContent: redactResearchStatus(status),
+              isError: Boolean(error)
+            }
+          });
+          return;
+        }
+        await delay(Math.min(this.config.researchPollMs, Math.max(0, deadline - Date.now())), signal);
+      }
+      writeJson(res, 200, {
+        jsonrpc: "2.0",
+        id: request.id ?? null,
+        result: {
+          content: [{ type: "text", text: `Research is still running. Job: ${prefab.jobId}` }],
+          structuredContent: redactResearchStatus(status ?? { job_id: prefab.jobId, status: "running", done: false }),
+          isError: false
+        }
+      });
+    } catch (err) {
+      if (err instanceof ResearchRpcError) {
+        writeJson(res, 200, mcpError(request.id ?? null, err.code, err.message));
+        return;
+      }
+      throw err;
+    }
+  }
+  async callResearchBackend(params) {
+    const response = await forwardBuffered({
+      method: "POST",
+      requestHeaders: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-session-id": params.sessionId,
+        ...params.protocolVersion ? { "mcp-protocol-version": params.protocolVersion } : {}
+      },
+      body: Buffer.from(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: params.id,
+          method: "tools/call",
+          params: { name: params.tool, arguments: params.arguments }
+        })
+      ),
+      url: this.config.researchMcpUrl,
+      accessToken: params.accessToken,
+      ...params.timeoutMs !== void 0 ? { timeoutMs: params.timeoutMs } : {},
+      signal: params.signal
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Research Agent returned HTTP ${response.status}`);
+    }
+    const parsed = parseMcpResponse(response.body);
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("Research Agent returned an invalid MCP response");
+    }
+    const rpcError = objectValue(parsed.error);
+    if (rpcError) {
+      throw new ResearchRpcError(
+        numberValue(rpcError.code) ?? -32603,
+        stringValue2(rpcError.message) ?? "Research Agent request failed"
+      );
+    }
+    const toolError = mcpToolError(parsed);
+    if (toolError) {
+      throw new ResearchRpcError(-32003, toolError);
+    }
+    return parsed;
+  }
+  async integrationAccessToken() {
+    if (this.config.gatewayLocation === "local" && this.config.hfToken) {
+      return this.config.hfToken;
+    }
+    const credentialSlot = integrationCredentialSlot(this.config);
+    if (!credentialSlot) {
+      throw new Error("ML Claw has no primary admin");
+    }
+    return this.credentials.accessToken(credentialSlot);
+  }
+};
+var ResearchRpcError = class extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = "ResearchRpcError";
+  }
+};
+function deriveInternalToken(secret) {
+  return createHmac2("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
+}
+function managedMcpServerConfig(config2) {
+  const headers = { [INTERNAL_HEADER]: deriveInternalToken(config2.sessionSecret) };
+  return {
+    huggingface: {
+      url: `http://127.0.0.1:${config2.mcpPort}/mcp/huggingface`,
+      transport: "streamable-http",
+      headers,
+      supportsParallelToolCalls: true
+    },
+    "research-agent": {
+      url: `http://127.0.0.1:${config2.mcpPort}/mcp/research`,
+      transport: "streamable-http",
+      headers,
+      supportsParallelToolCalls: false
+    }
+  };
+}
+async function forwardStreaming(params) {
+  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
+  try {
+    const response = await fetch(params.url, {
+      method: params.req.method ?? "POST",
+      headers: upstreamHeaders(params.req.headers, params.accessToken),
+      ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
+      redirect: "error",
+      signal: timed.signal
+    });
+    params.res.writeHead(response.status, responseHeaders(response.headers));
+    if (!response.body) {
+      params.res.end();
+      return;
+    }
+    await pipeResponseBody(response.body, params.res);
+  } finally {
+    timed.dispose();
+  }
+}
+async function forwardBuffered(params) {
+  const timed = timedAbortSignal(params.signal, params.timeoutMs ?? UPSTREAM_TIMEOUT_MS);
+  try {
+    const response = await fetch(params.url, {
+      method: params.method,
+      headers: upstreamHeaders(params.requestHeaders, params.accessToken),
+      ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
+      redirect: "error",
+      signal: timed.signal
+    });
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: new Uint8Array(await response.arrayBuffer())
+    };
+  } finally {
+    timed.dispose();
+  }
+}
+function upstreamHeaders(headers, accessToken) {
+  const out = new Headers({ authorization: `Bearer ${accessToken}` });
+  for (const name of ["accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"]) {
+    const value = requestHeader(headers, name);
+    if (value) {
+      out.set(name, value);
+    }
+  }
+  return out;
+}
+function responseHeaders(headers) {
+  const out = {};
+  for (const name of [
+    "content-type",
+    "cache-control",
+    "mcp-session-id",
+    "mcp-protocol-version",
+    "www-authenticate",
+    "retry-after"
+  ]) {
+    const value = headers.get(name);
+    if (value) {
+      out[name] = value;
+    }
+  }
+  return out;
+}
+function writeBuffered(res, response) {
+  const headers = responseHeaders(response.headers);
+  headers["content-length"] = response.body.byteLength;
+  res.writeHead(response.status, headers);
+  res.end(response.body);
+}
+async function readBody(req, limit) {
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    length += buffer.length;
+    if (length > limit) {
+      throw new Error("MCP request body is too large");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+function parseJsonRpc(body) {
+  try {
+    const value = JSON.parse(Buffer.from(body).toString("utf8"));
+    return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseMcpResponse(body) {
+  const text = Buffer.from(body).toString("utf8").trim();
+  if (!text) {
+    return void 0;
+  }
+  const candidates = text.startsWith("{") ? [text] : text.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+  for (const candidate of candidates.reverse()) {
+    try {
+      const value = JSON.parse(candidate);
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return value;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
+function prefabJob(message) {
+  const result = objectValue(message?.result);
+  const structured = objectValue(result?.structuredContent);
+  const prefab = objectValue(structured?.$prefab);
+  const state = objectValue(prefab?.state);
+  const view = objectValue(prefab?.view);
+  const jobId = stringValue2(state?.job_id);
+  const startTool = findActionTool(view, "_start_research");
+  const statusTool = findActionTool(view, "_research_status");
+  return jobId && startTool && statusTool ? { jobId, startTool, statusTool } : void 0;
+}
+function findActionTool(value, suffix) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findActionTool(item, suffix);
+      if (found) {
+        return found;
+      }
+    }
+    return void 0;
+  }
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const record = value;
+  const tool = stringValue2(record.tool);
+  if (record.action === "toolCall" && tool?.endsWith(suffix)) {
+    return tool;
+  }
+  for (const item of Object.values(record)) {
+    const found = findActionTool(item, suffix);
+    if (found) {
+      return found;
+    }
+  }
+  return void 0;
+}
+function toolName(request) {
+  return stringValue2(objectValue(request.params)?.name);
+}
+function toolResultObject(message) {
+  const result = objectValue(message.result);
+  const structured = objectValue(result?.structuredContent);
+  if (structured) {
+    return structured;
+  }
+  const content = Array.isArray(result?.content) ? result.content : [];
+  for (const item of content) {
+    const text = stringValue2(objectValue(item)?.text);
+    if (!text) {
+      continue;
+    }
+    try {
+      const value = JSON.parse(text);
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return value;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
+function mcpToolError(message) {
+  const result = objectValue(message.result);
+  if (result?.isError !== true) {
+    return void 0;
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const detail = content.map((item) => stringValue2(objectValue(item)?.text)).filter((text) => Boolean(text)).join("\n").trim();
+  return detail || "Research Agent tool failed";
+}
+function redactResearchStatus(status) {
+  return Object.fromEntries(
+    Object.entries(status).filter(
+      ([key]) => !["auth", "token", "access_token", "refresh_token"].includes(key.toLowerCase())
+    )
+  );
+}
+function mcpError(id, code, message) {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+function writeJson(res, status, value) {
+  const body = `${JSON.stringify(value)}
+`;
+  res.writeHead(status, {
+    "cache-control": "no-store",
+    "content-length": Buffer.byteLength(body),
+    "content-type": "application/json; charset=utf-8"
+  });
+  res.end(body);
+}
+async function pipeResponseBody(body, response) {
+  await new Promise((resolve, reject) => {
+    const stream = Readable.fromWeb(body);
+    stream.once("error", reject);
+    response.once("error", reject);
+    response.once("finish", resolve);
+    stream.pipe(response);
+  });
+}
+function validInternalToken(value, expected) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const actualBuffer = Buffer.from(value);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual2(actualBuffer, expectedBuffer);
+}
+function requestHeader(headers, name) {
+  const value = headers[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+function objectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function stringValue2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function numberValue(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function safeError(err) {
+  return err instanceof Error ? err.message : "unknown error";
+}
+function delay(ms, signal) {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+function timedAbortSignal(parent, timeoutMs) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(parent.reason);
+  if (parent.aborted) {
+    abort();
+  } else {
+    parent.addEventListener("abort", abort, { once: true });
+  }
+  const timeout = setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), timeoutMs);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parent.removeEventListener("abort", abort);
+    }
+  };
+}
+function isTimeoutError(err) {
+  return err instanceof Error && err.name === "TimeoutError";
+}
+function remainingUpstreamTimeout(deadline) {
+  return Math.max(1, Math.min(UPSTREAM_TIMEOUT_MS, deadline - Date.now()));
+}
+
+// src/mlclaw-space-runtime/openclaw-config.ts
+var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
+var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
+var AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2147483647;
+async function prepareUnyoloConfig(configPath) {
+  const parsed = objectValue2(JSON.parse(await fs2.readFile(configPath, "utf8")));
+  if (!parsed) throw new Error("OpenClaw configuration must be an object");
+  removeSupersededPluginConfig(parsed);
+  await fs2.writeFile(configPath, `${JSON.stringify(parsed, null, 2)}
+`, { mode: 384 });
+  await fs2.chmod(configPath, 384);
+}
+async function configureOpenClawGateway(config2, options = {}) {
+  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
+  const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw2));
+  const gateway = object(openclawConfig, "gateway");
+  gateway.mode = "local";
+  gateway.bind = "loopback";
+  gateway.port = config2.openclawPort;
+  gateway.auth = {
+    mode: "trusted-proxy",
+    trustedProxy: {
+      userHeader: "x-forwarded-user",
+      requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
+      allowLoopback: true
+    }
+  };
+  gateway.trustedProxies = ["127.0.0.1", "::1"];
+  gateway.controlUi = {
+    ...typeof gateway.controlUi === "object" && gateway.controlUi ? gateway.controlUi : {},
+    dangerouslyDisableDeviceAuth: true,
+    allowedOrigins: config2.accessOrigins,
+    embedSandbox: "scripts"
+  };
+  const codexConfigured = Boolean(options.codexConfigured);
+  const openAiConfigured2 = Boolean(options.openAiConfigured);
+  configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2);
+  configureOpenAiAuthMetadata(openclawConfig, codexConfigured);
+  configureCodexRuntimePlugin(openclawConfig, codexConfigured || openAiConfigured2);
+  disableAutomaticSessionResets(openclawConfig);
+  configureManagedMcpServers(openclawConfig, config2);
+  configureBrokerMcpServer(openclawConfig, config2);
+  configureUnyoloPlugin(openclawConfig, config2);
+  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+`, { mode: 384 });
+  await fs2.chmod(config2.openclawConfigPath, 384);
+  if (process.getuid?.() === 0) {
+    await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
+  }
+}
+function disableAutomaticSessionResets(openclawConfig) {
+  const session = object(openclawConfig, "session");
+  session.reset = {
+    mode: "idle",
+    idleMinutes: AUTOMATIC_SESSION_RESET_DISABLED_MINUTES
+  };
+  delete session.idleMinutes;
+  delete session.resetByType;
+  delete session.resetByChannel;
+  const maintenance = object(session, "maintenance");
+  maintenance.resetArchiveRetention = false;
+}
+function configureBrokerMcpServer(openclawConfig, config2) {
+  const servers = object(object(openclawConfig, "mcp"), "servers");
+  if (!config2.brokerAgentUrl || !config2.brokerAgentSecretFile) {
+    delete servers["huggingface-broker"];
+    return;
+  }
+  const existing = objectValue2(servers["huggingface-broker"]);
+  servers["huggingface-broker"] = {
+    ...preservedBrokerMcpFields(existing),
+    command: "/usr/local/bin/hf-broker",
+    args: ["mcp"],
+    connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
+    requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
+    env: {
+      HF_BROKER_AGENT_ENDPOINT: brokerAgentEndpoint(config2.brokerAgentUrl),
+      HF_BROKER_SHARED_SECRET_FILE: config2.brokerAgentSecretFile
+    },
+    ...existing?.enabled === false ? { enabled: false } : { enabled: true }
+  };
+}
+function brokerAgentEndpoint(agentUrl) {
+  const parsed = new URL(agentUrl);
+  if (parsed.protocol !== "http:" || !parsed.port || parsed.username || parsed.password) {
+    throw new Error("HF Broker agent URL must be an unauthenticated HTTP URL with an explicit port");
+  }
+  return `tcp://${parsed.host}`;
+}
+function preservedBrokerMcpFields(existing) {
+  const codex = preservedBrokerCodexConfig(objectValue2(existing?.codex));
+  return {
+    ...existing?.toolFilter && typeof existing.toolFilter === "object" ? { toolFilter: existing.toolFilter } : {},
+    ...typeof existing?.supportsParallelToolCalls === "boolean" ? { supportsParallelToolCalls: existing.supportsParallelToolCalls } : {},
+    ...codex ? { codex } : {}
+  };
+}
+function preservedBrokerCodexConfig(existing) {
+  const agents = brokerAgentScope(existing?.agents);
+  const defaultToolsApprovalMode = brokerApprovalMode(existing?.defaultToolsApprovalMode);
+  const nativeApprovalMode = brokerApprovalMode(existing?.default_tools_approval_mode);
+  const preserved = {
+    ...agents ? { agents } : {},
+    ...defaultToolsApprovalMode ? { defaultToolsApprovalMode } : {},
+    ...nativeApprovalMode ? { default_tools_approval_mode: nativeApprovalMode } : {}
+  };
+  return Object.keys(preserved).length > 0 ? preserved : void 0;
+}
+function brokerAgentScope(value) {
+  if (!Array.isArray(value)) return void 0;
+  const agents = value.filter((agent) => typeof agent === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(agent.trim())).map((agent) => agent.trim());
+  return agents.length > 0 ? agents : void 0;
+}
+function brokerApprovalMode(value) {
+  return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
+}
+function configureCodexRuntimePlugin(openclawConfig, enabled) {
+  const plugins = object(openclawConfig, "plugins");
+  const entries = object(plugins, "entries");
+  const existing = objectValue2(entries.codex);
+  if (!enabled) {
+    if (existing) entries.codex = { ...existing, enabled: false };
+    return;
+  }
+  if (plugins.allow !== void 0) {
+    plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
+  }
+  const existingConfig = objectValue2(existing?.config);
+  const existingAppServer = objectValue2(existingConfig?.appServer);
+  entries.codex = {
+    ...existing,
+    enabled: true,
+    config: {
+      ...existingConfig,
+      appServer: {
+        ...existingAppServer,
+        clearEnv: uniqueStrings(existingAppServer?.clearEnv, "OPENCLAW_GATEWAY_PASSWORD")
+      }
+    }
+  };
+}
+function configureUnyoloPlugin(openclawConfig, config2) {
+  removeSupersededPluginConfig(openclawConfig);
+  const plugins = object(openclawConfig, "plugins");
+  const load = object(plugins, "load");
+  load.paths = uniqueStrings(load.paths, config2.unyoloPluginPath);
+  if (plugins.allow !== void 0) plugins.allow = uniqueStrings(plugins.allow, "unyolo");
+  const entries = object(plugins, "entries");
+  entries.unyolo = {
+    enabled: true,
+    config: {
+      mode: "delegated-web",
+      delegatedWeb: { basePath: "/trusted-host/api/unyolo" }
+    }
+  };
+}
+async function managedMcpServerStatus(config2) {
+  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
+  const servers = object(object(raw2, "mcp"), "servers");
+  return [
+    { id: "huggingface", name: "Hugging Face MCP" },
+    { id: "research-agent", name: "Research Agent" }
+  ].map((server2) => ({
+    ...server2,
+    enabled: objectValue2(servers[server2.id])?.enabled !== false
+  }));
+}
+function configureManagedMcpServers(openclawConfig, config2) {
+  const mcp = object(openclawConfig, "mcp");
+  const servers = object(mcp, "servers");
+  delete servers.codex;
+  for (const [name, managed] of Object.entries(managedMcpServerConfig(config2))) {
+    const existing = servers[name];
+    const userFields = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+    servers[name] = {
+      ...userFields,
+      ...managed,
+      ...userFields.enabled === false ? { enabled: false } : { enabled: true },
+      ...userFields.toolFilter && typeof userFields.toolFilter === "object" ? { toolFilter: userFields.toolFilter } : {}
+    };
+  }
+}
+function configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2) {
+  const routerChoices = config2.modelChoices;
+  configureAgentModelChoices(
+    object(object(openclawConfig, "agents"), "defaults"),
+    config2,
+    routerChoices,
+    codexConfigured,
+    openAiConfigured2
+  );
+  const models = object(openclawConfig, "models");
+  models.mode = "merge";
+  const providers = object(models, "providers");
+  configureHuggingFaceProvider(object(providers, "huggingface"), config2, routerChoices);
+  configureNativeOpenAiProvider(providers);
+}
+function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
+  const existingModel = objectValue2(defaults.model) ?? {};
+  const openAiAvailable = codexConfigured || openAiConfigured2;
+  const primary = resolvePrimaryModel({
+    existing: existingModel.primary,
+    requested: replaceLegacyCodexModelRef(config2.model),
+    openAiAvailable,
+    ...routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}
+  });
+  defaults.model = {
+    ...existingModel,
+    ...primary ? { primary } : {}
+  };
+  defaults.models = {
+    ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
+    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "codex" } } } : {}
+  };
+}
+function resolvePrimaryModel(params) {
+  const existing = typeof params.existing === "string" ? params.existing.trim() : void 0;
+  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
+  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
+  return params.requested;
+}
+function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
+  huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
+  if (config2.brokerAgentSecret) huggingface.apiKey = config2.brokerAgentSecret;
+  else delete huggingface.apiKey;
+  huggingface.api = "openai-completions";
+  huggingface.models = routerChoices.map(modelDefinitionFromChoice);
+}
+function configureNativeOpenAiProvider(providers) {
+  delete providers["mlclaw-codex"];
+  const existing = objectValue2(providers.openai);
+  const params = objectValue2(existing?.params);
+  if (!params || !("codexProxyBaseUrl" in params)) return;
+  const nextParams = { ...params };
+  delete nextParams.codexProxyBaseUrl;
+  if (existing) {
+    if (Object.keys(nextParams).length > 0) existing.params = nextParams;
+    else delete existing.params;
+  }
+}
+function configureOpenAiAuthMetadata(openclawConfig, configured) {
+  const auth = object(openclawConfig, "auth");
+  const profiles = object(auth, "profiles");
+  const order = object(auth, "order");
+  const existingOrder = Array.isArray(order.openai) ? order.openai.filter((value) => typeof value === "string" && value !== OPENAI_OAUTH_PROFILE_ID) : [];
+  if (configured) {
+    profiles[OPENAI_OAUTH_PROFILE_ID] = {
+      provider: "openai",
+      mode: "oauth",
+      displayName: "MLClaw ChatGPT"
+    };
+    order.openai = [OPENAI_OAUTH_PROFILE_ID, ...existingOrder];
+  } else {
+    delete profiles[OPENAI_OAUTH_PROFILE_ID];
+    if (existingOrder.length > 0) order.openai = existingOrder;
+    else delete order.openai;
+  }
+  if (Object.keys(profiles).length === 0) delete auth.profiles;
+  if (Object.keys(order).length === 0) delete auth.order;
+}
+function replaceLegacyCodexModelRef(value) {
+  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : value;
+}
+function migrateLegacyCodexModelRefs(value) {
+  if (typeof value === "string") return replaceLegacyCodexModelRef(value);
+  if (Array.isArray(value)) return value.map(migrateLegacyCodexModelRefs);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [replaceLegacyCodexModelRef(key), migrateLegacyCodexModelRefs(entry)])
+  );
+}
+function modelDefinitionFromChoice(choice) {
+  const providerModelId = providerModelIdFromChoice(choice);
+  return {
+    id: providerModelId,
+    name: `${choice.label} (${choice.provider})`,
+    input: inputModalitiesForChoice(choice),
+    contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
+    maxTokens: 8192,
+    reasoning: isReasoningModel(choice.modelId),
+    cost: {
+      input: choice.pricing?.input ?? 0,
+      output: choice.pricing?.output ?? 0,
+      cacheRead: 0,
+      cacheWrite: 0
+    },
+    api: "openai-completions",
+    compat: {
+      supportsTools: choice.supportsTools ?? true,
+      supportsStrictMode: choice.supportsStructuredOutput ?? false
+    }
+  };
+}
+function providerModelIdFromChoice(choice) {
+  const parsed = parseOpenClawModelRef(choice.openclawModel);
+  return parsed ? `${parsed.modelId}:${parsed.provider}` : `${choice.modelId}:${choice.provider}`;
+}
+function inputModalitiesForChoice(choice) {
+  if (choice.inputModalities?.length) {
+    return choice.inputModalities.filter((item) => item === "text" || item === "image");
+  }
+  return isLikelyImageModel(choice.modelId) ? ["text", "image"] : ["text"];
+}
+function aliasForChoice(choice) {
+  const base = displayNameFromModelId(choice.modelId).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "model";
+  return `${base}-${choice.provider}`.slice(0, 64);
+}
+function isLikelyImageModel(id) {
+  const lower = id.toLowerCase();
+  return lower.includes("-vl") || lower.includes("vision") || lower.includes("multimodal") || lower.includes("gemma-3") || lower.includes("gemma-4") || lower.includes("llama-4") || lower.includes("qwen3.6");
+}
+function contextWindowForModel(id) {
+  const lower = id.toLowerCase();
+  if (lower.includes("gemma-4") || lower.includes("qwen3.6")) {
+    return 262144;
+  }
+  if (lower.includes("qwen3-8b") || lower.includes("qwen3-14b")) {
+    return 40960;
+  }
+  return 131072;
+}
+function isReasoningModel(id) {
+  return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
+}
+function object(parent, key) {
+  const value = parent[key];
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  const created = {};
+  parent[key] = created;
+  return created;
+}
+function objectValue2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function uniqueStrings(value, required) {
+  const current = Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  return [.../* @__PURE__ */ new Set([...current, required])];
+}
+function removeSupersededPluginConfig(openclawConfig) {
+  const plugins = objectValue2(openclawConfig.plugins);
+  if (!plugins) return;
+  const load = objectValue2(plugins.load);
+  if (load?.paths !== void 0) {
+    load.paths = withoutString(load.paths, "/opt/openclaw-plugins/node_modules/openclaw-brokerkit");
+  }
+  if (plugins.allow !== void 0) plugins.allow = withoutString(plugins.allow, "brokerkit");
+  const entries = objectValue2(plugins.entries);
+  if (entries) delete entries.brokerkit;
+}
+function withoutString(value, removed) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item !== removed) : [];
+}
+
 // src/mlclaw-space-runtime/server.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomBytes as randomBytes9 } from "node:crypto";
@@ -6667,7 +7763,7 @@ var Hono2 = class extends Hono {
 };
 
 // src/mlclaw-space-runtime/csrf.ts
-import { createHmac as createHmac2, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac3, randomBytes as randomBytes2, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var CSRF_TTL_SECONDS = 60 * 60;
 function createCsrfToken(params) {
   const now = params.now ?? Date.now();
@@ -6700,16 +7796,16 @@ function verifyCsrfToken(params) {
   return payload.username === params.username && typeof payload.exp === "number" && payload.exp > now && typeof payload.nonce === "string" && payload.nonce.length > 0;
 }
 function sign(value, secret) {
-  return createHmac2("sha256", secret).update(value).digest("base64url");
+  return createHmac3("sha256", secret).update(value).digest("base64url");
 }
 function signatureMatches(a, b) {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual2(left, right);
+  return left.length === right.length && timingSafeEqual3(left, right);
 }
 
 // src/mlclaw-space-runtime/delegated-unyolo.ts
-import { createHash as createHash2, createHmac as createHmac3, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash2, createHmac as createHmac4, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 
 // src/mlclaw-space-runtime/delegated-revisions.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
@@ -6794,7 +7890,7 @@ var DelegatedUnyolo = class {
     this.registry = registry;
     this.now = now;
     this.sourceDeadlineMs = sourceDeadlineMs;
-    this.key = createHmac3("sha256", sessionSecret).update("mlclaw/unyolo-delegated-web/v1", "utf8").digest();
+    this.key = createHmac4("sha256", sessionSecret).update("mlclaw/unyolo-delegated-web/v1", "utf8").digest();
   }
   key;
   handles = /* @__PURE__ */ new Map();
@@ -7011,7 +8107,7 @@ var DelegatedUnyolo = class {
     this.handlesByIdentity.delete(requestIdentity(record.sourceId, record.requestId, record.revision));
   }
   sign(encoded) {
-    return createHmac3("sha256", this.key).update(encoded, "utf8").digest("base64url");
+    return createHmac4("sha256", this.key).update(encoded, "utf8").digest("base64url");
   }
 };
 async function decideWithRecovery(source, requestId, action, decision) {
@@ -7158,7 +8254,7 @@ function validTokenNonce(record) {
 function safeEqual(left, right) {
   const a = Buffer.from(left, "utf8");
   const b = Buffer.from(right, "utf8");
-  return a.length === b.length && timingSafeEqual3(a, b);
+  return a.length === b.length && timingSafeEqual4(a, b);
 }
 function safeSourceError(error) {
   const code = error instanceof BrokerOperatorError ? error.code : error instanceof DelegatedUnyoloError ? error.code : void 0;
@@ -11352,1088 +12448,6 @@ async function exchangeCodeForIdentity(settings, code) {
 function normalizeScope(value) {
   const scopes = Array.isArray(value) ? value : (value ?? "").split(/\s+/);
   return [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
-}
-
-// src/mlclaw-space-runtime/openclaw-config.ts
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
-
-// src/mlclaw-space-runtime/openai-models.ts
-var LEGACY_CODEX_MODEL_REF = "mlclaw-codex/gpt-5.4";
-var DEFAULT_OPENAI_MODEL_REF = "openai/gpt-5.4";
-
-// src/mlclaw-space-runtime/openclaw-oauth-profile.ts
-import { constants as fsConstants } from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { spawn } from "node:child_process";
-var OPENAI_OAUTH_PROFILE_ID = "openai:mlclaw";
-var MAX_HELPER_OUTPUT_BYTES = 64 * 1024;
-var PROFILE_HELPER_SCRIPT = String.raw`
-import fs from "node:fs";
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
-
-const input = fs.readFileSync(0, "utf8");
-const payload = JSON.parse(input);
-const require = createRequire(pathToFileURL(payload.openclawEntry));
-const sdkPath = require.resolve("openclaw/plugin-sdk/provider-auth");
-const { updateAuthProfileStoreWithLock } = await import(pathToFileURL(sdkPath).href);
-
-const result = await updateAuthProfileStoreWithLock({
-  agentDir: payload.agentDir,
-  saveOptions: { filterExternalAuthProfiles: false, syncExternalCli: false },
-  updater(store) {
-    const profileId = payload.profileId;
-    const existing = store.profiles[profileId];
-    if (payload.operation === "remove") {
-      let changed = false;
-      if (existing) {
-        delete store.profiles[profileId];
-        changed = true;
-      }
-      if (store.usageStats?.[profileId]) {
-        delete store.usageStats[profileId];
-        changed = true;
-      }
-      if (store.lastGood) {
-        for (const [provider, value] of Object.entries(store.lastGood)) {
-          if (value === profileId) {
-            delete store.lastGood[provider];
-            changed = true;
-          }
-        }
-      }
-      if (store.order) {
-        for (const [provider, order] of Object.entries(store.order)) {
-          const next = Array.isArray(order) ? order.filter((value) => value !== profileId) : order;
-          if (Array.isArray(order) && next.length !== order.length) {
-            changed = true;
-            if (next.length > 0) store.order[provider] = next;
-            else delete store.order[provider];
-          }
-        }
-      }
-      return changed;
-    }
-
-    const incoming = payload.credential;
-    if (
-      existing?.type === "oauth" &&
-      existing.provider === "openai" &&
-      existing.accountId === incoming.accountId &&
-      Number(existing.expires) >= Number(incoming.expires)
-    ) {
-      return false;
-    }
-    store.profiles[profileId] = incoming;
-    const currentOrder = Array.isArray(store.order?.openai) ? store.order.openai : [];
-    store.order = {
-      ...store.order,
-      openai: [profileId, ...currentOrder.filter((value) => value !== profileId)],
-    };
-    return true;
-  },
-});
-
-if (!result) throw new Error("OpenClaw auth profile store was unavailable");
-process.stdout.write(JSON.stringify({ ok: true }) + "\n");
-`;
-async function syncOpenAiOAuthProfile(params) {
-  const openclawEntry = await resolveOpenClawEntry(params.config.openclawCommand, params.env.PATH);
-  if (!openclawEntry) return false;
-  const agentDir = path.join(path.dirname(params.config.openclawConfigPath), "agents", "main", "agent");
-  const credential = params.credential ? {
-    type: "oauth",
-    provider: "openai",
-    access: params.credential.access,
-    refresh: params.credential.refresh,
-    expires: params.credential.expires,
-    accountId: params.credential.accountId,
-    ...params.credential.idToken ? { idToken: params.credential.idToken } : {},
-    displayName: "MLClaw ChatGPT"
-  } : void 0;
-  await runProfileHelper({
-    openclawEntry,
-    agentDir,
-    env: params.env,
-    payload: {
-      operation: credential ? "upsert" : "remove",
-      profileId: OPENAI_OAUTH_PROFILE_ID,
-      ...credential ? { credential } : {}
-    },
-    ...process.getuid?.() === 0 ? { uid: params.config.openclawUid, gid: params.config.openclawGid } : {}
-  });
-  return true;
-}
-async function resolveOpenClawEntry(command, pathValue) {
-  const candidate = command.includes(path.sep) ? path.resolve(command) : await findOnPath(command, pathValue);
-  if (!candidate) return void 0;
-  try {
-    const real = await fs.realpath(candidate);
-    if (path.basename(real) !== "openclaw.mjs") return void 0;
-    return real;
-  } catch {
-    return void 0;
-  }
-}
-async function findOnPath(command, pathValue) {
-  for (const directory of (pathValue ?? "").split(path.delimiter)) {
-    if (!directory) continue;
-    const candidate = path.join(directory, command);
-    try {
-      await fs.access(candidate, fsConstants.X_OK);
-      return candidate;
-    } catch {
-    }
-  }
-  return void 0;
-}
-async function runProfileHelper(params) {
-  await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "--eval", PROFILE_HELPER_SCRIPT], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: params.env,
-      ...params.uid !== void 0 ? { uid: params.uid } : {},
-      ...params.gid !== void 0 ? { gid: params.gid } : {}
-    });
-    let stdout = "";
-    let stderr = "";
-    const append = (current, chunk) => `${current}${chunk.toString("utf8")}`.slice(-MAX_HELPER_OUTPUT_BYTES);
-    child.stdout.on("data", (chunk) => {
-      stdout = append(stdout, chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr = append(stderr, chunk);
-    });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0 && stdout.includes('"ok":true')) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          `OpenClaw OAuth profile update failed (code=${code ?? "null"}, signal=${signal ?? "null"}): ${sanitizeHelperError(stderr)}`
-        )
-      );
-    });
-    child.stdin.end(
-      JSON.stringify({
-        ...params.payload,
-        openclawEntry: params.openclawEntry,
-        agentDir: params.agentDir
-      })
-    );
-  });
-}
-function sanitizeHelperError(value) {
-  return value.replace(/[\r\n\t]+/gu, " ").trim().slice(0, 512) || "unknown error";
-}
-
-// src/mlclaw-space-runtime/mcp-integrations.ts
-import { createHmac as createHmac4, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
-import http from "node:http";
-import { Readable } from "node:stream";
-var MAX_REQUEST_BYTES = 16 * 1024 * 1024;
-var UPSTREAM_TIMEOUT_MS = 12e4;
-var INTERNAL_HEADER = "x-mlclaw-mcp-key";
-var McpIntegrationServer = class {
-  constructor(config2, credentials, fetchFn = fetch) {
-    this.config = config2;
-    this.credentials = credentials;
-    this.fetchFn = fetchFn;
-    this.internalToken = deriveInternalToken(config2.sessionSecret);
-  }
-  server;
-  internalToken;
-  activeRequests = /* @__PURE__ */ new Set();
-  managedServerConfig() {
-    return managedMcpServerConfig(this.config);
-  }
-  async start() {
-    if (this.server) {
-      return;
-    }
-    const server2 = http.createServer((req, res) => {
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      this.activeRequests.add(controller);
-      req.once("aborted", abort);
-      res.once("close", abort);
-      this.handle(req, res, controller.signal).catch((err) => {
-        if (controller.signal.aborted) {
-          res.destroy();
-          return;
-        }
-        process.stderr.write(`[mlclaw] MCP integration request failed: ${safeError(err)}
-`);
-        if (!res.headersSent) {
-          writeJson(res, 502, mcpError(null, -32603, "MCP integration request failed"));
-        } else {
-          res.end();
-        }
-      }).finally(() => {
-        req.off("aborted", abort);
-        res.off("close", abort);
-        this.activeRequests.delete(controller);
-      });
-    });
-    await new Promise((resolve, reject) => {
-      server2.once("error", reject);
-      server2.listen(this.config.mcpPort, "127.0.0.1", () => {
-        server2.off("error", reject);
-        resolve();
-      });
-    });
-    this.server = server2;
-    process.stdout.write(`[mlclaw] MCP integrations listening on 127.0.0.1:${this.config.mcpPort}
-`);
-  }
-  async stop() {
-    const server2 = this.server;
-    this.server = void 0;
-    if (!server2) {
-      return;
-    }
-    const closed = new Promise((resolve) => server2.close(() => resolve()));
-    for (const controller of this.activeRequests) {
-      controller.abort();
-    }
-    server2.closeAllConnections();
-    await closed;
-  }
-  async handle(req, res, signal) {
-    const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (!validInternalToken(req.headers[INTERNAL_HEADER], this.internalToken)) {
-      writeJson(res, 401, mcpError(null, -32001, "Unauthorized"));
-      return;
-    }
-    const body = await readBody(req, MAX_REQUEST_BYTES);
-    if (pathname !== "/mcp/huggingface" && pathname !== "/mcp/research") {
-      writeJson(res, 404, mcpError(null, -32601, "Not found"));
-      return;
-    }
-    let accessToken;
-    try {
-      accessToken = await this.integrationAccessToken();
-    } catch (err) {
-      writeJson(res, 503, mcpError(null, -32002, safeError(err)));
-      return;
-    }
-    if (pathname === "/mcp/research" && req.method === "POST") {
-      const parsed = parseJsonRpc(body);
-      if (parsed?.method === "tools/call" && toolName(parsed) === "research") {
-        await this.handleResearchCall(req, res, body, parsed, accessToken, signal);
-        return;
-      }
-    }
-    await forwardStreaming({
-      req,
-      res,
-      body,
-      url: pathname === "/mcp/huggingface" ? this.config.hfMcpUrl : this.config.researchMcpUrl,
-      accessToken,
-      signal
-    });
-  }
-  async handleResearchCall(req, res, body, request, accessToken, signal) {
-    const deadline = Date.now() + this.config.researchTimeoutMs;
-    const initial = await forwardBuffered({
-      method: req.method ?? "POST",
-      requestHeaders: req.headers,
-      body,
-      url: this.config.researchMcpUrl,
-      accessToken,
-      timeoutMs: remainingUpstreamTimeout(deadline),
-      signal
-    });
-    const message = parseMcpResponse(initial.body);
-    const prefab = prefabJob(message);
-    if (!prefab) {
-      writeBuffered(res, initial);
-      return;
-    }
-    const sessionId = requestHeader(req.headers, "mcp-session-id");
-    const protocolVersion = requestHeader(req.headers, "mcp-protocol-version");
-    if (!sessionId) {
-      writeJson(res, 502, mcpError(request.id ?? null, -32603, "Research Agent did not establish an MCP session"));
-      return;
-    }
-    try {
-      const startToken = await this.integrationAccessToken();
-      await this.callResearchBackend({
-        sessionId,
-        tool: prefab.startTool,
-        arguments: { job_id: prefab.jobId },
-        accessToken: startToken,
-        id: `${String(request.id ?? "research")}:start`,
-        protocolVersion,
-        timeoutMs: remainingUpstreamTimeout(deadline),
-        signal
-      });
-      let status;
-      while (Date.now() < deadline) {
-        if (res.destroyed) {
-          return;
-        }
-        const pollToken = await this.integrationAccessToken();
-        const remainingMs = deadline - Date.now();
-        if (remainingMs <= 0) {
-          break;
-        }
-        const deadlineBound = remainingMs <= UPSTREAM_TIMEOUT_MS;
-        let result;
-        try {
-          result = await this.callResearchBackend({
-            sessionId,
-            tool: prefab.statusTool,
-            arguments: { job_id: prefab.jobId },
-            accessToken: pollToken,
-            id: `${String(request.id ?? "research")}:status`,
-            protocolVersion,
-            timeoutMs: Math.min(UPSTREAM_TIMEOUT_MS, remainingMs),
-            signal
-          });
-        } catch (err) {
-          if (deadlineBound && isTimeoutError(err) && !signal.aborted) {
-            break;
-          }
-          throw err;
-        }
-        status = toolResultObject(result);
-        if (status?.done === true) {
-          const error = stringValue2(status.error);
-          const resultText = stringValue2(status.result);
-          writeJson(res, 200, {
-            jsonrpc: "2.0",
-            id: request.id ?? null,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: error ? `Research failed: ${error}` : resultText ?? `Research completed. Job: ${prefab.jobId}`
-                }
-              ],
-              structuredContent: redactResearchStatus(status),
-              isError: Boolean(error)
-            }
-          });
-          return;
-        }
-        await delay(Math.min(this.config.researchPollMs, Math.max(0, deadline - Date.now())), signal);
-      }
-      writeJson(res, 200, {
-        jsonrpc: "2.0",
-        id: request.id ?? null,
-        result: {
-          content: [{ type: "text", text: `Research is still running. Job: ${prefab.jobId}` }],
-          structuredContent: redactResearchStatus(status ?? { job_id: prefab.jobId, status: "running", done: false }),
-          isError: false
-        }
-      });
-    } catch (err) {
-      if (err instanceof ResearchRpcError) {
-        writeJson(res, 200, mcpError(request.id ?? null, err.code, err.message));
-        return;
-      }
-      throw err;
-    }
-  }
-  async callResearchBackend(params) {
-    const response = await forwardBuffered({
-      method: "POST",
-      requestHeaders: {
-        accept: "application/json, text/event-stream",
-        "content-type": "application/json",
-        "mcp-session-id": params.sessionId,
-        ...params.protocolVersion ? { "mcp-protocol-version": params.protocolVersion } : {}
-      },
-      body: Buffer.from(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: params.id,
-          method: "tools/call",
-          params: { name: params.tool, arguments: params.arguments }
-        })
-      ),
-      url: this.config.researchMcpUrl,
-      accessToken: params.accessToken,
-      ...params.timeoutMs !== void 0 ? { timeoutMs: params.timeoutMs } : {},
-      signal: params.signal
-    });
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Research Agent returned HTTP ${response.status}`);
-    }
-    const parsed = parseMcpResponse(response.body);
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("Research Agent returned an invalid MCP response");
-    }
-    const rpcError = objectValue(parsed.error);
-    if (rpcError) {
-      throw new ResearchRpcError(
-        numberValue(rpcError.code) ?? -32603,
-        stringValue2(rpcError.message) ?? "Research Agent request failed"
-      );
-    }
-    const toolError = mcpToolError(parsed);
-    if (toolError) {
-      throw new ResearchRpcError(-32003, toolError);
-    }
-    return parsed;
-  }
-  async integrationAccessToken() {
-    if (this.config.gatewayLocation === "local" && this.config.hfToken) {
-      return this.config.hfToken;
-    }
-    const credentialSlot = integrationCredentialSlot(this.config);
-    if (!credentialSlot) {
-      throw new Error("ML Claw has no primary admin");
-    }
-    return this.credentials.accessToken(credentialSlot);
-  }
-};
-var ResearchRpcError = class extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-    this.name = "ResearchRpcError";
-  }
-};
-function deriveInternalToken(secret) {
-  return createHmac4("sha256", secret).update("mlclaw:mcp-integrations:v1").digest("base64url");
-}
-function managedMcpServerConfig(config2) {
-  const headers = { [INTERNAL_HEADER]: deriveInternalToken(config2.sessionSecret) };
-  return {
-    huggingface: {
-      url: `http://127.0.0.1:${config2.mcpPort}/mcp/huggingface`,
-      transport: "streamable-http",
-      headers,
-      supportsParallelToolCalls: true
-    },
-    "research-agent": {
-      url: `http://127.0.0.1:${config2.mcpPort}/mcp/research`,
-      transport: "streamable-http",
-      headers,
-      supportsParallelToolCalls: false
-    }
-  };
-}
-async function forwardStreaming(params) {
-  const timed = timedAbortSignal(params.signal, UPSTREAM_TIMEOUT_MS);
-  try {
-    const response = await fetch(params.url, {
-      method: params.req.method ?? "POST",
-      headers: upstreamHeaders(params.req.headers, params.accessToken),
-      ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
-      redirect: "error",
-      signal: timed.signal
-    });
-    params.res.writeHead(response.status, responseHeaders(response.headers));
-    if (!response.body) {
-      params.res.end();
-      return;
-    }
-    await pipeResponseBody(response.body, params.res);
-  } finally {
-    timed.dispose();
-  }
-}
-async function forwardBuffered(params) {
-  const timed = timedAbortSignal(params.signal, params.timeoutMs ?? UPSTREAM_TIMEOUT_MS);
-  try {
-    const response = await fetch(params.url, {
-      method: params.method,
-      headers: upstreamHeaders(params.requestHeaders, params.accessToken),
-      ...params.body.byteLength > 0 ? { body: Buffer.from(params.body) } : {},
-      redirect: "error",
-      signal: timed.signal
-    });
-    return {
-      status: response.status,
-      headers: response.headers,
-      body: new Uint8Array(await response.arrayBuffer())
-    };
-  } finally {
-    timed.dispose();
-  }
-}
-function upstreamHeaders(headers, accessToken) {
-  const out = new Headers({ authorization: `Bearer ${accessToken}` });
-  for (const name of ["accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"]) {
-    const value = requestHeader(headers, name);
-    if (value) {
-      out.set(name, value);
-    }
-  }
-  return out;
-}
-function responseHeaders(headers) {
-  const out = {};
-  for (const name of [
-    "content-type",
-    "cache-control",
-    "mcp-session-id",
-    "mcp-protocol-version",
-    "www-authenticate",
-    "retry-after"
-  ]) {
-    const value = headers.get(name);
-    if (value) {
-      out[name] = value;
-    }
-  }
-  return out;
-}
-function writeBuffered(res, response) {
-  const headers = responseHeaders(response.headers);
-  headers["content-length"] = response.body.byteLength;
-  res.writeHead(response.status, headers);
-  res.end(response.body);
-}
-async function readBody(req, limit) {
-  const chunks = [];
-  let length = 0;
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    length += buffer.length;
-    if (length > limit) {
-      throw new Error("MCP request body is too large");
-    }
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks);
-}
-function parseJsonRpc(body) {
-  try {
-    const value = JSON.parse(Buffer.from(body).toString("utf8"));
-    return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function parseMcpResponse(body) {
-  const text = Buffer.from(body).toString("utf8").trim();
-  if (!text) {
-    return void 0;
-  }
-  const candidates = text.startsWith("{") ? [text] : text.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
-  for (const candidate of candidates.reverse()) {
-    try {
-      const value = JSON.parse(candidate);
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        return value;
-      }
-    } catch {
-    }
-  }
-  return void 0;
-}
-function prefabJob(message) {
-  const result = objectValue(message?.result);
-  const structured = objectValue(result?.structuredContent);
-  const prefab = objectValue(structured?.$prefab);
-  const state = objectValue(prefab?.state);
-  const view = objectValue(prefab?.view);
-  const jobId = stringValue2(state?.job_id);
-  const startTool = findActionTool(view, "_start_research");
-  const statusTool = findActionTool(view, "_research_status");
-  return jobId && startTool && statusTool ? { jobId, startTool, statusTool } : void 0;
-}
-function findActionTool(value, suffix) {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findActionTool(item, suffix);
-      if (found) {
-        return found;
-      }
-    }
-    return void 0;
-  }
-  if (!value || typeof value !== "object") {
-    return void 0;
-  }
-  const record = value;
-  const tool = stringValue2(record.tool);
-  if (record.action === "toolCall" && tool?.endsWith(suffix)) {
-    return tool;
-  }
-  for (const item of Object.values(record)) {
-    const found = findActionTool(item, suffix);
-    if (found) {
-      return found;
-    }
-  }
-  return void 0;
-}
-function toolName(request) {
-  return stringValue2(objectValue(request.params)?.name);
-}
-function toolResultObject(message) {
-  const result = objectValue(message.result);
-  const structured = objectValue(result?.structuredContent);
-  if (structured) {
-    return structured;
-  }
-  const content = Array.isArray(result?.content) ? result.content : [];
-  for (const item of content) {
-    const text = stringValue2(objectValue(item)?.text);
-    if (!text) {
-      continue;
-    }
-    try {
-      const value = JSON.parse(text);
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        return value;
-      }
-    } catch {
-    }
-  }
-  return void 0;
-}
-function mcpToolError(message) {
-  const result = objectValue(message.result);
-  if (result?.isError !== true) {
-    return void 0;
-  }
-  const content = Array.isArray(result.content) ? result.content : [];
-  const detail = content.map((item) => stringValue2(objectValue(item)?.text)).filter((text) => Boolean(text)).join("\n").trim();
-  return detail || "Research Agent tool failed";
-}
-function redactResearchStatus(status) {
-  return Object.fromEntries(
-    Object.entries(status).filter(
-      ([key]) => !["auth", "token", "access_token", "refresh_token"].includes(key.toLowerCase())
-    )
-  );
-}
-function mcpError(id, code, message) {
-  return { jsonrpc: "2.0", id, error: { code, message } };
-}
-function writeJson(res, status, value) {
-  const body = `${JSON.stringify(value)}
-`;
-  res.writeHead(status, {
-    "cache-control": "no-store",
-    "content-length": Buffer.byteLength(body),
-    "content-type": "application/json; charset=utf-8"
-  });
-  res.end(body);
-}
-async function pipeResponseBody(body, response) {
-  await new Promise((resolve, reject) => {
-    const stream = Readable.fromWeb(body);
-    stream.once("error", reject);
-    response.once("error", reject);
-    response.once("finish", resolve);
-    stream.pipe(response);
-  });
-}
-function validInternalToken(value, expected) {
-  if (typeof value !== "string") {
-    return false;
-  }
-  const actualBuffer = Buffer.from(value);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual4(actualBuffer, expectedBuffer);
-}
-function requestHeader(headers, name) {
-  const value = headers[name];
-  return Array.isArray(value) ? value[0] : value;
-}
-function objectValue(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function stringValue2(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function numberValue(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
-}
-function safeError(err) {
-  return err instanceof Error ? err.message : "unknown error";
-}
-function delay(ms, signal) {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-  }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, ms);
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-function timedAbortSignal(parent, timeoutMs) {
-  const controller = new AbortController();
-  const abort = () => controller.abort(parent.reason);
-  if (parent.aborted) {
-    abort();
-  } else {
-    parent.addEventListener("abort", abort, { once: true });
-  }
-  const timeout = setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), timeoutMs);
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parent.removeEventListener("abort", abort);
-    }
-  };
-}
-function isTimeoutError(err) {
-  return err instanceof Error && err.name === "TimeoutError";
-}
-function remainingUpstreamTimeout(deadline) {
-  return Math.max(1, Math.min(UPSTREAM_TIMEOUT_MS, deadline - Date.now()));
-}
-
-// src/mlclaw-space-runtime/openclaw-config.ts
-var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
-var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
-var AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2147483647;
-async function configureOpenClawGateway(config2, options = {}) {
-  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
-  const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw2));
-  const gateway = object(openclawConfig, "gateway");
-  gateway.mode = "local";
-  gateway.bind = "loopback";
-  gateway.port = config2.openclawPort;
-  gateway.auth = {
-    mode: "trusted-proxy",
-    trustedProxy: {
-      userHeader: "x-forwarded-user",
-      requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
-      allowLoopback: true
-    }
-  };
-  gateway.trustedProxies = ["127.0.0.1", "::1"];
-  gateway.controlUi = {
-    ...typeof gateway.controlUi === "object" && gateway.controlUi ? gateway.controlUi : {},
-    dangerouslyDisableDeviceAuth: true,
-    allowedOrigins: config2.accessOrigins,
-    embedSandbox: "scripts"
-  };
-  const codexConfigured = Boolean(options.codexConfigured);
-  const openAiConfigured2 = Boolean(options.openAiConfigured);
-  configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2);
-  configureOpenAiAuthMetadata(openclawConfig, codexConfigured);
-  configureCodexRuntimePlugin(openclawConfig, codexConfigured || openAiConfigured2);
-  disableAutomaticSessionResets(openclawConfig);
-  configureManagedMcpServers(openclawConfig, config2);
-  configureBrokerMcpServer(openclawConfig, config2);
-  configureUnyoloPlugin(openclawConfig, config2);
-  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
-`, { mode: 384 });
-  await fs2.chmod(config2.openclawConfigPath, 384);
-  if (process.getuid?.() === 0) {
-    await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
-  }
-}
-function disableAutomaticSessionResets(openclawConfig) {
-  const session = object(openclawConfig, "session");
-  session.reset = {
-    mode: "idle",
-    idleMinutes: AUTOMATIC_SESSION_RESET_DISABLED_MINUTES
-  };
-  delete session.idleMinutes;
-  delete session.resetByType;
-  delete session.resetByChannel;
-  const maintenance = object(session, "maintenance");
-  maintenance.resetArchiveRetention = false;
-}
-function configureBrokerMcpServer(openclawConfig, config2) {
-  const servers = object(object(openclawConfig, "mcp"), "servers");
-  if (!config2.brokerAgentUrl || !config2.brokerAgentSecretFile) {
-    delete servers["huggingface-broker"];
-    return;
-  }
-  const existing = objectValue2(servers["huggingface-broker"]);
-  servers["huggingface-broker"] = {
-    ...preservedBrokerMcpFields(existing),
-    command: "/usr/local/bin/hf-broker",
-    args: ["mcp"],
-    connectionTimeoutMs: BROKER_MCP_CONNECTION_TIMEOUT_MS,
-    requestTimeoutMs: BROKER_MCP_REQUEST_TIMEOUT_MS,
-    env: {
-      HF_BROKER_AGENT_ENDPOINT: brokerAgentEndpoint(config2.brokerAgentUrl),
-      HF_BROKER_SHARED_SECRET_FILE: config2.brokerAgentSecretFile
-    },
-    ...existing?.enabled === false ? { enabled: false } : { enabled: true }
-  };
-}
-function brokerAgentEndpoint(agentUrl) {
-  const parsed = new URL(agentUrl);
-  if (parsed.protocol !== "http:" || !parsed.port || parsed.username || parsed.password) {
-    throw new Error("HF Broker agent URL must be an unauthenticated HTTP URL with an explicit port");
-  }
-  return `tcp://${parsed.host}`;
-}
-function preservedBrokerMcpFields(existing) {
-  const codex = preservedBrokerCodexConfig(objectValue2(existing?.codex));
-  return {
-    ...existing?.toolFilter && typeof existing.toolFilter === "object" ? { toolFilter: existing.toolFilter } : {},
-    ...typeof existing?.supportsParallelToolCalls === "boolean" ? { supportsParallelToolCalls: existing.supportsParallelToolCalls } : {},
-    ...codex ? { codex } : {}
-  };
-}
-function preservedBrokerCodexConfig(existing) {
-  const agents = brokerAgentScope(existing?.agents);
-  const defaultToolsApprovalMode = brokerApprovalMode(existing?.defaultToolsApprovalMode);
-  const nativeApprovalMode = brokerApprovalMode(existing?.default_tools_approval_mode);
-  const preserved = {
-    ...agents ? { agents } : {},
-    ...defaultToolsApprovalMode ? { defaultToolsApprovalMode } : {},
-    ...nativeApprovalMode ? { default_tools_approval_mode: nativeApprovalMode } : {}
-  };
-  return Object.keys(preserved).length > 0 ? preserved : void 0;
-}
-function brokerAgentScope(value) {
-  if (!Array.isArray(value)) return void 0;
-  const agents = value.filter((agent) => typeof agent === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(agent.trim())).map((agent) => agent.trim());
-  return agents.length > 0 ? agents : void 0;
-}
-function brokerApprovalMode(value) {
-  return value === "auto" || value === "prompt" || value === "approve" ? value : void 0;
-}
-function configureCodexRuntimePlugin(openclawConfig, enabled) {
-  const plugins = object(openclawConfig, "plugins");
-  const entries = object(plugins, "entries");
-  const existing = objectValue2(entries.codex);
-  if (!enabled) {
-    if (existing) entries.codex = { ...existing, enabled: false };
-    return;
-  }
-  if (plugins.allow !== void 0) {
-    plugins.allow = uniqueStrings(uniqueStrings(plugins.allow, "openai"), "codex");
-  }
-  const existingConfig = objectValue2(existing?.config);
-  const existingAppServer = objectValue2(existingConfig?.appServer);
-  entries.codex = {
-    ...existing,
-    enabled: true,
-    config: {
-      ...existingConfig,
-      appServer: {
-        ...existingAppServer,
-        clearEnv: uniqueStrings(existingAppServer?.clearEnv, "OPENCLAW_GATEWAY_PASSWORD")
-      }
-    }
-  };
-}
-function configureUnyoloPlugin(openclawConfig, config2) {
-  const plugins = object(openclawConfig, "plugins");
-  const load = object(plugins, "load");
-  load.paths = uniqueStrings(
-    withoutString(load.paths, "/opt/openclaw-plugins/node_modules/openclaw-brokerkit"),
-    config2.unyoloPluginPath
-  );
-  if (plugins.allow !== void 0) {
-    plugins.allow = uniqueStrings(withoutString(plugins.allow, "brokerkit"), "unyolo");
-  }
-  const entries = object(plugins, "entries");
-  delete entries.brokerkit;
-  entries.unyolo = {
-    enabled: true,
-    config: {
-      mode: "delegated-web",
-      delegatedWeb: { basePath: "/trusted-host/api/unyolo" }
-    }
-  };
-}
-async function managedMcpServerStatus(config2) {
-  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
-  const servers = object(object(raw2, "mcp"), "servers");
-  return [
-    { id: "huggingface", name: "Hugging Face MCP" },
-    { id: "research-agent", name: "Research Agent" }
-  ].map((server2) => ({
-    ...server2,
-    enabled: objectValue2(servers[server2.id])?.enabled !== false
-  }));
-}
-function configureManagedMcpServers(openclawConfig, config2) {
-  const mcp = object(openclawConfig, "mcp");
-  const servers = object(mcp, "servers");
-  delete servers.codex;
-  for (const [name, managed] of Object.entries(managedMcpServerConfig(config2))) {
-    const existing = servers[name];
-    const userFields = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
-    servers[name] = {
-      ...userFields,
-      ...managed,
-      ...userFields.enabled === false ? { enabled: false } : { enabled: true },
-      ...userFields.toolFilter && typeof userFields.toolFilter === "object" ? { toolFilter: userFields.toolFilter } : {}
-    };
-  }
-}
-function configureOpenClawModels(openclawConfig, config2, codexConfigured, openAiConfigured2) {
-  const routerChoices = config2.modelChoices;
-  configureAgentModelChoices(
-    object(object(openclawConfig, "agents"), "defaults"),
-    config2,
-    routerChoices,
-    codexConfigured,
-    openAiConfigured2
-  );
-  const models = object(openclawConfig, "models");
-  models.mode = "merge";
-  const providers = object(models, "providers");
-  configureHuggingFaceProvider(object(providers, "huggingface"), config2, routerChoices);
-  configureNativeOpenAiProvider(providers);
-}
-function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
-  const existingModel = objectValue2(defaults.model) ?? {};
-  const openAiAvailable = codexConfigured || openAiConfigured2;
-  const primary = resolvePrimaryModel({
-    existing: existingModel.primary,
-    requested: replaceLegacyCodexModelRef(config2.model),
-    openAiAvailable,
-    ...routerChoices[0]?.openclawModel ? { fallback: routerChoices[0].openclawModel } : {}
-  });
-  defaults.model = {
-    ...existingModel,
-    ...primary ? { primary } : {}
-  };
-  defaults.models = {
-    ...Object.fromEntries(routerChoices.map((choice) => [choice.openclawModel, { alias: aliasForChoice(choice) }])),
-    ...openAiAvailable ? { "openai/*": { agentRuntime: { id: "codex" } } } : {}
-  };
-}
-function resolvePrimaryModel(params) {
-  const existing = typeof params.existing === "string" ? params.existing.trim() : void 0;
-  if (params.openAiAvailable && existing?.startsWith("openai/")) return existing;
-  if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
-  return params.requested;
-}
-function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
-  huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
-  if (config2.brokerAgentSecret) huggingface.apiKey = config2.brokerAgentSecret;
-  else delete huggingface.apiKey;
-  huggingface.api = "openai-completions";
-  huggingface.models = routerChoices.map(modelDefinitionFromChoice);
-}
-function configureNativeOpenAiProvider(providers) {
-  delete providers["mlclaw-codex"];
-  const existing = objectValue2(providers.openai);
-  const params = objectValue2(existing?.params);
-  if (!params || !("codexProxyBaseUrl" in params)) return;
-  const nextParams = { ...params };
-  delete nextParams.codexProxyBaseUrl;
-  if (existing) {
-    if (Object.keys(nextParams).length > 0) existing.params = nextParams;
-    else delete existing.params;
-  }
-}
-function configureOpenAiAuthMetadata(openclawConfig, configured) {
-  const auth = object(openclawConfig, "auth");
-  const profiles = object(auth, "profiles");
-  const order = object(auth, "order");
-  const existingOrder = Array.isArray(order.openai) ? order.openai.filter((value) => typeof value === "string" && value !== OPENAI_OAUTH_PROFILE_ID) : [];
-  if (configured) {
-    profiles[OPENAI_OAUTH_PROFILE_ID] = {
-      provider: "openai",
-      mode: "oauth",
-      displayName: "MLClaw ChatGPT"
-    };
-    order.openai = [OPENAI_OAUTH_PROFILE_ID, ...existingOrder];
-  } else {
-    delete profiles[OPENAI_OAUTH_PROFILE_ID];
-    if (existingOrder.length > 0) order.openai = existingOrder;
-    else delete order.openai;
-  }
-  if (Object.keys(profiles).length === 0) delete auth.profiles;
-  if (Object.keys(order).length === 0) delete auth.order;
-}
-function replaceLegacyCodexModelRef(value) {
-  return value === LEGACY_CODEX_MODEL_REF ? DEFAULT_OPENAI_MODEL_REF : value;
-}
-function migrateLegacyCodexModelRefs(value) {
-  if (typeof value === "string") return replaceLegacyCodexModelRef(value);
-  if (Array.isArray(value)) return value.map(migrateLegacyCodexModelRefs);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [replaceLegacyCodexModelRef(key), migrateLegacyCodexModelRefs(entry)])
-  );
-}
-function modelDefinitionFromChoice(choice) {
-  const providerModelId = providerModelIdFromChoice(choice);
-  return {
-    id: providerModelId,
-    name: `${choice.label} (${choice.provider})`,
-    input: inputModalitiesForChoice(choice),
-    contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
-    maxTokens: 8192,
-    reasoning: isReasoningModel(choice.modelId),
-    cost: {
-      input: choice.pricing?.input ?? 0,
-      output: choice.pricing?.output ?? 0,
-      cacheRead: 0,
-      cacheWrite: 0
-    },
-    api: "openai-completions",
-    compat: {
-      supportsTools: choice.supportsTools ?? true,
-      supportsStrictMode: choice.supportsStructuredOutput ?? false
-    }
-  };
-}
-function providerModelIdFromChoice(choice) {
-  const parsed = parseOpenClawModelRef(choice.openclawModel);
-  return parsed ? `${parsed.modelId}:${parsed.provider}` : `${choice.modelId}:${choice.provider}`;
-}
-function inputModalitiesForChoice(choice) {
-  if (choice.inputModalities?.length) {
-    return choice.inputModalities.filter((item) => item === "text" || item === "image");
-  }
-  return isLikelyImageModel(choice.modelId) ? ["text", "image"] : ["text"];
-}
-function aliasForChoice(choice) {
-  const base = displayNameFromModelId(choice.modelId).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "model";
-  return `${base}-${choice.provider}`.slice(0, 64);
-}
-function isLikelyImageModel(id) {
-  const lower = id.toLowerCase();
-  return lower.includes("-vl") || lower.includes("vision") || lower.includes("multimodal") || lower.includes("gemma-3") || lower.includes("gemma-4") || lower.includes("llama-4") || lower.includes("qwen3.6");
-}
-function contextWindowForModel(id) {
-  const lower = id.toLowerCase();
-  if (lower.includes("gemma-4") || lower.includes("qwen3.6")) {
-    return 262144;
-  }
-  if (lower.includes("qwen3-8b") || lower.includes("qwen3-14b")) {
-    return 40960;
-  }
-  return 131072;
-}
-function isReasoningModel(id) {
-  return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
-}
-function object(parent, key) {
-  const value = parent[key];
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value;
-  }
-  const created = {};
-  parent[key] = created;
-  return created;
-}
-function objectValue2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function uniqueStrings(value, required) {
-  const current = Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
-  return [.../* @__PURE__ */ new Set([...current, required])];
-}
-function withoutString(value, removed) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item !== removed) : [];
 }
 
 // src/mlclaw-space-runtime/openai-credentials.ts
@@ -20538,6 +20552,12 @@ function formatError2(err) {
 }
 
 // src/mlclaw-space-runtime/cli.ts
+if (process2.argv[2] === "prepare-unyolo-config") {
+  const configPath = process2.env.OPENCLAW_CONFIG_PATH?.trim();
+  if (!configPath?.startsWith("/")) throw new Error("OPENCLAW_CONFIG_PATH must be absolute");
+  await prepareUnyoloConfig(configPath);
+  process2.exit(0);
+}
 var config = loadConfig();
 var server = new SpaceRuntimeServer(config);
 var toolingSeeder;

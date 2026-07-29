@@ -15,6 +15,7 @@ import {
   BROKER_MCP_CONNECTION_TIMEOUT_MS,
   BROKER_MCP_REQUEST_TIMEOUT_MS,
   configureOpenClawGateway,
+  prepareUnyoloConfig,
 } from "../src/mlclaw-space-runtime/openclaw-config.js";
 import { createSpaceRuntimeApp } from "../src/mlclaw-space-runtime/app.js";
 import { OpenAiCredentialStore } from "../src/mlclaw-space-runtime/openai-credentials.js";
@@ -2055,6 +2056,38 @@ describe("ML Claw Space runtime", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, restartPending: false });
     expect(restartCount).toBe(1);
+  });
+
+  it("removes the superseded plugin before OpenClaw validates restored config", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-openclaw-unyolo-prepare-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const configPath = path.join(root, "openclaw.json");
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        plugins: {
+          allow: ["custom", "brokerkit"],
+          load: {
+            paths: ["/opt/custom-plugin", "/opt/openclaw-plugins/node_modules/openclaw-brokerkit"],
+          },
+          entries: {
+            custom: { enabled: true },
+            brokerkit: { enabled: true },
+          },
+        },
+      }),
+      { mode: 0o644 },
+    );
+
+    await prepareUnyoloConfig(configPath);
+
+    const rewritten = JSON.parse(await fs.readFile(configPath, "utf8"));
+    expect(rewritten.plugins).toEqual({
+      allow: ["custom"],
+      load: { paths: ["/opt/custom-plugin"] },
+      entries: { custom: { enabled: true } },
+    });
+    expect((await fs.stat(configPath)).mode & 0o777).toBe(0o600);
   });
 
   it("configures OpenClaw as a loopback trusted-proxy browser gateway", async () => {

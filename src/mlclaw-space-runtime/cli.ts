@@ -2,7 +2,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import process from "node:process";
 import { loadConfig } from "./config.js";
+import { prepareUnyoloConfig } from "./openclaw-config.js";
 import { SpaceRuntimeServer } from "./server.js";
+
+if (process.argv[2] === "prepare-unyolo-config") {
+  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
+  if (!configPath?.startsWith("/")) throw new Error("OPENCLAW_CONFIG_PATH must be absolute");
+  await prepareUnyoloConfig(configPath);
+  process.exit(0);
+}
 
 const config = loadConfig();
 const server = new SpaceRuntimeServer(config);

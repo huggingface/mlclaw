@@ -220,6 +220,10 @@ if [ ! -f "$CONFIG_PATH" ]; then
 fi
 chown_openclaw_live
 
+echo "[unyolo] preparing renamed OpenClaw plugin configuration"
+env HOME=/home/node USER=node LOGNAME=node \
+  gosu "$OPENCLAW_IDENTITY" node /app/mlclaw-space-runtime.js prepare-unyolo-config
+
 # Let OpenClaw create its native workspace files. The ML Claw runtime waits for
 # native onboarding to finish before adding workspace tooling; OpenClaw treats
 # any preinstalled workspace skills as evidence that onboarding already ran.
