@@ -162,6 +162,9 @@ The approval file may contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw
 token. Never reuse the conversation bot. Telegram permits one `getUpdates`
 poller per token, and the approval bot is a separate trust boundary. Use a
 positive user ID for a one-to-one chat; ML Claw rejects group and channel IDs.
+Both bots must reach the standard Telegram Bot API directly. Custom API roots
+and Telegram-specific proxies are unsupported because the approval ingress
+cannot apply them consistently.
 
 For an existing Telegram deployment, rerun bootstrap with
 `--approval-telegram-token-file` before updating. `mlclaw update` fails closed

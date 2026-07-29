@@ -723,7 +723,7 @@ describe("mlclaw CLI", () => {
     expect(hub.bucketObjects.get(".mlclaw/desired-state.json")).not.toContain("hf_test_token");
   });
 
-  it("preserves Telegram configuration on an automatic bootstrap rerun", async () => {
+  it("preserves Telegram bots and private user on an automatic bootstrap rerun", async () => {
     const hub = createFakeHub();
     const runtime = await createRuntime(hub, createPrompt([]).prompt);
     await expect(
@@ -738,10 +738,6 @@ describe("mlclaw CLI", () => {
           "telegram-token",
           "--telegram-user-id",
           "1234567890",
-          "--telegram-proxy",
-          "http://proxy.example",
-          "--telegram-api-root",
-          "https://telegram.example",
           "--no-pull",
         ],
         runtime,
@@ -751,9 +747,8 @@ describe("mlclaw CLI", () => {
     await expect(main(["bootstrap", "--gateway", "local", "--no-pull"], runtime)).resolves.toBe(0);
     await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
       TELEGRAM_BOT_TOKEN: "telegram-token",
+      MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN: "approval-telegram-token",
       TELEGRAM_ALLOWED_USERS: "1234567890",
-      TELEGRAM_PROXY: "http://proxy.example",
-      TELEGRAM_API_ROOT: "https://telegram.example",
     });
   });
 
@@ -3600,6 +3595,8 @@ describe("mlclaw CLI", () => {
     await hub.addSpaceVariable("alice/research", "MLCLAW_ADMINS", "alice");
     await hub.addSpaceSecret("alice/research", "HF_TOKEN", "hf_old");
     await hub.addSpaceSecret("alice/research", "HUGGINGFACE_HUB_TOKEN", "hf_old");
+    await hub.addSpaceSecret("alice/research", "TELEGRAM_PROXY", "http://proxy.example");
+    await hub.addSpaceSecret("alice/research", "TELEGRAM_API_ROOT", "https://telegram.example");
     await hub.addSpaceSecret("alice/research", "MLCLAW_ROUTER_TOKEN", "hf_router");
     await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
     hub.calls.length = 0;
@@ -3616,6 +3613,9 @@ describe("mlclaw CLI", () => {
 
     expect(code).toBe(0);
     expect(output.join("\n")).toContain("deleted stale secrets HF_TOKEN, HUGGINGFACE_HUB_TOKEN");
+    expect(output.join("\n")).toContain(
+      "deleted unsupported Telegram transport secrets TELEGRAM_PROXY, TELEGRAM_API_ROOT",
+    );
     expect(output.join("\n")).toContain("mounted bucket alice/research-data at /data/mlclaw-state");
     expect(output.join("\n")).toContain("set secret MLCLAW_CREDENTIAL_KEY");
     expect(output.join("\n")).toContain("set protected Space visibility");
@@ -3633,6 +3633,8 @@ describe("mlclaw CLI", () => {
     });
     expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HF_TOKEN"] });
     expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "HUGGINGFACE_HUB_TOKEN"] });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "TELEGRAM_PROXY"] });
+    expect(hub.calls).toContainEqual({ name: "deleteSpaceSecret", args: ["alice/research", "TELEGRAM_API_ROOT"] });
     expect(hub.calls).toContainEqual({
       name: "addSpaceSecret",
       args: ["alice/research", "MLCLAW_CREDENTIAL_KEY", expect.any(String)],

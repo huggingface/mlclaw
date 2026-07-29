@@ -470,10 +470,8 @@ const OPENCLAW_ENV_ALLOWLIST = [
   "OPENCLAW_WORKSPACE_DIR",
   "MLCLAW_HF_BROKER_URL",
   "MLCLAW_HF_BROKER_AGENT_SECRET_FILE",
-  "TELEGRAM_API_ROOT",
   "TELEGRAM_ALLOWED_USERS",
   "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_PROXY",
 ] as const;
 
 function allowedOpenClawEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

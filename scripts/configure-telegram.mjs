@@ -11,9 +11,6 @@ const allowedUsers = (allowedUsersRaw || "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
-const telegramProxy = (process.env.TELEGRAM_PROXY || "").trim();
-const telegramApiRoot = (process.env.TELEGRAM_API_ROOT || "").trim().replace(/\/+$/, "");
-
 if (allowedUsers.length === 0) {
   process.exit(0);
 }
@@ -45,8 +42,6 @@ Object.assign(config.channels.telegram, {
     autoSelectFamily: false,
     dnsResultOrder: "ipv4first"
   },
-  ...(telegramProxy ? { proxy: "${TELEGRAM_PROXY}" } : {}),
-  ...(telegramApiRoot ? { apiRoot: "${TELEGRAM_API_ROOT}" } : {}),
   groups: config.channels.telegram.groups || {}
 });
 

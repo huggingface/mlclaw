@@ -84,6 +84,10 @@ prepare_unyolo_telegram_secret() {
     fi
     return
   fi
+  if [ -n "${TELEGRAM_PROXY:-}" ] || [ -n "${TELEGRAM_API_ROOT:-}" ]; then
+    echo "[unyolo-telegram] approval routing requires direct access to the standard Telegram Bot API" >&2
+    return 1
+  fi
   if [ -z "$approval_token" ]; then
     echo "[unyolo-telegram] Telegram requires a separate MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN" >&2
     return 1
@@ -359,14 +363,8 @@ fi
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE:-0}" = "1" ]; then
   if command -v curl >/dev/null 2>&1; then
     PROBE_OUT="/tmp/openclaw-telegram-probe.json"
-    PROBE_PROXY=()
-    PROBE_API_ROOT="${TELEGRAM_API_ROOT:-https://api.telegram.org}"
-    PROBE_API_ROOT="${PROBE_API_ROOT%/}"
-    if [ -n "${TELEGRAM_PROXY:-}" ]; then
-      PROBE_PROXY=(--proxy "$TELEGRAM_PROXY")
-    fi
-    if curl -fsS --connect-timeout 20 --max-time 30 "${PROBE_PROXY[@]}" \
-      "${PROBE_API_ROOT}/bot${TELEGRAM_BOT_TOKEN}/getMe" \
+    if curl -fsS --connect-timeout 20 --max-time 30 \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" \
       -o "$PROBE_OUT"; then
       gosu "$OPENCLAW_IDENTITY" node /app/scripts/report-telegram-probe.mjs "$PROBE_OUT" || true
     else

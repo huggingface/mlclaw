@@ -163,6 +163,10 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('local approval_token="${MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN:-}"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"');
     expect(entrypoint).toContain('if [ "$approval_token" = "$conversation_token" ]');
+    expect(entrypoint).toContain("approval routing requires direct access to the standard Telegram Bot API");
+    expect(entrypoint).toContain('"https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"');
+    expect(entrypoint).not.toContain('PROBE_API_ROOT="${TELEGRAM_API_ROOT');
+    expect(entrypoint).not.toContain('PROBE_PROXY=(--proxy "$TELEGRAM_PROXY")');
     expect(entrypoint).toContain("unset MLCLAW_BROKER_HF_TOKEN MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS");

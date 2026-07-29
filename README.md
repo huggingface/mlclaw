@@ -171,9 +171,11 @@ bots and rejects group or channel chat IDs.
 
 The approval token is written to a protected runtime file for HF Broker and the
 single supervised `unyolo-telegram` ingress. It is removed from the wrapper
-environment before OpenClaw starts. Pending callbacks and their encryption key
-are included in durable state snapshots, so button decisions resume after a
-restart.
+environment before OpenClaw starts. Both bots use the standard Telegram Bot API
+directly; custom API roots and Telegram-specific proxies are unsupported because
+the approval ingress cannot apply them consistently. Pending callbacks and their
+encryption key are included in durable state snapshots, so button decisions
+resume after a restart.
 
 Existing Telegram deployments need one reconfiguration run before they can use
 a runtime with approval routing:
