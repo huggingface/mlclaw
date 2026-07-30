@@ -17,6 +17,16 @@ PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"
 HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"
 HF_BROKER_STATE_CONTRACT="unyolo-state-v1-grant-uses"
 HF_BROKER_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/hf-broker-state-contract"
+TELEGRAM_BOT_MUX_ENABLED=0
+TELEGRAM_BOT_MUX_RUN_DIR="/run/mlclaw-telegram-bot-mux"
+TELEGRAM_BOT_MUX_CONFIG_FILE="$TELEGRAM_BOT_MUX_RUN_DIR/config.json"
+TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE="$TELEGRAM_BOT_MUX_RUN_DIR/telegram-token"
+TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE="$TELEGRAM_BOT_MUX_RUN_DIR/openclaw-token"
+TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE="$TELEGRAM_BOT_MUX_RUN_DIR/unyolo-token"
+TELEGRAM_BOT_MUX_STATE_DIR="$PROTECTED_STATE_DIR/telegram-bot-mux"
+TELEGRAM_BOT_MUX_DATABASE="$TELEGRAM_BOT_MUX_STATE_DIR/state.db"
+TELEGRAM_BOT_MUX_OPENCLAW_BASE="http://127.0.0.1:7865/client/openclaw"
+TELEGRAM_BOT_MUX_UNYOLO_BASE="http://127.0.0.1:7865/client/unyolo"
 UNYOLO_TELEGRAM_ENABLED=0
 UNYOLO_TELEGRAM_RUN_DIR="/run/mlclaw-unyolo-telegram"
 UNYOLO_TELEGRAM_TOKEN_FILE="$UNYOLO_TELEGRAM_RUN_DIR/bot-token"
@@ -72,6 +82,33 @@ prepare_hf_broker() {
   HF_BROKER_ENABLED=1
 }
 
+prepare_telegram_bot_mux_secrets() {
+  local physical_token="$1"
+
+  install -d -m 0710 -o root -g mlclaw-protected "$TELEGRAM_BOT_MUX_RUN_DIR"
+  rm -f -- "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  install -m 0600 -o telegram-bot-mux -g telegram-bot-mux /dev/null "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE"
+  printf '%s\n' "$physical_token" > "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE"
+  /usr/local/bin/telegram-bot-mux generate-client-token --out "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE"
+  /usr/local/bin/telegram-bot-mux generate-client-token --out "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  chown telegram-bot-mux:telegram-bot-mux \
+    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  chmod 0600 \
+    "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  cat > "$TELEGRAM_BOT_MUX_CONFIG_FILE" <<EOF
+{"version":1,"listen":"127.0.0.1:7865","database":"$TELEGRAM_BOT_MUX_DATABASE","telegram":{"token_file":"$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE","allowed_updates":["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member"]},"clients":[{"id":"openclaw","token_file":"$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE"},{"id":"unyolo","token_file":"$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"}],"routing":{"mode":"exclusive","rules":[{"clients":["unyolo"],"update_types":["callback_query"],"callback_data_prefixes":["bk:"]}],"fallback_clients":["openclaw"]}}
+EOF
+  chown telegram-bot-mux:telegram-bot-mux "$TELEGRAM_BOT_MUX_CONFIG_FILE"
+  chmod 0600 "$TELEGRAM_BOT_MUX_CONFIG_FILE"
+  export TELEGRAM_BOT_TOKEN="$(cat "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE")"
+  export TELEGRAM_API_ROOT="$TELEGRAM_BOT_MUX_OPENCLAW_BASE"
+  export MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH="$TELEGRAM_BOT_MUX_CONFIG_FILE"
+  TELEGRAM_BOT_MUX_ENABLED=1
+}
+
 prepare_unyolo_telegram_secret() {
   local approval_token="${MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN:-}"
   local conversation_token="${TELEGRAM_BOT_TOKEN:-}"
@@ -85,15 +122,7 @@ prepare_unyolo_telegram_secret() {
     return
   fi
   if [ -n "${TELEGRAM_PROXY:-}" ] || [ -n "${TELEGRAM_API_ROOT:-}" ]; then
-    echo "[unyolo-telegram] approval routing requires direct access to the standard Telegram Bot API" >&2
-    return 1
-  fi
-  if [ -z "$approval_token" ]; then
-    echo "[unyolo-telegram] Telegram requires a separate MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN" >&2
-    return 1
-  fi
-  if [ "$approval_token" = "$conversation_token" ]; then
-    echo "[unyolo-telegram] approval and conversation bots must use different tokens" >&2
+    echo "[unyolo-telegram] Telegram transport is managed by ML Claw" >&2
     return 1
   fi
   if [[ ! "$chat_id" =~ ^[1-9][0-9]*$ ]]; then
@@ -102,9 +131,20 @@ prepare_unyolo_telegram_secret() {
   fi
 
   install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"
-  printf '%s\n' "$approval_token" > "$UNYOLO_TELEGRAM_TOKEN_FILE"
-  chown unyolo-telegram:mlclaw-protected "$UNYOLO_TELEGRAM_TOKEN_FILE"
-  chmod 0640 "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  if [ -z "$approval_token" ]; then
+    prepare_telegram_bot_mux_secrets "$conversation_token"
+    install -m 0640 -o unyolo-telegram -g mlclaw-protected \
+      "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE" \
+      "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  else
+    if [ "$approval_token" = "$conversation_token" ]; then
+      echo "[unyolo-telegram] omit MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN to share the conversation bot" >&2
+      return 1
+    fi
+    printf '%s\n' "$approval_token" > "$UNYOLO_TELEGRAM_TOKEN_FILE"
+    chown unyolo-telegram:mlclaw-protected "$UNYOLO_TELEGRAM_TOKEN_FILE"
+    chmod 0640 "$UNYOLO_TELEGRAM_TOKEN_FILE"
+  fi
   export MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH="$UNYOLO_TELEGRAM_CONFIG_FILE"
   UNYOLO_TELEGRAM_ENABLED=1
 }
@@ -145,6 +185,15 @@ restore_protected_state() {
   chmod 0700 "$HF_BROKER_STATE_DIR"
 }
 
+prepare_telegram_bot_mux_state() {
+  if [ "$TELEGRAM_BOT_MUX_ENABLED" != "1" ]; then
+    return
+  fi
+  install -d -m 0700 -o telegram-bot-mux -g telegram-bot-mux "$TELEGRAM_BOT_MUX_STATE_DIR"
+  chown -R telegram-bot-mux:telegram-bot-mux "$TELEGRAM_BOT_MUX_STATE_DIR"
+  chmod 0700 "$TELEGRAM_BOT_MUX_STATE_DIR"
+}
+
 prepare_unyolo_telegram_state() {
   if [ "$UNYOLO_TELEGRAM_ENABLED" != "1" ]; then
     return
@@ -174,8 +223,13 @@ prepare_unyolo_telegram_state() {
 
   chown root:unyolo-telegram "$HF_BROKER_RUN_DIR/operator-secret"
   chmod 0640 "$HF_BROKER_RUN_DIR/operator-secret"
-  printf '{"telegram_bot_token_file":"%s","telegram_chat_id":%s,"inbox_path":"%s","inbox_key_file":"%s","routes":{"h":{"operator_endpoint":"http://127.0.0.1:7864","operator_token_file":"%s"}}}\n' \
+  local telegram_api_base_json=""
+  if [ "$TELEGRAM_BOT_MUX_ENABLED" = "1" ]; then
+    telegram_api_base_json=",\"telegram_api_base\":\"$TELEGRAM_BOT_MUX_UNYOLO_BASE\""
+  fi
+  printf '{"telegram_bot_token_file":"%s"%s,"telegram_chat_id":%s,"inbox_path":"%s","inbox_key_file":"%s","routes":{"h":{"operator_endpoint":"tcp://127.0.0.1:7864","operator_token_file":"%s"}}}\n' \
     "$UNYOLO_TELEGRAM_TOKEN_FILE" \
+    "$telegram_api_base_json" \
     "$TELEGRAM_ALLOWED_USERS" \
     "$UNYOLO_TELEGRAM_INBOX_FILE" \
     "$UNYOLO_TELEGRAM_INBOX_KEY_FILE" \
@@ -224,6 +278,9 @@ start_hf_broker() {
       "HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE"
       "HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS"
     )
+    if [ "$TELEGRAM_BOT_MUX_ENABLED" = "1" ]; then
+      telegram_env+=("HF_BROKER_TELEGRAM_API_BASE=$TELEGRAM_BOT_MUX_UNYOLO_BASE")
+    fi
   fi
 
   env \
@@ -316,6 +373,7 @@ mkdir -p "$LIVE_DIR" "$WORKSPACE_DIR" "$STATE_DIR"
 chown_openclaw_live
 install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR"
 install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/control"
+prepare_telegram_bot_mux_state
 prepare_unyolo_telegram_state
 render_hf_broker_policy
 start_hf_broker
@@ -360,7 +418,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_ALLOWED_USERS:-}" ]; the
   echo "[telegram-config] Telegram channel configured"
 fi
 
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE:-0}" = "1" ]; then
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "$TELEGRAM_BOT_MUX_ENABLED" != "1" ] && [ "${OPENCLAW_TELEGRAM_CONNECTIVITY_PROBE:-0}" = "1" ]; then
   if command -v curl >/dev/null 2>&1; then
     PROBE_OUT="/tmp/openclaw-telegram-probe.json"
     if curl -fsS --connect-timeout 20 --max-time 30 \

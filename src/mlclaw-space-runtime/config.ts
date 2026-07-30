@@ -57,6 +57,10 @@ export type SpaceRuntimeConfig = {
   openclawCommand: string;
   openclawArgs: string[];
   unyoloPluginPath: string;
+  telegramBotMuxConfigPath: string | undefined;
+  telegramBotMuxReadyUrl: string | undefined;
+  telegramBotMuxCommand?: string;
+  telegramBotMuxArgs?: string[];
   unyoloTelegramConfigPath: string | undefined;
   unyoloTelegramCommand?: string;
   unyoloTelegramArgs?: string[];
@@ -136,6 +140,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
+  const telegramBotMuxConfigPath = optionalAbsolutePath(
+    env.MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH,
+    "MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH",
+  );
 
   return {
     port,
@@ -191,6 +199,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     openclawCommand,
     openclawArgs,
     unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
+    telegramBotMuxConfigPath,
+    telegramBotMuxReadyUrl: telegramBotMuxConfigPath ? "http://127.0.0.1:7865/readyz" : undefined,
     unyoloTelegramConfigPath: optionalAbsolutePath(
       env.MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH,
       "MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH",

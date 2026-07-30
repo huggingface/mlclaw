@@ -8,6 +8,7 @@ import {
   OPENCLAW_BASE_IMAGE,
   OPENCLAW_VERSION,
   PACKAGE_VERSION,
+  TELEGRAM_BOT_MUX_VERSION,
 } from "../src/mlclaw/runtime-image.js";
 import { AUTOMATIC_SESSION_RESET_DISABLED_MINUTES } from "../src/mlclaw-space-runtime/openclaw-config.js";
 
@@ -18,6 +19,13 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain(`ARG OPENCLAW_VERSION=${OPENCLAW_VERSION}`);
     expect(dockerfile).toContain(`ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}`);
     expect(dockerfile).toContain(`ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}`);
+    expect(dockerfile).toContain(`ARG TELEGRAM_BOT_MUX_VERSION=${TELEGRAM_BOT_MUX_VERSION}`);
+    expect(dockerfile).toContain(
+      "FROM ghcr.io/osolmaz/telegram-bot-mux:v${TELEGRAM_BOT_MUX_VERSION} AS telegram-bot-mux",
+    );
+    expect(dockerfile).toContain(
+      "COPY --from=telegram-bot-mux /usr/local/bin/telegram-bot-mux /usr/local/bin/telegram-bot-mux",
+    );
     expect(HF_BROKER_VERSION).toMatch(/^hf-broker\/v\d+\.\d+\.\d+$/u);
     expect(DEFAULT_HF_BROKER_VERSION).toBe(HF_BROKER_VERSION);
     expect(dockerfile.match(/git -C \/src fetch --depth=1 https:\/\/github\.com\/osolmaz\/unyolo\.git/g)).toHaveLength(
@@ -162,14 +170,33 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain("gosu hf-broker /usr/local/bin/hf-broker &");
     expect(entrypoint).toContain('local approval_token="${MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN:-}"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"');
+    expect(entrypoint).toContain('if [ -z "$approval_token" ]');
+    expect(entrypoint).toContain('prepare_telegram_bot_mux_secrets "$conversation_token"');
+    expect(entrypoint).toContain("chown telegram-bot-mux:telegram-bot-mux \\");
+    expect(entrypoint).toContain(
+      '"$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE" \\\n    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \\\n    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"',
+    );
+    expect(entrypoint).toContain("install -m 0640 -o unyolo-telegram -g mlclaw-protected \\");
+    expect(entrypoint).toContain('"$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE" \\\n      "$UNYOLO_TELEGRAM_TOKEN_FILE"');
+    expect(entrypoint).not.toContain('UNYOLO_TELEGRAM_TOKEN_FILE="$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"');
+    expect(entrypoint).toContain('export TELEGRAM_API_ROOT="$TELEGRAM_BOT_MUX_OPENCLAW_BASE"');
+    expect(entrypoint).toContain('"callback_data_prefixes":["bk:"]');
+    expect(entrypoint).toContain("HF_BROKER_TELEGRAM_API_BASE=$TELEGRAM_BOT_MUX_UNYOLO_BASE");
+    expect(entrypoint).toContain(
+      'telegram_api_base_json=",\\"telegram_api_base\\":\\"$TELEGRAM_BOT_MUX_UNYOLO_BASE\\""',
+    );
     expect(entrypoint).toContain('if [ "$approval_token" = "$conversation_token" ]');
-    expect(entrypoint).toContain("approval routing requires direct access to the standard Telegram Bot API");
+    expect(entrypoint).toContain("Telegram transport is managed by ML Claw");
     expect(entrypoint).toContain('"https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"');
     expect(entrypoint).not.toContain('PROBE_API_ROOT="${TELEGRAM_API_ROOT');
     expect(entrypoint).not.toContain('PROBE_PROXY=(--proxy "$TELEGRAM_PROXY")');
     expect(entrypoint).toContain("unset MLCLAW_BROKER_HF_TOKEN MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS");
+    expect(entrypoint).toContain('"operator_endpoint":"tcp://127.0.0.1:7864"');
+    expect(entrypoint).not.toContain('"operator_endpoint":"http://127.0.0.1:7864"');
+    expect(entrypoint).toContain("prepare_telegram_bot_mux_state");
+    expect(entrypoint).toContain('TELEGRAM_BOT_MUX_STATE_DIR="$PROTECTED_STATE_DIR/telegram-bot-mux"');
     expect(entrypoint).toContain("-u TELEGRAM_BOT_TOKEN");
     expect(entrypoint).toContain("-u TELEGRAM_ALLOWED_USERS");
     expect(entrypoint).toContain('UNYOLO_TELEGRAM_INBOX_FILE="$UNYOLO_TELEGRAM_STATE_DIR/callbacks.db"');

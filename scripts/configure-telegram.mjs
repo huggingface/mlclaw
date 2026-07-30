@@ -28,6 +28,8 @@ config.messages.queue.debounceMsByChannel.telegram ??= 1500;
 config.messages.queue.cap ??= 20;
 config.messages.queue.drop ||= "summarize";
 
+const managedApiRoot = process.env.TELEGRAM_API_ROOT?.trim();
+
 Object.assign(config.channels.telegram, {
   enabled: true,
   botToken: "${TELEGRAM_BOT_TOKEN}",
@@ -44,5 +46,10 @@ Object.assign(config.channels.telegram, {
   },
   groups: config.channels.telegram.groups || {}
 });
+if (managedApiRoot) {
+  config.channels.telegram.apiRoot = managedApiRoot;
+} else {
+  delete config.channels.telegram.apiRoot;
+}
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });

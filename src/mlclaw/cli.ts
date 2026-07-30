@@ -363,7 +363,7 @@ export function createProgram(runtimeOverrides: CliRuntime = {}): Command {
     .option("--gateway <local|space>", "Where the live gateway runs")
     .option("--telegram-token <token>", "Optional Telegram bot token")
     .option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token")
-    .option("--approval-telegram-token-file <path>", "File containing the separate unYOLO approval bot token")
+    .option("--approval-telegram-token-file <path>", "Optional file containing a separate unYOLO approval bot token")
     .option("--telegram-user-id <id>", "Allowed Telegram user ID and private approval chat ID")
     .option("--hardware <flavor>", "Hugging Face Space hardware flavor")
     .option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger)
@@ -800,9 +800,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
   if (!telegramToken && (suppliedApprovalTelegramToken || selectedSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN)) {
     throw new Error("the unYOLO approval bot requires the ML Claw Telegram channel");
   }
-  const approvalTelegramToken = telegramToken
-    ? (configuredApprovalTelegramToken ?? (await promptRequiredSecret("Separate unYOLO approval bot token", runtime)))
-    : undefined;
+  const approvalTelegramToken = telegramToken ? configuredApprovalTelegramToken : undefined;
   const telegramUserId = telegramToken
     ? normalizeTelegramPrivateUserId(
         opts.telegramUserId ??
@@ -4197,7 +4195,7 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
       fixed.push(`deleted unsupported Telegram transport secrets ${unsupportedTelegramTransportSecrets.join(", ")}`);
     } else {
       issues.push(
-        `unsupported Telegram transport secrets present: ${unsupportedTelegramTransportSecrets.join(", ")}; approval routing uses the standard Telegram Bot API directly`,
+        `unsupported Telegram transport secrets present: ${unsupportedTelegramTransportSecrets.join(", ")}; ML Claw manages Telegram transport internally`,
       );
     }
   }
@@ -4496,9 +4494,6 @@ function canDeleteBroadTokenSecrets(params: { model: string; routerTokenPresent:
 function telegramApprovalSecretIssue(secrets: Map<string, { key: string }>): string | undefined {
   const conversationConfigured = secrets.has("TELEGRAM_BOT_TOKEN");
   const approvalConfigured = secrets.has("MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
-  if (conversationConfigured && !approvalConfigured) {
-    return "Telegram is missing the separate unYOLO approval bot secret";
-  }
   if (approvalConfigured && !conversationConfigured) {
     return "the unYOLO approval bot secret is set without the ML Claw conversation bot";
   }
@@ -5402,14 +5397,6 @@ async function promptRequired(label: string, runtime: Required<CliRuntime>): Pro
     throw new Error(`${label} is required`);
   }
   const value = await runtime.prompt.text({ message: label });
-  return readPromptValue(value, label);
-}
-
-async function promptRequiredSecret(label: string, runtime: Required<CliRuntime>): Promise<string> {
-  if (!runtime.prompt.isInteractive()) {
-    throw new Error(`${label} is required; pass --approval-telegram-token-file`);
-  }
-  const value = await runtime.prompt.password({ message: label });
   return readPromptValue(value, label);
 }
 

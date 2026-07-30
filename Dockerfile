@@ -1,8 +1,11 @@
 ARG OPENCLAW_VERSION=2026.7.2-beta.5
 ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
 ARG UNYOLO_PLUGIN_VERSION=0.6.0
-ARG HF_BROKER_VERSION=hf-broker/v0.8.0
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.9.0-openclaw-2026.7.2-beta.5
+ARG HF_BROKER_VERSION=hf-broker/v0.9.0
+ARG TELEGRAM_BOT_MUX_VERSION=0.1.0
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.10.0-openclaw-2026.7.2-beta.5
+
+FROM ghcr.io/osolmaz/telegram-bot-mux:v${TELEGRAM_BOT_MUX_VERSION} AS telegram-bot-mux
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG HF_BROKER_VERSION
@@ -42,6 +45,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates gosu python3 python3-pip python3-venv zstd \
   && groupadd --system mlclaw-protected \
   && useradd --system --home-dir /var/lib/hf-broker --create-home --shell /usr/sbin/nologin --groups mlclaw-protected hf-broker \
+  && useradd --system --home-dir /var/lib/telegram-bot-mux --create-home --shell /usr/sbin/nologin --groups mlclaw-protected telegram-bot-mux \
   && useradd --system --home-dir /var/lib/unyolo-telegram --create-home --shell /usr/sbin/nologin --groups mlclaw-protected unyolo-telegram \
   && rm -rf /var/lib/apt/lists/*
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
@@ -66,6 +70,7 @@ COPY --from=sync-build /build/dist/hf-state-sync.js /app/hf-state-sync.js
 COPY --from=sync-build /build/dist/hf-tooling-seed.js /app/hf-tooling-seed.js
 COPY --from=sync-build /build/dist/mlclaw-space-runtime.js /app/mlclaw-space-runtime.js
 COPY --from=hf-broker-build /out/hf-broker /usr/local/bin/hf-broker
+COPY --from=telegram-bot-mux /usr/local/bin/telegram-bot-mux /usr/local/bin/telegram-bot-mux
 COPY --from=hf-broker-build /out/unyolo-telegram /usr/local/bin/unyolo-telegram
 COPY --from=hf-broker-build /out/hf-broker.scope.json /app/hf-broker.scope.json
 COPY --from=hf-broker-build /out/hf-broker.policy-profile.json /app/hf-broker.policy-profile.json

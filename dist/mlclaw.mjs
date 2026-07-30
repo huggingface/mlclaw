@@ -15383,9 +15383,10 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.9.0",
+  "packageVersion": "0.10.0",
   "openclawVersion": "2026.7.2-beta.5",
-  "hfBrokerVersion": "hf-broker/v0.8.0",
+  "hfBrokerVersion": "hf-broker/v0.9.0",
+  "telegramBotMuxVersion": "0.1.0",
   "unyoloPluginVersion": "0.6.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
@@ -15396,6 +15397,7 @@ var OPENCLAW_VERSION = RELEASE_CONFIG.openclawVersion;
 var OPENCLAW_BASE_IMAGE = `ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}`;
 var UNYOLO_PLUGIN_VERSION = RELEASE_CONFIG.unyoloPluginVersion;
 var HF_BROKER_VERSION = RELEASE_CONFIG.hfBrokerVersion;
+var TELEGRAM_BOT_MUX_VERSION = RELEASE_CONFIG.telegramBotMuxVersion;
 var RUNTIME_IMAGE_REPOSITORY = RELEASE_CONFIG.runtimeImageRepository;
 var DEFAULT_RUNTIME_IMAGE_TAG = `${PACKAGE_VERSION}-openclaw-${OPENCLAW_VERSION}`;
 var DEFAULT_RUNTIME_IMAGE = `${RUNTIME_IMAGE_REPOSITORY}:${DEFAULT_RUNTIME_IMAGE_TAG}`;
@@ -21005,7 +21007,7 @@ function createProgram(runtimeOverrides = {}) {
   program2.name("mlclaw").description("Deploy OpenClaw to a Hugging Face Space and private bucket").showHelpAfterError().exitOverride((err) => {
     throw err;
   });
-  program2.command("bootstrap", { isDefault: true }).alias("configure").description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--approval-telegram-token-file <path>", "File containing the separate unYOLO approval bot token").option("--telegram-user-id <id>", "Allowed Telegram user ID and private approval chat ID").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier").option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Expose the Space source as well as the authenticated app", false).addOption(new Option("--gateway-token <token>").hideHelp()).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option(
+  program2.command("bootstrap", { isDefault: true }).alias("configure").description("Create or update a Hugging Face OpenClaw deployment").option("--owner <owner>", "Hugging Face user or organization").option("--name <name>", "Agent and runtime resource base name").option("--bucket <owner/bucket>", "State bucket to create or adopt").option("--gateway <local|space>", "Where the live gateway runs").option("--telegram-token <token>", "Optional Telegram bot token").option("--telegram-token-file <path>", "File containing TELEGRAM_BOT_TOKEN=... or a raw token").option("--approval-telegram-token-file <path>", "Optional file containing a separate unYOLO approval bot token").option("--telegram-user-id <id>", "Allowed Telegram user ID and private approval chat ID").option("--hardware <flavor>", "Hugging Face Space hardware flavor").option("--sleep-time <seconds>", "Space sleep timeout in seconds; -1 means never sleep", parseInteger).option("--model <model>", "OpenClaw model identifier").option("--runtime-image <image>", "ML Claw runtime image").option("--bundled-runtime", "Generate a bundled Space runtime instead of using the prebuilt ML Claw image", false).option("--public-space", "Expose the Space source as well as the authenticated app", false).addOption(new Option("--gateway-token <token>").hideHelp()).option("--router-token <token>", "Hugging Face Router inference token for Space gateway model calls").option(
     "--router-token-file <path>",
     "File containing MLCLAW_ROUTER_TOKEN=..., HF_ROUTER_TOKEN=..., or a raw token"
   ).option("--broker-hf-token-file <path>", "File containing MLCLAW_BROKER_HF_TOKEN=... or a raw Hugging Face token").option("--docker-context <name>", "Docker context for local gateway mode").option("--container-runtime <auto|docker|podman>", "Local container runtime", "auto").option("--local-port <port>", "Loopback port for a local gateway", parseLocalPort).option("--tailscale <off|direct|serve>", "Tailnet access mode", parseTailscaleMode).option("--tailscale-port <port>", "Tailnet listener or Serve HTTPS port", parseLocalPort).option(
@@ -21261,7 +21263,7 @@ async function bootstrap(opts, runtime) {
   if (!telegramToken && (suppliedApprovalTelegramToken || selectedSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN)) {
     throw new Error("the unYOLO approval bot requires the ML Claw Telegram channel");
   }
-  const approvalTelegramToken = telegramToken ? configuredApprovalTelegramToken ?? await promptRequiredSecret("Separate unYOLO approval bot token", runtime) : void 0;
+  const approvalTelegramToken = telegramToken ? configuredApprovalTelegramToken : void 0;
   const telegramUserId = telegramToken ? normalizeTelegramPrivateUserId(
     opts.telegramUserId ?? runtime.env.TELEGRAM_ALLOWED_USERS ?? selectedSecrets.TELEGRAM_ALLOWED_USERS ?? await promptRequired("Telegram allowed user ID", runtime)
   ) : void 0;
@@ -24074,7 +24076,7 @@ async function doctor(repoId, opts, hub, runtime) {
       fixed.push(`deleted unsupported Telegram transport secrets ${unsupportedTelegramTransportSecrets.join(", ")}`);
     } else {
       issues.push(
-        `unsupported Telegram transport secrets present: ${unsupportedTelegramTransportSecrets.join(", ")}; approval routing uses the standard Telegram Bot API directly`
+        `unsupported Telegram transport secrets present: ${unsupportedTelegramTransportSecrets.join(", ")}; ML Claw manages Telegram transport internally`
       );
     }
   }
@@ -24328,9 +24330,6 @@ function canDeleteBroadTokenSecrets(params) {
 function telegramApprovalSecretIssue(secrets) {
   const conversationConfigured = secrets.has("TELEGRAM_BOT_TOKEN");
   const approvalConfigured = secrets.has("MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
-  if (conversationConfigured && !approvalConfigured) {
-    return "Telegram is missing the separate unYOLO approval bot secret";
-  }
   if (approvalConfigured && !conversationConfigured) {
     return "the unYOLO approval bot secret is set without the ML Claw conversation bot";
   }
@@ -25026,13 +25025,6 @@ async function promptRequired(label, runtime) {
     throw new Error(`${label} is required`);
   }
   const value = await runtime.prompt.text({ message: label });
-  return readPromptValue(value, label);
-}
-async function promptRequiredSecret(label, runtime) {
-  if (!runtime.prompt.isInteractive()) {
-    throw new Error(`${label} is required; pass --approval-telegram-token-file`);
-  }
-  const value = await runtime.prompt.password({ message: label });
   return readPromptValue(value, label);
 }
 async function promptConfirm(label, initialValue, runtime) {

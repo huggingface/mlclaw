@@ -1801,7 +1801,7 @@ describe("mlclaw CLI", () => {
     await expect(readManifest(runtime.configRoot, "research")).rejects.toThrow();
   });
 
-  it("requires a separate unYOLO approval bot for Telegram", async () => {
+  it("shares the conversation bot when no separate approval bot is configured", async () => {
     const hub = createFakeHub();
     const { prompt } = createPrompt([], false);
     const stderr: string[] = [];
@@ -1820,13 +1820,17 @@ describe("mlclaw CLI", () => {
         "--telegram-user-id",
         "1234567890",
         "--no-pull",
+        "--yes",
       ],
       runtime,
     );
 
-    expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("Separate unYOLO approval bot token is required");
-    expect(runtime.dockerRunner.calls.some((call) => call.name === "runDetached")).toBe(false);
+    expect(code, stderr.join("\n")).toBe(0);
+    await expect(readSecretEnv(runtime.configRoot, "research")).resolves.toMatchObject({
+      TELEGRAM_BOT_TOKEN: "conversation-token",
+      TELEGRAM_ALLOWED_USERS: "1234567890",
+    });
+    expect((await readSecretEnv(runtime.configRoot, "research")).MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN).toBeUndefined();
   });
 
   it("rejects one Telegram bot identity in both trust domains", async () => {
@@ -3295,24 +3299,23 @@ describe("mlclaw CLI", () => {
     });
   });
 
-  it("blocks an update that would strand a Telegram deployment without its approval bot", async () => {
+  it("updates a Telegram deployment that shares its conversation bot", async () => {
     const hub = createFakeHub();
     await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "old-template");
     await hub.addSpaceSecret("alice/research", "TELEGRAM_BOT_TOKEN", "conversation-token");
     const stderr: string[] = [];
     const runtime = await createRuntime(hub, createPrompt([], false).prompt, stderr);
+    await seedDedicatedCredentialDeployment(runtime);
     let pushed = false;
     runtime.pushTemplateToSpace = async () => {
       pushed = true;
-      return { templateRev: "unexpected" };
+      return { templateRev: "updated-template" };
     };
 
     const code = await main(["update", "alice/research"], runtime);
 
-    expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain("missing the separate unYOLO approval bot secret");
-    expect(stderr.join("\n")).toContain("mlclaw bootstrap --name research");
-    expect(pushed).toBe(false);
+    expect(code, stderr.join("\n")).toBe(0);
+    expect(pushed).toBe(true);
   });
 
   it("upgrades a legacy Router Space to the broker credential during update", async () => {
@@ -3563,7 +3566,7 @@ describe("mlclaw CLI", () => {
     expect(hub.calls.some((call) => call.name === "assertBucketAccessible")).toBe(false);
   });
 
-  it("reports a Telegram deployment missing its distinct approval bot", async () => {
+  it("accepts a Telegram deployment that shares its conversation bot", async () => {
     const hub = createFakeHub({ existingSpaces: ["alice/research"] });
     await hub.addSpaceVariable("alice/research", "OPENCLAW_HF_STATE_BUCKET", "alice/research-data");
     await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
@@ -3577,7 +3580,7 @@ describe("mlclaw CLI", () => {
     };
 
     await expect(main(["doctor", "alice/research"], runtime)).resolves.toBe(0);
-    expect(output.join("\n")).toContain("Telegram is missing the separate unYOLO approval bot secret");
+    expect(output.join("\n")).not.toContain("approval bot secret");
   });
 
   it("repairs app Space mounted state and removes stale broad Hub token secrets", async () => {

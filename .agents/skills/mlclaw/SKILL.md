@@ -69,9 +69,8 @@ Collect or confirm:
   - `local`: Docker gateway on the user's machine.
 - Optional model override.
 - Optional Docker context for local mode.
-- Optional Telegram conversation bot token, a separate unYOLO approval bot
-  token, and one positive private-chat user ID. Telegram deployments require
-  both bots.
+- Optional Telegram bot token and one positive private-chat user ID. A separate
+  unYOLO approval bot token remains available for existing two-bot deployments.
 - Optional explicit owner, name, or bucket only when the user needs them.
 
 If a Telegram conversation token is provided, ML Claw calls Telegram `getMe`,
@@ -144,32 +143,30 @@ npx mlclaw@latest bootstrap --name mlclaw --public-space
 
 ## Optional Telegram
 
-Telegram is optional and should not be required for the default setup. A
-Telegram deployment uses two BotFather bots in the same private chat. OpenClaw
-owns the conversation bot. HF Broker and the supervised `unyolo-telegram`
-ingress own the approval bot.
+Telegram is optional and should not be required for the default setup. One
+BotFather bot can carry OpenClaw conversations and unYOLO approval buttons.
+ML Claw runs Telegram Bot Mux as the only upstream poller and gives each
+consumer its own local token and queue.
 
 ```bash
 npx mlclaw@latest bootstrap \
-  --telegram-token-file ~/secrets/mlclaw-chat-bot.env \
-  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env \
+  --telegram-token-file ~/secrets/mlclaw-bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
 ```
 
-The approval file may contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw
-token. Never reuse the conversation bot. Telegram permits one `getUpdates`
-poller per token, and the approval bot is a separate trust boundary. Use a
-positive user ID for a one-to-one chat; ML Claw rejects group and channel IDs.
-Both bots must reach the standard Telegram Bot API directly. Custom API roots
-and Telegram-specific proxies are unsupported because the approval ingress
-cannot apply them consistently.
+Use a positive user ID for a one-to-one chat; ML Claw rejects group and channel
+IDs. The physical token stays in the trusted mux process. OpenClaw, HF Broker,
+and `unyolo-telegram` receive only local mux credentials. The mux routes `bk:`
+callbacks exclusively to unYOLO and keeps its SQLite queue in protected durable
+state.
 
-For an existing Telegram deployment, rerun bootstrap with
-`--approval-telegram-token-file` before updating. `mlclaw update` fails closed
-when the Space has a conversation token but lacks the approval token, and
-`mlclaw doctor` reports the mismatch.
+Existing two-bot deployments remain supported through
+`--approval-telegram-token-file`. The approval file may contain
+`MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw token, and it must identify a
+different bot. User-supplied Telegram API roots and Telegram-specific proxies
+remain unsupported because ML Claw manages those routes internally.
 
 Free Hugging Face Spaces intentionally block outbound TLS to some messaging
 APIs for anti-abuse reasons. Telegram and Discord connectivity from a Space
