@@ -102,6 +102,24 @@ describe("runtime image Dockerfile", () => {
     expect(config.session?.maintenance?.resetArchiveRetention).toBe(false);
   });
 
+  it("keeps Telegram credentials and removed fields out of the disabled default channel", async () => {
+    const config = JSON.parse(await fs.readFile("openclaw.default.json", "utf8")) as {
+      channels?: {
+        telegram?: {
+          enabled?: boolean;
+          botToken?: string;
+          timeoutSeconds?: number;
+          pollingStallThresholdMs?: number;
+        };
+      };
+    };
+
+    expect(config.channels?.telegram?.enabled).toBe(false);
+    expect(config.channels?.telegram?.botToken).toBeUndefined();
+    expect(config.channels?.telegram?.timeoutSeconds).toBeUndefined();
+    expect(config.channels?.telegram?.pollingStallThresholdMs).toBeUndefined();
+  });
+
   it("publishes and verifies the runtime image before publishing npm", async () => {
     const workflow = await fs.readFile(".github/workflows/publish.yml", "utf8");
     const buildImage = workflow.indexOf("name: Build and publish runtime image");
