@@ -163,4 +163,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           MLCLAW_CANONICAL_SPACE_ID: ${{ inputs.template_space || 'osolmaz/mlclaw' }}
-        run: node dist/mlclaw.mjs update "$MLCLAW_CANONICAL_SPACE_ID" --force
+          SPACE_ID: ${{ inputs.template_space || 'osolmaz/mlclaw' }}
+        run: node dist/mlclaw.mjs update "$SPACE_ID" --force
