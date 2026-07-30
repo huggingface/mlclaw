@@ -28,11 +28,8 @@
   "channels": {
     "telegram": {
       "enabled": false,
-      "botToken": "${TELEGRAM_BOT_TOKEN}",
       "dmPolicy": "allowlist",
       "allowFrom": [],
-      "timeoutSeconds": 45,
-      "pollingStallThresholdMs": 60000,
       "commands": {
         "native": false
       },
