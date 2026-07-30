@@ -91,9 +91,13 @@ prepare_telegram_bot_mux_secrets() {
   printf '%s\n' "$physical_token" > "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE"
   /usr/local/bin/telegram-bot-mux generate-client-token --out "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE"
   /usr/local/bin/telegram-bot-mux generate-client-token --out "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
-  chown root:mlclaw-protected "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
-  chmod 0600 "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE"
-  chmod 0640 "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  chown telegram-bot-mux:telegram-bot-mux \
+    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+  chmod 0600 \
+    "$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \
+    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
   cat > "$TELEGRAM_BOT_MUX_CONFIG_FILE" <<EOF
 {"version":1,"listen":"127.0.0.1:7865","database":"$TELEGRAM_BOT_MUX_DATABASE","telegram":{"token_file":"$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE","allowed_updates":["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member"]},"clients":[{"id":"openclaw","token_file":"$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE"},{"id":"unyolo","token_file":"$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"}],"routing":{"mode":"exclusive","rules":[{"clients":["unyolo"],"update_types":["callback_query"],"callback_data_prefixes":["bk:"]}],"fallback_clients":["openclaw"]}}
 EOF
@@ -129,7 +133,9 @@ prepare_unyolo_telegram_secret() {
   install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"
   if [ -z "$approval_token" ]; then
     prepare_telegram_bot_mux_secrets "$conversation_token"
-    UNYOLO_TELEGRAM_TOKEN_FILE="$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"
+    install -m 0640 -o unyolo-telegram -g mlclaw-protected \
+      "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE" \
+      "$UNYOLO_TELEGRAM_TOKEN_FILE"
   else
     if [ "$approval_token" = "$conversation_token" ]; then
       echo "[unyolo-telegram] omit MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN to share the conversation bot" >&2
@@ -221,7 +227,7 @@ prepare_unyolo_telegram_state() {
   if [ "$TELEGRAM_BOT_MUX_ENABLED" = "1" ]; then
     telegram_api_base_json=",\"telegram_api_base\":\"$TELEGRAM_BOT_MUX_UNYOLO_BASE\""
   fi
-  printf '{"telegram_bot_token_file":"%s"%s,"telegram_chat_id":%s,"inbox_path":"%s","inbox_key_file":"%s","routes":{"h":{"operator_endpoint":"http://127.0.0.1:7864","operator_token_file":"%s"}}}\n' \
+  printf '{"telegram_bot_token_file":"%s"%s,"telegram_chat_id":%s,"inbox_path":"%s","inbox_key_file":"%s","routes":{"h":{"operator_endpoint":"tcp://127.0.0.1:7864","operator_token_file":"%s"}}}\n' \
     "$UNYOLO_TELEGRAM_TOKEN_FILE" \
     "$telegram_api_base_json" \
     "$TELEGRAM_ALLOWED_USERS" \

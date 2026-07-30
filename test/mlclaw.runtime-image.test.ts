@@ -172,6 +172,13 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$UNYOLO_TELEGRAM_RUN_DIR"');
     expect(entrypoint).toContain('if [ -z "$approval_token" ]');
     expect(entrypoint).toContain('prepare_telegram_bot_mux_secrets "$conversation_token"');
+    expect(entrypoint).toContain("chown telegram-bot-mux:telegram-bot-mux \\");
+    expect(entrypoint).toContain(
+      '"$TELEGRAM_BOT_MUX_PHYSICAL_TOKEN_FILE" \\\n    "$TELEGRAM_BOT_MUX_OPENCLAW_TOKEN_FILE" \\\n    "$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"',
+    );
+    expect(entrypoint).toContain("install -m 0640 -o unyolo-telegram -g mlclaw-protected \\");
+    expect(entrypoint).toContain('"$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE" \\\n      "$UNYOLO_TELEGRAM_TOKEN_FILE"');
+    expect(entrypoint).not.toContain('UNYOLO_TELEGRAM_TOKEN_FILE="$TELEGRAM_BOT_MUX_UNYOLO_TOKEN_FILE"');
     expect(entrypoint).toContain('export TELEGRAM_API_ROOT="$TELEGRAM_BOT_MUX_OPENCLAW_BASE"');
     expect(entrypoint).toContain('"callback_data_prefixes":["bk:"]');
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_API_BASE=$TELEGRAM_BOT_MUX_UNYOLO_BASE");
@@ -186,6 +193,8 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain("unset MLCLAW_BROKER_HF_TOKEN MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_BOT_TOKEN_FILE=$UNYOLO_TELEGRAM_TOKEN_FILE");
     expect(entrypoint).toContain("HF_BROKER_TELEGRAM_CHAT_ID=$TELEGRAM_ALLOWED_USERS");
+    expect(entrypoint).toContain('"operator_endpoint":"tcp://127.0.0.1:7864"');
+    expect(entrypoint).not.toContain('"operator_endpoint":"http://127.0.0.1:7864"');
     expect(entrypoint).toContain("prepare_telegram_bot_mux_state");
     expect(entrypoint).toContain('TELEGRAM_BOT_MUX_STATE_DIR="$PROTECTED_STATE_DIR/telegram-bot-mux"');
     expect(entrypoint).toContain("-u TELEGRAM_BOT_TOKEN");
