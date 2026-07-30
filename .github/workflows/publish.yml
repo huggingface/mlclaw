@@ -62,11 +62,13 @@ jobs:
           openclaw_version="$(node -p 'require("./package.json").config.openclawVersion')"
           unyolo_plugin_version="$(node -p 'require("./package.json").config.unyoloPluginVersion')"
           hf_broker_version="$(node -p 'require("./package.json").config.hfBrokerVersion')"
+          telegram_bot_mux_version="$(node -p 'require("./package.json").config.telegramBotMuxVersion')"
           runtime_image="$(node -p 'require("./package.json").config.runtimeImageRepository')"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "openclaw_version=${openclaw_version}" >> "$GITHUB_OUTPUT"
           echo "unyolo_plugin_version=${unyolo_plugin_version}" >> "$GITHUB_OUTPUT"
           echo "hf_broker_version=${hf_broker_version}" >> "$GITHUB_OUTPUT"
+          echo "telegram_bot_mux_version=${telegram_bot_mux_version}" >> "$GITHUB_OUTPUT"
           echo "runtime_image=${runtime_image}" >> "$GITHUB_OUTPUT"
           echo "runtime_tag=${version}-openclaw-${openclaw_version}" >> "$GITHUB_OUTPUT"
       - run: npm ci
@@ -132,6 +134,7 @@ jobs:
             OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${{ steps.runtime-config.outputs.openclaw_version }}
             UNYOLO_PLUGIN_VERSION=${{ steps.runtime-config.outputs.unyolo_plugin_version }}
             HF_BROKER_VERSION=${{ steps.runtime-config.outputs.hf_broker_version }}
+            TELEGRAM_BOT_MUX_VERSION=${{ steps.runtime-config.outputs.telegram_bot_mux_version }}
             MLCLAW_RUNTIME_IMAGE=${{ steps.runtime-config.outputs.runtime_image }}:${{ steps.runtime-config.outputs.runtime_tag }}
           tags: |
             ${{ steps.runtime-config.outputs.runtime_image }}:${{ steps.runtime-config.outputs.runtime_tag }}

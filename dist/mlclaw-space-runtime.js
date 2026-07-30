@@ -4418,6 +4418,10 @@ function loadConfig(env = process.env) {
   const runtimeSettings2 = readRuntimeSettings(runtimeSettingsFile);
   const model = runtimeSettings2.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
+  const telegramBotMuxConfigPath = optionalAbsolutePath(
+    env.MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH,
+    "MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH"
+  );
   return {
     port,
     openclawPort,
@@ -4466,6 +4470,8 @@ function loadConfig(env = process.env) {
     openclawCommand,
     openclawArgs,
     unyoloPluginPath: trim(env.MLCLAW_UNYOLO_PLUGIN_PATH) ?? "/opt/openclaw-plugins/node_modules/openclaw-unyolo",
+    telegramBotMuxConfigPath,
+    telegramBotMuxReadyUrl: telegramBotMuxConfigPath ? "http://127.0.0.1:7865/readyz" : void 0,
     unyoloTelegramConfigPath: optionalAbsolutePath(
       env.MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH,
       "MLCLAW_UNYOLO_TELEGRAM_CONFIG_PATH"
@@ -20238,10 +20244,12 @@ var SpaceRuntimeServer = class {
     });
   }
   openclaw;
+  telegramBotMux;
   unyoloTelegram;
   openclawGatewayPassword = randomBytes9(48).toString("base64url");
   openclawStarting = false;
   openclawStopping = false;
+  telegramBotMuxStopping = false;
   unyoloTelegramStopping = false;
   app;
   exitProcess;
@@ -20254,6 +20262,7 @@ var SpaceRuntimeServer = class {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
       try {
+        await this.startTelegramBotMux();
         await this.startUnyoloTelegram();
         await this.startOpenClaw();
       } catch (err) {
@@ -20315,7 +20324,48 @@ var SpaceRuntimeServer = class {
   async stop() {
     await this.stopOpenClaw();
     await this.stopUnyoloTelegram();
+    await this.stopTelegramBotMux();
     await this.mcpIntegrations.stop();
+  }
+  async startTelegramBotMux() {
+    const configPath = this.config.telegramBotMuxConfigPath;
+    if (!configPath || this.telegramBotMux) return;
+    const command = this.config.telegramBotMuxCommand ?? "/usr/sbin/gosu";
+    const args = this.config.telegramBotMuxArgs ?? [
+      "telegram-bot-mux",
+      "/usr/local/bin/telegram-bot-mux",
+      "serve",
+      "--config",
+      configPath
+    ];
+    try {
+      await spawnSidecar(
+        command,
+        args,
+        telegramBotMuxEnvironment(process.env),
+        "telegram-bot-mux",
+        (child) => {
+          this.telegramBotMux = child;
+        },
+        (child, code) => {
+          if (this.telegramBotMux === child) this.telegramBotMux = void 0;
+          if (!this.telegramBotMuxStopping) this.exitProcess(code);
+        }
+      );
+    } catch (error) {
+      this.telegramBotMux = void 0;
+      throw error;
+    }
+    if (this.config.telegramBotMuxReadyUrl) {
+      await waitForSidecarReady(this.telegramBotMux, this.config.telegramBotMuxReadyUrl, "telegram-bot-mux");
+    }
+    process.stdout.write("[telegram-bot-mux] shared Telegram poller started\n");
+  }
+  async stopTelegramBotMux() {
+    this.telegramBotMuxStopping = true;
+    await stopSidecar(this.telegramBotMux);
+    this.telegramBotMux = void 0;
+    this.telegramBotMuxStopping = false;
   }
   async startUnyoloTelegram() {
     const configPath = this.config.unyoloTelegramConfigPath;
@@ -20328,50 +20378,30 @@ var SpaceRuntimeServer = class {
       "--config",
       configPath
     ];
-    const child = spawn2(command, args, {
-      stdio: "inherit",
-      env: unyoloTelegramEnvironment(process.env)
-    });
-    this.unyoloTelegram = child;
-    let started = false;
-    const spawned = new Promise((resolve, reject) => {
-      child.once("spawn", () => {
-        started = true;
-        resolve();
-      });
-      child.once("error", reject);
-    });
-    child.once("exit", (code, signal) => {
-      process.stdout.write(`[unyolo-telegram] exited code=${code ?? "null"} signal=${signal ?? "null"}
-`);
-      if (this.unyoloTelegram === child) this.unyoloTelegram = void 0;
-      if (started && !this.unyoloTelegramStopping) {
-        this.exitProcess(typeof code === "number" && code !== 0 ? code : 1);
-      }
-    });
     try {
-      await spawned;
-    } catch (err) {
-      if (this.unyoloTelegram === child) this.unyoloTelegram = void 0;
-      throw err;
+      await spawnSidecar(
+        command,
+        args,
+        unyoloTelegramEnvironment(process.env),
+        "unyolo-telegram",
+        (child) => {
+          this.unyoloTelegram = child;
+        },
+        (child, code) => {
+          if (this.unyoloTelegram === child) this.unyoloTelegram = void 0;
+          if (!this.unyoloTelegramStopping) this.exitProcess(code);
+        }
+      );
+    } catch (error) {
+      this.unyoloTelegram = void 0;
+      throw error;
     }
     process.stdout.write("[unyolo-telegram] approval ingress started\n");
   }
   async stopUnyoloTelegram() {
-    const child = this.unyoloTelegram;
-    if (!child || child.exitCode !== null || child.signalCode !== null) {
-      this.unyoloTelegram = void 0;
-      return;
-    }
     this.unyoloTelegramStopping = true;
-    child.kill("SIGTERM");
-    await new Promise((resolve) => {
-      const timer = setTimeout(() => child.kill("SIGKILL"), 1e4);
-      child.once("exit", () => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+    await stopSidecar(this.unyoloTelegram);
+    this.unyoloTelegram = void 0;
     this.unyoloTelegramStopping = false;
   }
   async stopOpenClaw() {
@@ -20549,7 +20579,50 @@ var SpaceRuntimeServer = class {
     res.end(body);
   }
 };
-var UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
+async function spawnSidecar(command, args, env, label, assign, onUnexpectedExit) {
+  const child = spawn2(command, args, { stdio: "inherit", env });
+  assign(child);
+  let started = false;
+  const spawned = new Promise((resolve, reject) => {
+    child.once("spawn", () => {
+      started = true;
+      resolve();
+    });
+    child.once("error", reject);
+  });
+  child.once("exit", (code, signal) => {
+    process.stdout.write(`[${label}] exited code=${code ?? "null"} signal=${signal ?? "null"}
+`);
+    if (started) onUnexpectedExit(child, typeof code === "number" && code !== 0 ? code : 1);
+  });
+  await spawned;
+}
+async function stopSidecar(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  await new Promise((resolve) => {
+    const timer = setTimeout(() => child.kill("SIGKILL"), 1e4);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+async function waitForSidecarReady(child, readyUrl, label) {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`${label} exited before readiness`);
+    }
+    try {
+      const response = await fetch(readyUrl, { signal: AbortSignal.timeout(500) });
+      if (response.ok) return;
+    } catch {
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`${label} readiness timed out`);
+}
+var SIDECAR_ENV_ALLOWLIST = [
   "PATH",
   "TZ",
   "LANG",
@@ -20563,13 +20636,15 @@ var UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
   "https_proxy",
   "no_proxy"
 ];
+function telegramBotMuxEnvironment(source) {
+  return sidecarEnvironment(source, "/var/lib/telegram-bot-mux", "telegram-bot-mux");
+}
 function unyoloTelegramEnvironment(source) {
-  const env = {
-    HOME: "/var/lib/unyolo-telegram",
-    USER: "unyolo-telegram",
-    LOGNAME: "unyolo-telegram"
-  };
-  for (const key of UNYOLO_TELEGRAM_ENV_ALLOWLIST) {
+  return sidecarEnvironment(source, "/var/lib/unyolo-telegram", "unyolo-telegram");
+}
+function sidecarEnvironment(source, home, identity) {
+  const env = { HOME: home, USER: identity, LOGNAME: identity };
+  for (const key of SIDECAR_ENV_ALLOWLIST) {
     if (source[key] !== void 0) env[key] = source[key];
   }
   return env;
@@ -20589,7 +20664,8 @@ var OPENCLAW_ENV_ALLOWLIST = [
   "MLCLAW_HF_BROKER_URL",
   "MLCLAW_HF_BROKER_AGENT_SECRET_FILE",
   "TELEGRAM_ALLOWED_USERS",
-  "TELEGRAM_BOT_TOKEN"
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_API_ROOT"
 ];
 function allowedOpenClawEnvironment(source) {
   const env = {};

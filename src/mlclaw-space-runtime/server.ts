@@ -25,10 +25,12 @@ type SpaceRuntimeServerOptions = {
 
 export class SpaceRuntimeServer {
   private openclaw: ChildProcess | undefined;
+  private telegramBotMux: ChildProcess | undefined;
   private unyoloTelegram: ChildProcess | undefined;
   private readonly openclawGatewayPassword = randomBytes(48).toString("base64url");
   private openclawStarting = false;
   private openclawStopping = false;
+  private telegramBotMuxStopping = false;
   private unyoloTelegramStopping = false;
   private readonly app: Hono;
   private readonly exitProcess: (code: number) => void;
@@ -83,6 +85,7 @@ export class SpaceRuntimeServer {
     if (this.config.mode === "app") {
       await this.mcpIntegrations.start();
       try {
+        await this.startTelegramBotMux();
         await this.startUnyoloTelegram();
         await this.startOpenClaw();
       } catch (err) {
@@ -144,7 +147,50 @@ export class SpaceRuntimeServer {
   async stop(): Promise<void> {
     await this.stopOpenClaw();
     await this.stopUnyoloTelegram();
+    await this.stopTelegramBotMux();
     await this.mcpIntegrations.stop();
+  }
+
+  private async startTelegramBotMux(): Promise<void> {
+    const configPath = this.config.telegramBotMuxConfigPath;
+    if (!configPath || this.telegramBotMux) return;
+    const command = this.config.telegramBotMuxCommand ?? "/usr/sbin/gosu";
+    const args = this.config.telegramBotMuxArgs ?? [
+      "telegram-bot-mux",
+      "/usr/local/bin/telegram-bot-mux",
+      "serve",
+      "--config",
+      configPath,
+    ];
+    try {
+      await spawnSidecar(
+        command,
+        args,
+        telegramBotMuxEnvironment(process.env),
+        "telegram-bot-mux",
+        (child) => {
+          this.telegramBotMux = child;
+        },
+        (child, code) => {
+          if (this.telegramBotMux === child) this.telegramBotMux = undefined;
+          if (!this.telegramBotMuxStopping) this.exitProcess(code);
+        },
+      );
+    } catch (error) {
+      this.telegramBotMux = undefined;
+      throw error;
+    }
+    if (this.config.telegramBotMuxReadyUrl) {
+      await waitForSidecarReady(this.telegramBotMux, this.config.telegramBotMuxReadyUrl, "telegram-bot-mux");
+    }
+    process.stdout.write("[telegram-bot-mux] shared Telegram poller started\n");
+  }
+
+  private async stopTelegramBotMux(): Promise<void> {
+    this.telegramBotMuxStopping = true;
+    await stopSidecar(this.telegramBotMux);
+    this.telegramBotMux = undefined;
+    this.telegramBotMuxStopping = false;
   }
 
   private async startUnyoloTelegram(): Promise<void> {
@@ -158,50 +204,31 @@ export class SpaceRuntimeServer {
       "--config",
       configPath,
     ];
-    const child = spawn(command, args, {
-      stdio: "inherit",
-      env: unyoloTelegramEnvironment(process.env),
-    });
-    this.unyoloTelegram = child;
-    let started = false;
-    const spawned = new Promise<void>((resolve, reject) => {
-      child.once("spawn", () => {
-        started = true;
-        resolve();
-      });
-      child.once("error", reject);
-    });
-    child.once("exit", (code, signal) => {
-      process.stdout.write(`[unyolo-telegram] exited code=${code ?? "null"} signal=${signal ?? "null"}\n`);
-      if (this.unyoloTelegram === child) this.unyoloTelegram = undefined;
-      if (started && !this.unyoloTelegramStopping) {
-        this.exitProcess(typeof code === "number" && code !== 0 ? code : 1);
-      }
-    });
     try {
-      await spawned;
-    } catch (err) {
-      if (this.unyoloTelegram === child) this.unyoloTelegram = undefined;
-      throw err;
+      await spawnSidecar(
+        command,
+        args,
+        unyoloTelegramEnvironment(process.env),
+        "unyolo-telegram",
+        (child) => {
+          this.unyoloTelegram = child;
+        },
+        (child, code) => {
+          if (this.unyoloTelegram === child) this.unyoloTelegram = undefined;
+          if (!this.unyoloTelegramStopping) this.exitProcess(code);
+        },
+      );
+    } catch (error) {
+      this.unyoloTelegram = undefined;
+      throw error;
     }
     process.stdout.write("[unyolo-telegram] approval ingress started\n");
   }
 
   private async stopUnyoloTelegram(): Promise<void> {
-    const child = this.unyoloTelegram;
-    if (!child || child.exitCode !== null || child.signalCode !== null) {
-      this.unyoloTelegram = undefined;
-      return;
-    }
     this.unyoloTelegramStopping = true;
-    child.kill("SIGTERM");
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
-      child.once("exit", () => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+    await stopSidecar(this.unyoloTelegram);
+    this.unyoloTelegram = undefined;
     this.unyoloTelegramStopping = false;
   }
 
@@ -429,7 +456,60 @@ export class SpaceRuntimeServer {
   }
 }
 
-const UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
+async function spawnSidecar(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  label: string,
+  assign: (child: ChildProcess) => void,
+  onUnexpectedExit: (child: ChildProcess, code: number) => void,
+): Promise<void> {
+  const child = spawn(command, args, { stdio: "inherit", env });
+  assign(child);
+  let started = false;
+  const spawned = new Promise<void>((resolve, reject) => {
+    child.once("spawn", () => {
+      started = true;
+      resolve();
+    });
+    child.once("error", reject);
+  });
+  child.once("exit", (code, signal) => {
+    process.stdout.write(`[${label}] exited code=${code ?? "null"} signal=${signal ?? "null"}\n`);
+    if (started) onUnexpectedExit(child, typeof code === "number" && code !== 0 ? code : 1);
+  });
+  await spawned;
+}
+
+async function stopSidecar(child: ChildProcess | undefined): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+async function waitForSidecarReady(child: ChildProcess | undefined, readyUrl: string, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`${label} exited before readiness`);
+    }
+    try {
+      const response = await fetch(readyUrl, { signal: AbortSignal.timeout(500) });
+      if (response.ok) return;
+    } catch {
+      // Readiness retries are bounded below.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`${label} readiness timed out`);
+}
+
+const SIDECAR_ENV_ALLOWLIST = [
   "PATH",
   "TZ",
   "LANG",
@@ -444,13 +524,17 @@ const UNYOLO_TELEGRAM_ENV_ALLOWLIST = [
   "no_proxy",
 ] as const;
 
+function telegramBotMuxEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return sidecarEnvironment(source, "/var/lib/telegram-bot-mux", "telegram-bot-mux");
+}
+
 function unyoloTelegramEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    HOME: "/var/lib/unyolo-telegram",
-    USER: "unyolo-telegram",
-    LOGNAME: "unyolo-telegram",
-  };
-  for (const key of UNYOLO_TELEGRAM_ENV_ALLOWLIST) {
+  return sidecarEnvironment(source, "/var/lib/unyolo-telegram", "unyolo-telegram");
+}
+
+function sidecarEnvironment(source: NodeJS.ProcessEnv, home: string, identity: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { HOME: home, USER: identity, LOGNAME: identity };
+  for (const key of SIDECAR_ENV_ALLOWLIST) {
     if (source[key] !== undefined) env[key] = source[key];
   }
   return env;
@@ -472,6 +556,7 @@ const OPENCLAW_ENV_ALLOWLIST = [
   "MLCLAW_HF_BROKER_AGENT_SECRET_FILE",
   "TELEGRAM_ALLOWED_USERS",
   "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_API_ROOT",
 ] as const;
 
 function allowedOpenClawEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

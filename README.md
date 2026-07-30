@@ -145,49 +145,37 @@ DeepSeek V4 Flash and Pro, and MiniMax M3. Use the provider suffix
 
 ## Optional Telegram
 
-Telegram deployments use two BotFather bots in the same private chat. The first
-bot handles ordinary OpenClaw conversations. The second bot shows unYOLO
-approval requests and owns the Approve and Deny buttons. Separate bot identities
-keep approval credentials outside OpenClaw and avoid two `getUpdates` pollers
-competing for one token.
+A Telegram deployment can use one BotFather bot for conversations and unYOLO
+approval buttons. ML Claw runs
+[Telegram Bot Mux](https://github.com/osolmaz/telegram-bot-mux) inside the
+trusted runtime. The mux owns Telegram polling and gives OpenClaw and unYOLO
+separate local queues and credentials.
 
-Start a private chat with each bot before bootstrapping, then pass the same
-positive Telegram user ID as the chat ID for both:
+Start a private chat with the bot, then pass one positive Telegram user ID:
 
 ```bash
 npx mlclaw@latest bootstrap \
-  --telegram-token-file ~/secrets/mlclaw-chat-bot.env \
-  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env \
+  --telegram-token-file ~/secrets/mlclaw-bot.env \
   --telegram-user-id 1234567890 \
   --hardware cpu-upgrade \
   --sleep-time -1
 ```
 
-The conversation file may contain `TELEGRAM_BOT_TOKEN=...` or a raw token. The
-approval file may contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw token.
-Interactive bootstrap asks for the approval token through a hidden prompt when
-the file is omitted. ML Claw verifies that the two tokens identify different
-bots and rejects group or channel chat IDs.
+The token file may contain `TELEGRAM_BOT_TOKEN=...` or a raw token. The physical
+bot token stays in a mux-owned runtime file. OpenClaw, HF Broker, and the
+supervised `unyolo-telegram` ingress receive short-lived local client tokens
+instead. The mux routes `bk:` approval callbacks only to unYOLO and sends other
+updates to OpenClaw.
 
-The approval token is written to a protected runtime file for HF Broker and the
-single supervised `unyolo-telegram` ingress. It is removed from the wrapper
-environment before OpenClaw starts. Both bots use the standard Telegram Bot API
-directly; custom API roots and Telegram-specific proxies are unsupported because
-the approval ingress cannot apply them consistently. Pending callbacks and their
-encryption key are included in durable state snapshots, so button decisions
-resume after a restart.
+Existing two-bot deployments remain supported. Pass
+`--approval-telegram-token-file` to keep a distinct approval bot. That file may
+contain `MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN=...` or a raw token, and ML Claw
+verifies that it identifies a different bot.
 
-Existing Telegram deployments need one reconfiguration run before they can use
-a runtime with approval routing:
-
-```bash
-npx mlclaw@latest bootstrap \
-  --name mlclaw \
-  --approval-telegram-token-file ~/secrets/mlclaw-approval-bot.env
-```
-
-`mlclaw update` stops before changing an older Telegram Space that lacks the
-approval bot secret. `mlclaw doctor` reports the same condition.
+ML Claw manages Telegram API roots inside the runtime, so user-supplied
+`TELEGRAM_API_ROOT` and `TELEGRAM_PROXY` values are rejected. The mux database,
+pending callbacks, and callback encryption key are included in durable state
+snapshots.
 
 When a conversation token is provided, ML Claw calls Telegram `getMe`, removes
 a trailing `_bot` from the username, and can derive the Space and bucket names

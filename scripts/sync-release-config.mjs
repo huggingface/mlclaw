@@ -16,6 +16,7 @@ const releaseConfig = {
   packageVersion: requiredString(pkg.version, "package version"),
   openclawVersion: requiredString(pkg.config?.openclawVersion, "OpenClaw version"),
   hfBrokerVersion: requiredString(pkg.config?.hfBrokerVersion, "HF Broker version"),
+  telegramBotMuxVersion: requiredString(pkg.config?.telegramBotMuxVersion, "Telegram Bot Mux version"),
   unyoloPluginVersion: requiredString(pkg.config?.unyoloPluginVersion, "unYOLO plugin version"),
   runtimeImageRepository: requiredString(pkg.config?.runtimeImageRepository, "runtime image repository"),
 };
@@ -37,6 +38,7 @@ const dockerValues = new Map([
   ["OPENCLAW_BASE_IMAGE", "ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}"],
   ["UNYOLO_PLUGIN_VERSION", releaseConfig.unyoloPluginVersion],
   ["HF_BROKER_VERSION", releaseConfig.hfBrokerVersion],
+  ["TELEGRAM_BOT_MUX_VERSION", releaseConfig.telegramBotMuxVersion],
   ["MLCLAW_RUNTIME_IMAGE", runtimeImage],
 ]);
 const currentDockerfile = fs.readFileSync(dockerfile, "utf8");
