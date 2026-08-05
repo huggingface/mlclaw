@@ -20499,7 +20499,10 @@ var SpaceRuntimeServer = class {
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
         ...extraEnv
       };
-      if (!this.config.brokerAgentUrl && this.config.routerToken) {
+      if (this.config.brokerAgentSecret) {
+        env.HF_TOKEN = this.config.brokerAgentSecret;
+        env.HUGGINGFACE_HUB_TOKEN = this.config.brokerAgentSecret;
+      } else if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }
