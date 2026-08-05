@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { HubApi } from "./hub-api.js";
-import { UNYOLO_PLUGIN_VERSION, HF_BROKER_VERSION, OPENCLAW_BASE_IMAGE } from "./runtime-image.js";
+import { UNYOLO_PLUGIN_VERSION, HF_BROKER_VERSION, OPENCLAW_BASE_IMAGE, TELEGRAM_BOT_MUX_VERSION } from "./runtime-image.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -106,6 +106,9 @@ function imageDockerfile(runtimeImage: string): string {
 function bundledDockerfile(): string {
   return `ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}
 ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}
+ARG TELEGRAM_BOT_MUX_VERSION=${TELEGRAM_BOT_MUX_VERSION}
+
+FROM ghcr.io/osolmaz/telegram-bot-mux:v${TELEGRAM_BOT_MUX_VERSION} AS telegram-bot-mux
 
 FROM golang:1.26.5-bookworm AS hf-broker-build
 ARG HF_BROKER_VERSION
@@ -162,6 +165,7 @@ COPY --chown=node:node runtime/hf-state-sync.js /app/hf-state-sync.js
 COPY --chown=node:node runtime/hf-tooling-seed.js /app/hf-tooling-seed.js
 COPY --chown=node:node runtime/mlclaw-space-runtime.js /app/mlclaw-space-runtime.js
 COPY --from=hf-broker-build /out/hf-broker /usr/local/bin/hf-broker
+COPY --from=telegram-bot-mux /usr/local/bin/telegram-bot-mux /usr/local/bin/telegram-bot-mux
 COPY --from=hf-broker-build /out/unyolo-telegram /usr/local/bin/unyolo-telegram
 COPY --from=hf-broker-build /out/hf-broker.scope.json /app/hf-broker.scope.json
 COPY --from=hf-broker-build /out/hf-broker.policy-profile.json /app/hf-broker.policy-profile.json
