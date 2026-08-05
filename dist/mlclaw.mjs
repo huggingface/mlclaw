@@ -15383,9 +15383,9 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.10.1",
+  "packageVersion": "0.10.2",
   "openclawVersion": "2026.7.2-beta.5",
-  "hfBrokerVersion": "hf-broker/v0.9.0",
+  "hfBrokerVersion": "hf-broker/v0.9.1",
   "telegramBotMuxVersion": "0.1.0",
   "unyoloPluginVersion": "0.6.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
@@ -15531,6 +15531,7 @@ RUN apt-get update \\
   && apt-get install -y --no-install-recommends ca-certificates gosu python3 python3-pip python3-venv zstd \\
   && groupadd --system mlclaw-protected \\
   && useradd --system --home-dir /var/lib/hf-broker --create-home --shell /usr/sbin/nologin --groups mlclaw-protected hf-broker \\
+  && useradd --system --home-dir /var/lib/telegram-bot-mux --create-home --shell /usr/sbin/nologin --groups mlclaw-protected telegram-bot-mux \\
   && useradd --system --home-dir /var/lib/unyolo-telegram --create-home --shell /usr/sbin/nologin --groups mlclaw-protected unyolo-telegram \\
   && rm -rf /var/lib/apt/lists/*
 RUN python3 -m pip install --break-system-packages --no-cache-dir \\

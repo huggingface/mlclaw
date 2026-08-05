@@ -137,6 +137,7 @@ RUN apt-get update \\
   && apt-get install -y --no-install-recommends ca-certificates gosu python3 python3-pip python3-venv zstd \\
   && groupadd --system mlclaw-protected \\
   && useradd --system --home-dir /var/lib/hf-broker --create-home --shell /usr/sbin/nologin --groups mlclaw-protected hf-broker \\
+  && useradd --system --home-dir /var/lib/telegram-bot-mux --create-home --shell /usr/sbin/nologin --groups mlclaw-protected telegram-bot-mux \\
   && useradd --system --home-dir /var/lib/unyolo-telegram --create-home --shell /usr/sbin/nologin --groups mlclaw-protected unyolo-telegram \\
   && rm -rf /var/lib/apt/lists/*
 RUN python3 -m pip install --break-system-packages --no-cache-dir \\
