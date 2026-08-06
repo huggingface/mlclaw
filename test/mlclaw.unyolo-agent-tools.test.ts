@@ -182,7 +182,11 @@ async function toolResult(
   args: Record<string, unknown>,
   expectError = false,
 ): Promise<JsonObject> {
-  const response = await callMcp(url, "tools/call", { name, arguments: args });
+  const response = await callMcp(url, "tools/call", {
+    name,
+    arguments: args,
+    _meta: { threadId: "mlclaw-agent-tools-test" },
+  });
   expect(response.result.isError).toBe(expectError);
   return jsonObject(response.result.structuredContent, `${name} structured content`);
 }
