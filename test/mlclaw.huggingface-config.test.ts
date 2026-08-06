@@ -44,6 +44,25 @@ describe("Hugging Face model config", () => {
     });
   });
 
+  it("marks Kimi K3 as a reasoning model with a thinking-sized token budget", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-model-"));
+    const configPath = path.join(dir, "openclaw.json");
+    await fs.writeFile(configPath, "{}");
+
+    await execFileAsync("node", ["scripts/configure-huggingface-model.mjs", configPath], {
+      env: {
+        ...process.env,
+        OPENCLAW_MODEL: "huggingface/moonshotai/Kimi-K3:baseten",
+      },
+    });
+
+    const config = JSON.parse(await fs.readFile(configPath, "utf8"));
+    expect(config.models.providers.huggingface.models[0]).toMatchObject({
+      reasoning: true,
+      maxTokens: 32768,
+    });
+  });
+
   it("does nothing for non-Hugging Face model refs", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-model-"));
     const configPath = path.join(dir, "openclaw.json");

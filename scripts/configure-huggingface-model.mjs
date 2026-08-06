@@ -44,6 +44,12 @@ function contextWindowForModel(id) {
   return 131072;
 }
 
+function isReasoningModel(id) {
+  // Kimi thinking models (K3, K2.6, K2.7) reason by default without carrying
+  // any of the generic reasoning markers.
+  return /r1|reason|thinking|reasoner|qwq|qwen|kimi-k3|kimi-k2\.6|kimi-k2\.7/i.test(id);
+}
+
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 config.models ||= {};
 config.models.providers ||= {};
@@ -59,8 +65,10 @@ const defaultEntry = {
   name: displayNameFromModelId(providerModelId),
   input: isLikelyImageModel(providerModelId) ? ["text", "image"] : ["text"],
   contextWindow: contextWindowForModel(providerModelId),
-  maxTokens: 8192,
-  reasoning: /r1|reason|thinking|reasoner|qwq/i.test(providerModelId),
+  // Reasoning models need budget for both the thinking phase and the answer;
+  // a short cap truncates the turn before any reply content exists.
+  maxTokens: isReasoningModel(providerModelId) ? 32768 : 8192,
+  reasoning: isReasoningModel(providerModelId),
   cost: {
     input: 0,
     output: 0,
