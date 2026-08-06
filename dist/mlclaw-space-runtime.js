@@ -5629,6 +5629,7 @@ function migrateLegacyCodexModelRefs(value) {
 }
 function modelDefinitionFromChoice(choice) {
   const providerModelId = providerModelIdFromChoice(choice);
+  const reasoning = isReasoningModel(choice.modelId);
   return {
     id: providerModelId,
     name: `${choice.label} (${choice.provider})`,
@@ -5636,19 +5637,25 @@ function modelDefinitionFromChoice(choice) {
     contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
     // Reasoning models need budget for both the thinking phase and the answer;
     // a short cap truncates the turn before any reply content exists.
-    maxTokens: isReasoningModel(choice.modelId) ? 32768 : 8192,
-    reasoning: isReasoningModel(choice.modelId),
-    cost: {
-      input: choice.pricing?.input ?? 0,
-      output: choice.pricing?.output ?? 0,
-      cacheRead: 0,
-      cacheWrite: 0
-    },
+    maxTokens: reasoning ? 32768 : 8192,
+    reasoning,
+    cost: modelCostFromChoice(choice),
     api: "openai-completions",
-    compat: {
-      supportsTools: choice.supportsTools ?? true,
-      supportsStrictMode: choice.supportsStructuredOutput ?? false
-    }
+    compat: modelCompatibilityFromChoice(choice)
+  };
+}
+function modelCostFromChoice(choice) {
+  return {
+    input: choice.pricing?.input ?? 0,
+    output: choice.pricing?.output ?? 0,
+    cacheRead: 0,
+    cacheWrite: 0
+  };
+}
+function modelCompatibilityFromChoice(choice) {
+  return {
+    supportsTools: choice.supportsTools ?? true,
+    supportsStrictMode: choice.supportsStructuredOutput ?? false
   };
 }
 function providerModelIdFromChoice(choice) {

@@ -5,7 +5,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { HubApi } from "./hub-api.js";
-import { UNYOLO_PLUGIN_VERSION, HF_BROKER_VERSION, OPENCLAW_BASE_IMAGE, TELEGRAM_BOT_MUX_VERSION } from "./runtime-image.js";
+import {
+  UNYOLO_PLUGIN_VERSION,
+  HF_BROKER_VERSION,
+  OPENCLAW_BASE_IMAGE,
+  TELEGRAM_BOT_MUX_VERSION,
+} from "./runtime-image.js";
 
 const execFileAsync = promisify(execFile);
 
