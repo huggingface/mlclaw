@@ -5634,7 +5634,9 @@ function modelDefinitionFromChoice(choice) {
     name: `${choice.label} (${choice.provider})`,
     input: inputModalitiesForChoice(choice),
     contextWindow: choice.contextLength ?? contextWindowForModel(choice.modelId),
-    maxTokens: 8192,
+    // Reasoning models need budget for both the thinking phase and the answer;
+    // a short cap truncates the turn before any reply content exists.
+    maxTokens: isReasoningModel(choice.modelId) ? 32768 : 8192,
     reasoning: isReasoningModel(choice.modelId),
     cost: {
       input: choice.pricing?.input ?? 0,
@@ -5678,7 +5680,7 @@ function contextWindowForModel(id) {
   return 131072;
 }
 function isReasoningModel(id) {
-  return /r1|reason|thinking|reasoner|qwq|qwen/i.test(id);
+  return /r1|reason|thinking|reasoner|qwq|qwen|kimi-k3|kimi-k2\.6|kimi-k2\.7/i.test(id);
 }
 function object(parent, key) {
   const value = parent[key];
