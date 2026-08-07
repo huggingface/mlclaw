@@ -30,9 +30,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/ajv-formats/dist/formats.js
+// ../../mlclaw/node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "node_modules/ajv-formats/dist/formats.js"(exports) {
+  "../../mlclaw/node_modules/ajv-formats/dist/formats.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
@@ -233,9 +233,9 @@ var require_formats = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/index.js
+// ../../mlclaw/node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports, module) {
+  "../../mlclaw/node_modules/fast-deep-equal/index.js"(exports, module) {
     "use strict";
     module.exports = function equal2(a, b) {
       if (a === b) return true;
@@ -268,9 +268,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js
+// ../../mlclaw/node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js"(exports) {
+  "../../mlclaw/node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var equal2 = require_fast_deep_equal();
@@ -279,9 +279,9 @@ var require_equal = __commonJS({
   }
 });
 
-// node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js
+// ../../mlclaw/node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "../../mlclaw/node_modules/openclaw-unyolo/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length2(str) {
@@ -919,7 +919,7 @@ function positiveNumber(value) {
 import { isAbsolute } from "node:path";
 import { readFileSync } from "node:fs";
 
-// node_modules/openclaw-unyolo/dist/src/generated/operator-validators.js
+// ../../mlclaw/node_modules/openclaw-unyolo/dist/src/generated/operator-validators.js
 var import_formats = __toESM(require_formats(), 1);
 var import_equal = __toESM(require_equal(), 1);
 var import_ucs2length = __toESM(require_ucs2length(), 1);
@@ -4014,7 +4014,7 @@ function validate53(data, { instancePath = "", parentData, parentDataProperty, r
 }
 validate53.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 
-// node_modules/openclaw-unyolo/dist/src/operator-v1.js
+// ../../mlclaw/node_modules/openclaw-unyolo/dist/src/operator-v1.js
 function parseDescriptor(value) {
   return validated(validateDescriptor, value);
 }
@@ -5913,7 +5913,7 @@ import { Readable as Readable2 } from "node:stream";
 import fs5 from "node:fs/promises";
 import path5 from "node:path";
 
-// node_modules/hono/dist/compose.js
+// ../../mlclaw/node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {
     let index = -1;
@@ -5957,10 +5957,10 @@ var compose = (middleware, onError, onNotFound) => {
   };
 };
 
-// node_modules/hono/dist/request/constants.js
+// ../../mlclaw/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
 
-// node_modules/hono/dist/utils/buffer.js
+// ../../mlclaw/node_modules/hono/dist/utils/buffer.js
 var bufferToFormData = (arrayBuffer, contentType2) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -5971,7 +5971,7 @@ var bufferToFormData = (arrayBuffer, contentType2) => {
   return response.formData();
 };
 
-// node_modules/hono/dist/utils/body.js
+// ../../mlclaw/node_modules/hono/dist/utils/body.js
 var isRawRequest = (request) => "headers" in request;
 var parseBody = async (request, options = /* @__PURE__ */ Object.create(null)) => {
   const { all = false, dot = false } = options;
@@ -6051,7 +6051,7 @@ var handleParsingNestedValues = (form, key, value) => {
   });
 };
 
-// node_modules/hono/dist/utils/url.js
+// ../../mlclaw/node_modules/hono/dist/utils/url.js
 var splitPath = (path10) => {
   const paths = path10.split("/");
   if (paths[0] === "") {
@@ -6255,7 +6255,7 @@ var getQueryParams = (url, key) => {
 };
 var decodeURIComponent_ = decodeURIComponent;
 
-// node_modules/hono/dist/request.js
+// ../../mlclaw/node_modules/hono/dist/request.js
 var tryDecodeURIComponent = (str) => tryDecode(str, decodeURIComponent_);
 var HonoRequest = class {
   /**
@@ -6538,7 +6538,7 @@ var HonoRequest = class {
   }
 };
 
-// node_modules/hono/dist/utils/html.js
+// ../../mlclaw/node_modules/hono/dist/utils/html.js
 var HtmlEscapedCallbackPhase = {
   Stringify: 1,
   BeforeStream: 2,
@@ -6580,7 +6580,7 @@ var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => 
   }
 };
 
-// node_modules/hono/dist/context.js
+// ../../mlclaw/node_modules/hono/dist/context.js
 var TEXT_PLAIN = "text/plain; charset=UTF-8";
 var setDefaultContentType = (contentType2, headers) => {
   return {
@@ -6987,7 +6987,7 @@ var Context = class {
   };
 };
 
-// node_modules/hono/dist/router.js
+// ../../mlclaw/node_modules/hono/dist/router.js
 var METHOD_NAME_ALL = "ALL";
 var METHOD_NAME_ALL_LOWERCASE = "all";
 var METHODS = ["get", "post", "put", "delete", "options", "patch"];
@@ -6995,10 +6995,10 @@ var MESSAGE_MATCHER_IS_ALREADY_BUILT = "Can not add a route since the matcher is
 var UnsupportedPathError = class extends Error {
 };
 
-// node_modules/hono/dist/utils/constants.js
+// ../../mlclaw/node_modules/hono/dist/utils/constants.js
 var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
 
-// node_modules/hono/dist/hono-base.js
+// ../../mlclaw/node_modules/hono/dist/hono-base.js
 var notFoundHandler = (c) => {
   return c.text("404 Not Found", 404);
 };
@@ -7374,7 +7374,7 @@ var Hono = class _Hono {
   };
 };
 
-// node_modules/hono/dist/router/reg-exp-router/matcher.js
+// ../../mlclaw/node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
 function match(method, path10) {
   const matchers = this.buildAllMatchers();
@@ -7395,7 +7395,7 @@ function match(method, path10) {
   return match2(method, path10);
 }
 
-// node_modules/hono/dist/router/reg-exp-router/node.js
+// ../../mlclaw/node_modules/hono/dist/router/reg-exp-router/node.js
 var LABEL_REG_EXP_STR = "[^/]+";
 var ONLY_WILDCARD_REG_EXP_STR = ".*";
 var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
@@ -7503,7 +7503,7 @@ var Node = class _Node {
   }
 };
 
-// node_modules/hono/dist/router/reg-exp-router/trie.js
+// ../../mlclaw/node_modules/hono/dist/router/reg-exp-router/trie.js
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
@@ -7559,7 +7559,7 @@ var Trie = class {
   }
 };
 
-// node_modules/hono/dist/router/reg-exp-router/router.js
+// ../../mlclaw/node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
 function buildWildcardRegExp(path10) {
@@ -7738,7 +7738,7 @@ var RegExpRouter = class {
   }
 };
 
-// node_modules/hono/dist/router/smart-router/router.js
+// ../../mlclaw/node_modules/hono/dist/router/smart-router/router.js
 var SmartRouter = class {
   name = "SmartRouter";
   #routers = [];
@@ -7793,7 +7793,7 @@ var SmartRouter = class {
   }
 };
 
-// node_modules/hono/dist/router/trie-router/node.js
+// ../../mlclaw/node_modules/hono/dist/router/trie-router/node.js
 var emptyParams = /* @__PURE__ */ Object.create(null);
 var hasChildren = (children) => {
   for (const _ in children) {
@@ -7968,7 +7968,7 @@ var Node2 = class _Node2 {
   }
 };
 
-// node_modules/hono/dist/router/trie-router/router.js
+// ../../mlclaw/node_modules/hono/dist/router/trie-router/router.js
 var TrieRouter = class {
   name = "TrieRouter";
   #node;
@@ -7990,7 +7990,7 @@ var TrieRouter = class {
   }
 };
 
-// node_modules/hono/dist/hono.js
+// ../../mlclaw/node_modules/hono/dist/hono.js
 var Hono2 = class extends Hono {
   /**
    * Creates an instance of the Hono class.
@@ -8563,7 +8563,7 @@ async function hubRequest(config2, path10, init) {
   return response;
 }
 
-// node_modules/zod/v3/external.js
+// ../../mlclaw/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -8675,7 +8675,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../mlclaw/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_) => {
@@ -8809,7 +8809,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../mlclaw/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -8927,7 +8927,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../mlclaw/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9030,7 +9030,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../mlclaw/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -9039,7 +9039,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../mlclaw/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path10, errorMaps, issueData } = params;
   const fullPath = [...path10, ...issueData.path || []];
@@ -9149,14 +9149,14 @@ var isDirty = (x) => x.status === "dirty";
 var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../mlclaw/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../mlclaw/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path10, key) {
     this._cachedPath = [];
@@ -15192,7 +15192,7 @@ var SplicedBlob = class _SplicedBlob extends Blob {
   }
 };
 
-// node_modules/gearhash-jit/dist/esm/table.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/table.js
 var GEAR_TABLE = [
   0xb088d3a9e840f559n,
   0x5652c7f739ed20d6n,
@@ -15452,7 +15452,7 @@ var GEAR_TABLE = [
   0x63c7a906c1dd187bn
 ];
 
-// node_modules/gearhash-jit/dist/esm/wasm.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/wasm.js
 var TABLE_OFFSET = 0;
 var HASH_OFFSET = 2048;
 var MASK_OFFSET = 2056;
@@ -15588,7 +15588,7 @@ function getView() {
   return wasmView;
 }
 
-// node_modules/gearhash-jit/dist/esm/index.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/index.js
 var Hasher = class {
   maskBytes;
   /**
@@ -15629,7 +15629,7 @@ var Hasher = class {
   }
 };
 
-// node_modules/@huggingface/blake3-jit/dist/esm/compress.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/compress.js
 function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, blockLen, flags) {
   let m0 = block[blockOff] | 0;
   let m1 = block[blockOff + 1] | 0;
@@ -16469,7 +16469,7 @@ function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, block
   out[outOff + 7] = s7 ^ s15;
 }
 
-// node_modules/@huggingface/blake3-jit/dist/esm/constants.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/constants.js
 var IV = new Uint32Array([
   1779033703,
   3144134277,
@@ -16607,7 +16607,7 @@ var PERMUTATIONS = new Uint8Array([
   13
 ]);
 
-// node_modules/@huggingface/blake3-jit/dist/esm/utils.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/utils.js
 var IS_LITTLE_ENDIAN = new Uint8Array(new Uint32Array([16909060]).buffer)[0] === 4;
 function readLittleEndianWordsFull(input, offset, words) {
   for (let i = 0; i < 16; ++i, offset += 4) {
@@ -16690,7 +16690,7 @@ var CTZ32_TABLE = new Uint8Array([
   9
 ]);
 
-// node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
 var XofReader = class {
   inputCv;
   blockWords;
@@ -17044,7 +17044,7 @@ var Hasher2 = class _Hasher {
   }
 };
 
-// node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
 function toLebU32Min2(n) {
   return [n & 127 | 128, n >>> 7 & 127];
 }
@@ -17851,7 +17851,7 @@ var arenaBatchCounterLow = null;
 var arenaBatchFlagsBase = null;
 var arenaBatchOutput = null;
 
-// node_modules/@huggingface/blake3-jit/dist/esm/hash.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hash.js
 var CV_STACK_DEPTH = 64;
 var HYPER_CV_STACK = new Uint32Array(CV_STACK_DEPTH * 8);
 var CV_POOL_SIZE = 64;
@@ -17897,14 +17897,14 @@ function warmupSimd() {
   return ensureSimdSync();
 }
 
-// node_modules/@huggingface/blake3-jit/dist/esm/index.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/index.js
 if (typeof globalThis !== "undefined" && typeof globalThis.document !== "undefined") {
   queueMicrotask(() => {
     warmupSimd();
   });
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
 var TARGET_CHUNK_SIZE = 64 * 1024;
 var MINIMUM_CHUNK_DIVISOR = 8;
 var MAXIMUM_CHUNK_MULTIPLIER = 2;
@@ -18119,7 +18119,7 @@ function hexToBytes(hex) {
   return bytes;
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
 var MEAN_CHUNK_PER_NODE = 4;
 var BLAKE3_NODE_KEY = new Uint8Array([
   1,
@@ -18194,7 +18194,7 @@ function mergedHashOfSequence(chunks) {
   return { hash: hash3, length: totalLength };
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
 var ZERO_KEY = new Uint8Array(32);
 var VERIFICATION_KEY = new Uint8Array([
   127,
