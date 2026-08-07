@@ -1,10 +1,10 @@
 {
   "name": "mlclaw",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "license": "MIT",
   "config": {
     "openclawVersion": "2026.7.2-beta.5",
-    "hfBrokerVersion": "hf-broker/v0.10.0",
+    "hfBrokerVersion": "hf-broker/v0.10.1",
     "telegramBotMuxVersion": "0.1.0",
     "unyoloPluginVersion": "0.7.0",
     "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"

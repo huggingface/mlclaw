@@ -148,7 +148,7 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('RESTORED_PROTECTED_STATE_DIR="$LIVE_DIR/.mlclaw-protected"');
     expect(entrypoint).toContain('PROTECTED_STATE_DIR="/var/lib/mlclaw-protected"');
     expect(entrypoint).toContain('HF_BROKER_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/hf-broker"');
-    expect(entrypoint).toContain('HF_BROKER_STATE_CONTRACT="unyolo-state-v1-grant-uses"');
+    expect(entrypoint).toContain('HF_BROKER_STATE_CONTRACT="unyolo-state-v1-terminal-grant-failures"');
     expect(entrypoint).toContain(
       'HF_BROKER_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/hf-broker-state-contract"',
     );
