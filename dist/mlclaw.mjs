@@ -39,9 +39,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/commander/lib/error.js
+// ../../mlclaw/node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "node_modules/commander/lib/error.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -74,9 +74,9 @@ var require_error = __commonJS({
   }
 });
 
-// node_modules/commander/lib/argument.js
+// ../../mlclaw/node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "node_modules/commander/lib/argument.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -202,9 +202,9 @@ var require_argument = __commonJS({
   }
 });
 
-// node_modules/commander/lib/help.js
+// ../../mlclaw/node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "node_modules/commander/lib/help.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -804,9 +804,9 @@ ${itemIndentStr}`);
   }
 });
 
-// node_modules/commander/lib/option.js
+// ../../mlclaw/node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "node_modules/commander/lib/option.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1117,9 +1117,9 @@ var require_option = __commonJS({
   }
 });
 
-// node_modules/commander/lib/suggestSimilar.js
+// ../../mlclaw/node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b2) {
       if (Math.abs(a.length - b2.length) > maxDistance)
@@ -1197,9 +1197,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// node_modules/commander/lib/command.js
+// ../../mlclaw/node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "node_modules/commander/lib/command.js"(exports) {
+  "../../mlclaw/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path16 = __require("node:path");
@@ -3443,9 +3443,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// node_modules/commander/index.js
+// ../../mlclaw/node_modules/commander/index.js
 var require_commander = __commonJS({
-  "node_modules/commander/index.js"(exports) {
+  "../../mlclaw/node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3465,10 +3465,10 @@ var require_commander = __commonJS({
   }
 });
 
-// node_modules/fast-string-truncated-width/dist/utils.js
+// ../../mlclaw/node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength, isFullWidth, isWideNotCJKTNotEmoji;
 var init_utils = __esm({
-  "node_modules/fast-string-truncated-width/dist/utils.js"() {
+  "../../mlclaw/node_modules/fast-string-truncated-width/dist/utils.js"() {
     getCodePointsLength = /* @__PURE__ */ (() => {
       const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
       return (input) => {
@@ -3489,10 +3489,10 @@ var init_utils = __esm({
   }
 });
 
-// node_modules/fast-string-truncated-width/dist/index.js
+// ../../mlclaw/node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE, CONTROL_RE, CJKT_WIDE_RE, TAB_RE, EMOJI_RE, LATIN_RE, MODIFIER_RE, NO_TRUNCATION, getStringTruncatedWidth, dist_default;
 var init_dist = __esm({
-  "node_modules/fast-string-truncated-width/dist/index.js"() {
+  "../../mlclaw/node_modules/fast-string-truncated-width/dist/index.js"() {
     init_utils();
     ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
     CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
@@ -3593,10 +3593,10 @@ var init_dist = __esm({
   }
 });
 
-// node_modules/fast-string-width/dist/index.js
+// ../../mlclaw/node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2, fastStringWidth, dist_default2;
 var init_dist2 = __esm({
-  "node_modules/fast-string-width/dist/index.js"() {
+  "../../mlclaw/node_modules/fast-string-width/dist/index.js"() {
     init_dist();
     NO_TRUNCATION2 = {
       limit: Infinity,
@@ -3610,13 +3610,13 @@ var init_dist2 = __esm({
   }
 });
 
-// node_modules/fast-wrap-ansi/lib/main.js
+// ../../mlclaw/node_modules/fast-wrap-ansi/lib/main.js
 function wrapAnsi(string, columns, options) {
   return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
 }
 var ESC, CSI, END_CODE, ANSI_ESCAPE_BELL, ANSI_CSI, ANSI_OSC, ANSI_SGR_TERMINATOR, ANSI_ESCAPE_LINK, GROUP_REGEX, getClosingCode, wrapAnsiCode, wrapAnsiHyperlink, wrapWord, stringVisibleTrimSpacesRight, exec, CRLF_OR_LF;
 var init_main = __esm({
-  "node_modules/fast-wrap-ansi/lib/main.js"() {
+  "../../mlclaw/node_modules/fast-wrap-ansi/lib/main.js"() {
     init_dist2();
     ESC = "\x1B";
     CSI = "\x9B";
@@ -3824,9 +3824,9 @@ var init_main = __esm({
   }
 });
 
-// node_modules/sisteransi/src/index.js
+// ../../mlclaw/node_modules/sisteransi/src/index.js
 var require_src = __commonJS({
-  "node_modules/sisteransi/src/index.js"(exports, module) {
+  "../../mlclaw/node_modules/sisteransi/src/index.js"(exports, module) {
     "use strict";
     var ESC2 = "\x1B";
     var CSI2 = `${ESC2}[`;
@@ -3880,7 +3880,7 @@ var require_src = __commonJS({
   }
 });
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../mlclaw/node_modules/@clack/core/dist/index.mjs
 import { styleText as v } from "node:util";
 import { stdout as x, stdin as D } from "node:process";
 import * as b from "node:readline";
@@ -4019,7 +4019,7 @@ function st(r, t, s, e2) {
 }
 var import_sisteransi, G, K, h, Y, k, A, L, m, Q, X, Z, et, it, rt, nt, ot, ut, at, ht;
 var init_dist3 = __esm({
-  "node_modules/@clack/core/dist/index.mjs"() {
+  "../../mlclaw/node_modules/@clack/core/dist/index.mjs"() {
     init_main();
     import_sisteransi = __toESM(require_src(), 1);
     G = ["up", "down", "left", "right", "space", "enter", "cancel"];
@@ -4628,7 +4628,7 @@ ${i}` : `${s}${v("inverse", e2)}${i}`;
   }
 });
 
-// node_modules/@clack/prompts/dist/index.mjs
+// ../../mlclaw/node_modules/@clack/prompts/dist/index.mjs
 var dist_exports = {};
 __export(dist_exports, {
   S_BAR: () => $2,
@@ -4756,7 +4756,7 @@ function _e({ style: t = "heavy", max: i = 100, size: s = 40, ...r } = {}) {
 }
 var import_sisteransi2, tt2, ot2, It, w2, Tt, at2, ut2, H2, lt, $2, x2, _t, xt, z2, U2, et2, K2, Y2, Et, st2, ct, Gt, $t, dt, Mt, ht2, pt, mt, gt, P2, yt, Ot, F2, At, ie, re, ne, oe, ae, ue, le, de, he, pe, R2, me, ge, ye, fe, Q2, ve, we, be, Se, Ce, Ie, Te, ft, jt, it2, xe, Ee, Nt, q2, Ge, Me, Oe, Pe;
 var init_dist4 = __esm({
-  "node_modules/@clack/prompts/dist/index.mjs"() {
+  "../../mlclaw/node_modules/@clack/prompts/dist/index.mjs"() {
     init_dist3();
     init_dist3();
     init_main();
@@ -5543,16 +5543,16 @@ ${c}
   }
 });
 
-// node_modules/events-universal/default.js
+// ../../mlclaw/node_modules/events-universal/default.js
 var require_default = __commonJS({
-  "node_modules/events-universal/default.js"(exports, module) {
+  "../../mlclaw/node_modules/events-universal/default.js"(exports, module) {
     module.exports = __require("events");
   }
 });
 
-// node_modules/fast-fifo/fixed-size.js
+// ../../mlclaw/node_modules/fast-fifo/fixed-size.js
 var require_fixed_size = __commonJS({
-  "node_modules/fast-fifo/fixed-size.js"(exports, module) {
+  "../../mlclaw/node_modules/fast-fifo/fixed-size.js"(exports, module) {
     module.exports = class FixedFIFO {
       constructor(hwm) {
         if (!(hwm > 0) || (hwm - 1 & hwm) !== 0) throw new Error("Max size for a FixedFIFO should be a power of two");
@@ -5590,9 +5590,9 @@ var require_fixed_size = __commonJS({
   }
 });
 
-// node_modules/fast-fifo/index.js
+// ../../mlclaw/node_modules/fast-fifo/index.js
 var require_fast_fifo = __commonJS({
-  "node_modules/fast-fifo/index.js"(exports, module) {
+  "../../mlclaw/node_modules/fast-fifo/index.js"(exports, module) {
     var FixedFIFO = require_fixed_size();
     module.exports = class FastFIFO {
       constructor(hwm) {
@@ -5637,9 +5637,9 @@ var require_fast_fifo = __commonJS({
   }
 });
 
-// node_modules/b4a/index.js
+// ../../mlclaw/node_modules/b4a/index.js
 var require_b4a = __commonJS({
-  "node_modules/b4a/index.js"(exports, module) {
+  "../../mlclaw/node_modules/b4a/index.js"(exports, module) {
     function isBuffer(value) {
       return Buffer.isBuffer(value) || value instanceof Uint8Array;
     }
@@ -5794,9 +5794,9 @@ var require_b4a = __commonJS({
   }
 });
 
-// node_modules/text-decoder/lib/pass-through-decoder.js
+// ../../mlclaw/node_modules/text-decoder/lib/pass-through-decoder.js
 var require_pass_through_decoder = __commonJS({
-  "node_modules/text-decoder/lib/pass-through-decoder.js"(exports, module) {
+  "../../mlclaw/node_modules/text-decoder/lib/pass-through-decoder.js"(exports, module) {
     var b4a = require_b4a();
     module.exports = class PassThroughDecoder {
       constructor(encoding) {
@@ -5815,9 +5815,9 @@ var require_pass_through_decoder = __commonJS({
   }
 });
 
-// node_modules/text-decoder/lib/utf8-decoder.js
+// ../../mlclaw/node_modules/text-decoder/lib/utf8-decoder.js
 var require_utf8_decoder = __commonJS({
-  "node_modules/text-decoder/lib/utf8-decoder.js"(exports, module) {
+  "../../mlclaw/node_modules/text-decoder/lib/utf8-decoder.js"(exports, module) {
     var b4a = require_b4a();
     module.exports = class UTF8Decoder {
       constructor() {
@@ -5962,9 +5962,9 @@ var require_utf8_decoder = __commonJS({
   }
 });
 
-// node_modules/text-decoder/index.js
+// ../../mlclaw/node_modules/text-decoder/index.js
 var require_text_decoder = __commonJS({
-  "node_modules/text-decoder/index.js"(exports, module) {
+  "../../mlclaw/node_modules/text-decoder/index.js"(exports, module) {
     var PassThroughDecoder = require_pass_through_decoder();
     var UTF8Decoder = require_utf8_decoder();
     module.exports = class TextDecoder {
@@ -6024,9 +6024,9 @@ var require_text_decoder = __commonJS({
   }
 });
 
-// node_modules/streamx/lib/errors.js
+// ../../mlclaw/node_modules/streamx/lib/errors.js
 var require_errors = __commonJS({
-  "node_modules/streamx/lib/errors.js"(exports, module) {
+  "../../mlclaw/node_modules/streamx/lib/errors.js"(exports, module) {
     module.exports = class StreamError extends Error {
       constructor(msg, code, fn = StreamError) {
         super(msg);
@@ -6066,9 +6066,9 @@ var require_errors = __commonJS({
   }
 });
 
-// node_modules/streamx/index.js
+// ../../mlclaw/node_modules/streamx/index.js
 var require_streamx = __commonJS({
-  "node_modules/streamx/index.js"(exports, module) {
+  "../../mlclaw/node_modules/streamx/index.js"(exports, module) {
     var { EventEmitter } = require_default();
     var FIFO = require_fast_fifo();
     var TextDecoder2 = require_text_decoder();
@@ -7097,9 +7097,9 @@ var require_streamx = __commonJS({
   }
 });
 
-// node_modules/tar-stream/headers.js
+// ../../mlclaw/node_modules/tar-stream/headers.js
 var require_headers = __commonJS({
-  "node_modules/tar-stream/headers.js"(exports) {
+  "../../mlclaw/node_modules/tar-stream/headers.js"(exports) {
     var b4a = require_b4a();
     var ZEROS = "0000000000000000000";
     var SEVENS = "7777777777777777777";
@@ -7359,9 +7359,9 @@ var require_headers = __commonJS({
   }
 });
 
-// node_modules/tar-stream/extract.js
+// ../../mlclaw/node_modules/tar-stream/extract.js
 var require_extract = __commonJS({
-  "node_modules/tar-stream/extract.js"(exports, module) {
+  "../../mlclaw/node_modules/tar-stream/extract.js"(exports, module) {
     var { Writable: Writable2, Readable: Readable2, getStreamError } = require_streamx();
     var FIFO = require_fast_fifo();
     var b4a = require_b4a();
@@ -7703,9 +7703,9 @@ var require_extract = __commonJS({
   }
 });
 
-// node_modules/tar-stream/constants.js
+// ../../mlclaw/node_modules/tar-stream/constants.js
 var require_constants = __commonJS({
-  "node_modules/tar-stream/constants.js"(exports, module) {
+  "../../mlclaw/node_modules/tar-stream/constants.js"(exports, module) {
     var constants = {
       // just for envs without fs
       S_IFMT: 61440,
@@ -7723,9 +7723,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/tar-stream/pack.js
+// ../../mlclaw/node_modules/tar-stream/pack.js
 var require_pack = __commonJS({
-  "node_modules/tar-stream/pack.js"(exports, module) {
+  "../../mlclaw/node_modules/tar-stream/pack.js"(exports, module) {
     var { Readable: Readable2, Writable: Writable2, getStreamError } = require_streamx();
     var b4a = require_b4a();
     var constants = require_constants();
@@ -7957,15 +7957,15 @@ var require_pack = __commonJS({
   }
 });
 
-// node_modules/tar-stream/index.js
+// ../../mlclaw/node_modules/tar-stream/index.js
 var require_tar_stream = __commonJS({
-  "node_modules/tar-stream/index.js"(exports) {
+  "../../mlclaw/node_modules/tar-stream/index.js"(exports) {
     exports.extract = require_extract();
     exports.pack = require_pack();
   }
 });
 
-// node_modules/skillflag/dist/shared/frontmatter.js
+// ../../mlclaw/node_modules/skillflag/dist/shared/frontmatter.js
 function stripYamlQuotes(value) {
   if (value.startsWith('"') && value.endsWith('"') || value.startsWith("'") && value.endsWith("'")) {
     return value.slice(1, -1).trim();
@@ -7993,11 +7993,11 @@ function parseFrontmatter(content) {
   return fields;
 }
 var init_frontmatter = __esm({
-  "node_modules/skillflag/dist/shared/frontmatter.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/shared/frontmatter.js"() {
   }
 });
 
-// node_modules/skillflag/dist/utils/collections.js
+// ../../mlclaw/node_modules/skillflag/dist/utils/collections.js
 function uniqueValues(values) {
   const out = [];
   for (const value of values) {
@@ -8008,11 +8008,11 @@ function uniqueValues(values) {
   return out;
 }
 var init_collections = __esm({
-  "node_modules/skillflag/dist/utils/collections.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/utils/collections.js"() {
   }
 });
 
-// node_modules/skillflag/dist/install/errors.js
+// ../../mlclaw/node_modules/skillflag/dist/install/errors.js
 function toErrorMessage2(err) {
   if (err instanceof Error)
     return err.message;
@@ -8020,7 +8020,7 @@ function toErrorMessage2(err) {
 }
 var InstallError;
 var init_errors = __esm({
-  "node_modules/skillflag/dist/install/errors.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/errors.js"() {
     InstallError = class extends Error {
       exitCode;
       constructor(message, exitCode = 1) {
@@ -8031,7 +8031,7 @@ var init_errors = __esm({
   }
 });
 
-// node_modules/skillflag/dist/install/validate.js
+// ../../mlclaw/node_modules/skillflag/dist/install/validate.js
 import fs5 from "node:fs/promises";
 import path5 from "node:path";
 async function assertSkillDir(rootDir) {
@@ -8057,13 +8057,13 @@ async function readSkillMetadata(rootDir) {
   return { name, description };
 }
 var init_validate = __esm({
-  "node_modules/skillflag/dist/install/validate.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/validate.js"() {
     init_errors();
     init_frontmatter();
   }
 });
 
-// node_modules/skillflag/dist/install/extract.js
+// ../../mlclaw/node_modules/skillflag/dist/install/extract.js
 import fs6 from "node:fs/promises";
 import path6 from "node:path";
 function isInvalidRelPath2(relPosix) {
@@ -8136,13 +8136,13 @@ async function extractSkillTarToTemp(stream, tempDir) {
 }
 var tar2;
 var init_extract = __esm({
-  "node_modules/skillflag/dist/install/extract.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/extract.js"() {
     tar2 = __toESM(require_tar_stream(), 1);
     init_errors();
   }
 });
 
-// node_modules/skillflag/dist/install/resolve.js
+// ../../mlclaw/node_modules/skillflag/dist/install/resolve.js
 import os from "node:os";
 import path7 from "node:path";
 import { execFileSync } from "node:child_process";
@@ -8203,7 +8203,7 @@ function resolveSkillsRoot2(agent, scope, cwd) {
 }
 var AGENTS, SCOPES, scopeResolversByAgent;
 var init_resolve = __esm({
-  "node_modules/skillflag/dist/install/resolve.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/resolve.js"() {
     init_errors();
     init_collections();
     AGENTS = [
@@ -8265,7 +8265,7 @@ var init_resolve = __esm({
   }
 });
 
-// node_modules/skillflag/dist/install/copy.js
+// ../../mlclaw/node_modules/skillflag/dist/install/copy.js
 import fs7 from "node:fs/promises";
 import path8 from "node:path";
 async function copySkillDir(sourceDir, destDir, force) {
@@ -8283,12 +8283,12 @@ async function copySkillDir(sourceDir, destDir, force) {
   await fs7.cp(sourceDir, destDir, { recursive: true });
 }
 var init_copy = __esm({
-  "node_modules/skillflag/dist/install/copy.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/copy.js"() {
     init_errors();
   }
 });
 
-// node_modules/skillflag/dist/install/install.js
+// ../../mlclaw/node_modules/skillflag/dist/install/install.js
 import fs8 from "node:fs/promises";
 import os2 from "node:os";
 import path9 from "node:path";
@@ -8319,7 +8319,7 @@ async function installSkill(input, options) {
   }
 }
 var init_install = __esm({
-  "node_modules/skillflag/dist/install/install.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/install.js"() {
     init_validate();
     init_extract();
     init_resolve();
@@ -8327,7 +8327,7 @@ var init_install = __esm({
   }
 });
 
-// node_modules/skillflag/dist/install/cli.js
+// ../../mlclaw/node_modules/skillflag/dist/install/cli.js
 var cli_exports = {};
 __export(cli_exports, {
   runInstallCli: () => runInstallCli
@@ -8884,7 +8884,7 @@ async function runInstallCli(argv, opts = {}) {
 }
 var agentList, scopeList, usageLines, usageText, defaultPromptApi, agentHints, agentOptions, scopeDescriptions;
 var init_cli = __esm({
-  "node_modules/skillflag/dist/install/cli.js"() {
+  "../../mlclaw/node_modules/skillflag/dist/install/cli.js"() {
     init_dist4();
     init_errors();
     init_install();
@@ -8960,7 +8960,7 @@ import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as r
 import { pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
-// node_modules/commander/esm.mjs
+// ../../mlclaw/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -8980,10 +8980,10 @@ var {
 // src/mlclaw/cli.ts
 init_dist4();
 
-// node_modules/skillflag/dist/skillflag.js
+// ../../mlclaw/node_modules/skillflag/dist/skillflag.js
 import process3 from "node:process";
 
-// node_modules/skillflag/dist/core/errors.js
+// ../../mlclaw/node_modules/skillflag/dist/core/errors.js
 var SkillflagError = class extends Error {
   exitCode;
   constructor(message, exitCode = 1) {
@@ -8997,7 +8997,7 @@ function toErrorMessage(err) {
   return String(err);
 }
 
-// node_modules/skillflag/dist/core/tar.js
+// ../../mlclaw/node_modules/skillflag/dist/core/tar.js
 var tar = __toESM(require_tar_stream(), 1);
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
@@ -9130,7 +9130,7 @@ function createTarStream(entries) {
   return pack2;
 }
 
-// node_modules/skillflag/dist/core/export.js
+// ../../mlclaw/node_modules/skillflag/dist/core/export.js
 async function pipeToWritable(stream, dest) {
   return new Promise((resolve, reject) => {
     const onError = (err) => {
@@ -9158,11 +9158,11 @@ async function exportSkill(skillDir, id, stdout) {
   await pipeToWritable(tarStream, stdout);
 }
 
-// node_modules/skillflag/dist/core/list.js
+// ../../mlclaw/node_modules/skillflag/dist/core/list.js
 import fs3 from "node:fs/promises";
 import path3 from "node:path";
 
-// node_modules/skillflag/dist/core/digest.js
+// ../../mlclaw/node_modules/skillflag/dist/core/digest.js
 import { createHash } from "node:crypto";
 import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -9178,7 +9178,7 @@ async function digestStreamSha256(stream) {
   return `sha256:${hash3.digest("hex")}`;
 }
 
-// node_modules/skillflag/dist/core/paths.js
+// ../../mlclaw/node_modules/skillflag/dist/core/paths.js
 import fs2 from "node:fs";
 import fsPromises2 from "node:fs/promises";
 import path2 from "node:path";
@@ -9314,7 +9314,7 @@ async function resolveSkillDirFromRoots(rootDirs, id) {
   throw new SkillflagError(`Skill not found: ${id}`);
 }
 
-// node_modules/skillflag/dist/core/list.js
+// ../../mlclaw/node_modules/skillflag/dist/core/list.js
 init_frontmatter();
 async function readSkillInfo(dir, id) {
   const skillMdPath = path3.join(dir, "SKILL.md");
@@ -9377,7 +9377,7 @@ async function listSkillsJson(rootDirs) {
   };
 }
 
-// node_modules/skillflag/dist/core/show.js
+// ../../mlclaw/node_modules/skillflag/dist/core/show.js
 import fs4 from "node:fs/promises";
 import path4 from "node:path";
 async function showSkill(skillDir, _id, stdout) {
@@ -9386,7 +9386,7 @@ async function showSkill(skillDir, _id, stdout) {
   stdout.write(content);
 }
 
-// node_modules/skillflag/dist/skillflag.js
+// ../../mlclaw/node_modules/skillflag/dist/skillflag.js
 init_collections();
 var usageLines2 = [
   "Usage:",
@@ -10833,7 +10833,7 @@ var SplicedBlob = class _SplicedBlob extends Blob {
   }
 };
 
-// node_modules/gearhash-jit/dist/esm/table.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/table.js
 var GEAR_TABLE = [
   0xb088d3a9e840f559n,
   0x5652c7f739ed20d6n,
@@ -11093,7 +11093,7 @@ var GEAR_TABLE = [
   0x63c7a906c1dd187bn
 ];
 
-// node_modules/gearhash-jit/dist/esm/wasm.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/wasm.js
 var TABLE_OFFSET = 0;
 var HASH_OFFSET = 2048;
 var MASK_OFFSET = 2056;
@@ -11229,7 +11229,7 @@ function getView() {
   return wasmView;
 }
 
-// node_modules/gearhash-jit/dist/esm/index.js
+// ../../mlclaw/node_modules/gearhash-jit/dist/esm/index.js
 var Hasher = class {
   maskBytes;
   /**
@@ -11270,7 +11270,7 @@ var Hasher = class {
   }
 };
 
-// node_modules/@huggingface/blake3-jit/dist/esm/compress.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/compress.js
 function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, blockLen, flags) {
   let m0 = block[blockOff] | 0;
   let m1 = block[blockOff + 1] | 0;
@@ -12110,7 +12110,7 @@ function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, block
   out[outOff + 7] = s7 ^ s15;
 }
 
-// node_modules/@huggingface/blake3-jit/dist/esm/constants.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/constants.js
 var IV = new Uint32Array([
   1779033703,
   3144134277,
@@ -12248,7 +12248,7 @@ var PERMUTATIONS = new Uint8Array([
   13
 ]);
 
-// node_modules/@huggingface/blake3-jit/dist/esm/utils.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/utils.js
 var IS_LITTLE_ENDIAN = new Uint8Array(new Uint32Array([16909060]).buffer)[0] === 4;
 function readLittleEndianWordsFull(input, offset, words) {
   for (let i = 0; i < 16; ++i, offset += 4) {
@@ -12331,7 +12331,7 @@ var CTZ32_TABLE = new Uint8Array([
   9
 ]);
 
-// node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
 var XofReader = class {
   inputCv;
   blockWords;
@@ -12685,7 +12685,7 @@ var Hasher2 = class _Hasher {
   }
 };
 
-// node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
 function toLebU32Min2(n) {
   return [n & 127 | 128, n >>> 7 & 127];
 }
@@ -13492,7 +13492,7 @@ var arenaBatchCounterLow = null;
 var arenaBatchFlagsBase = null;
 var arenaBatchOutput = null;
 
-// node_modules/@huggingface/blake3-jit/dist/esm/hash.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hash.js
 var CV_STACK_DEPTH = 64;
 var HYPER_CV_STACK = new Uint32Array(CV_STACK_DEPTH * 8);
 var CV_POOL_SIZE = 64;
@@ -13538,14 +13538,14 @@ function warmupSimd() {
   return ensureSimdSync();
 }
 
-// node_modules/@huggingface/blake3-jit/dist/esm/index.js
+// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/index.js
 if (typeof globalThis !== "undefined" && typeof globalThis.document !== "undefined") {
   queueMicrotask(() => {
     warmupSimd();
   });
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
 var TARGET_CHUNK_SIZE = 64 * 1024;
 var MINIMUM_CHUNK_DIVISOR = 8;
 var MAXIMUM_CHUNK_MULTIPLIER = 2;
@@ -13760,7 +13760,7 @@ function hexToBytes(hex) {
   return bytes;
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
 var MEAN_CHUNK_PER_NODE = 4;
 var BLAKE3_NODE_KEY = new Uint8Array([
   1,
@@ -13835,7 +13835,7 @@ function mergedHashOfSequence(chunks) {
   return { hash: hash3, length: totalLength };
 }
 
-// node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
+// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
 var ZERO_KEY = new Uint8Array(32);
 var VERIFICATION_KEY = new Uint8Array([
   127,
@@ -15383,11 +15383,11 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.10.2",
+  "packageVersion": "0.11.4",
   "openclawVersion": "2026.7.2-beta.5",
-  "hfBrokerVersion": "hf-broker/v0.9.2",
+  "hfBrokerVersion": "hf-broker/v0.10.4",
   "telegramBotMuxVersion": "0.1.0",
-  "unyoloPluginVersion": "0.6.0",
+  "unyoloPluginVersion": "0.7.0",
   "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
 };
 
@@ -16658,7 +16658,7 @@ import os6 from "node:os";
 import path14 from "node:path";
 import { createHash as createHash2 } from "node:crypto";
 
-// node_modules/zod/v3/external.js
+// ../../mlclaw/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -16770,7 +16770,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../mlclaw/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_) => {
@@ -16904,7 +16904,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../mlclaw/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -17022,7 +17022,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../mlclaw/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -17125,7 +17125,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../mlclaw/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -17134,7 +17134,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../mlclaw/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path16, errorMaps, issueData } = params;
   const fullPath = [...path16, ...issueData.path || []];
@@ -17244,14 +17244,14 @@ var isDirty = (x3) => x3.status === "dirty";
 var isValid = (x3) => x3.status === "valid";
 var isAsync = (x3) => typeof Promise !== "undefined" && x3 instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../mlclaw/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../mlclaw/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path16, key) {
     this._cachedPath = [];
