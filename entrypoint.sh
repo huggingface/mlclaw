@@ -34,6 +34,8 @@ UNYOLO_TELEGRAM_CONFIG_FILE="$UNYOLO_TELEGRAM_RUN_DIR/config.json"
 UNYOLO_TELEGRAM_STATE_DIR="$PROTECTED_STATE_DIR/unyolo/telegram"
 UNYOLO_TELEGRAM_INBOX_FILE="$UNYOLO_TELEGRAM_STATE_DIR/callbacks.db"
 UNYOLO_TELEGRAM_INBOX_KEY_FILE="$PROTECTED_STATE_DIR/control/unyolo-telegram-inbox-key"
+UNYOLO_TELEGRAM_STATE_CONTRACT="unyolo-telegram-inbox-v1-terminal-failures"
+UNYOLO_TELEGRAM_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/unyolo-telegram-state-contract"
 
 prepare_hf_broker() {
   local broker_token="${MLCLAW_BROKER_HF_TOKEN:-}"
@@ -170,6 +172,14 @@ restore_protected_state() {
   fi
   chown root:root "$HF_BROKER_STATE_CONTRACT_FILE"
   chmod 0600 "$HF_BROKER_STATE_CONTRACT_FILE"
+  if [ ! -f "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE" ] || [ -L "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE" ] || \
+    [ "$(cat "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE" 2>/dev/null || true)" != "$UNYOLO_TELEGRAM_STATE_CONTRACT" ]; then
+    rm -rf "$UNYOLO_TELEGRAM_STATE_DIR"
+    rm -f "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE"
+    printf '%s\n' "$UNYOLO_TELEGRAM_STATE_CONTRACT" > "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE"
+  fi
+  chown root:root "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE"
+  chmod 0600 "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE"
   install -d -m 0700 -o hf-broker -g hf-broker "$HF_BROKER_STATE_DIR"
   rm -rf -- \
     "$HF_BROKER_STATE_DIR/grants" \
