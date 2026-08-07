@@ -42,6 +42,8 @@ import type {
   TailscaleServeState,
 } from "../src/mlclaw/tailscale.js";
 import { TailscaleApprovalRequiredError } from "../src/mlclaw/tailscale.js";
+import { PRESET_MODEL_CHOICES } from "../src/mlclaw-space-runtime/model-choices.js";
+import { buildRuntimeSettings } from "../src/mlclaw-space-runtime/runtime-settings-file.js";
 
 type PromptAnswer = string | boolean;
 
@@ -2939,6 +2941,22 @@ describe("mlclaw CLI", () => {
     });
   });
 
+  it("updates the canonical Space model bootstrap on a CLI rerun", async () => {
+    const hub = createFakeHub();
+    const runtime = await createRuntime(hub, createPrompt([], false).prompt);
+    await expect(main(["bootstrap", "--name", "research", "--yes"], runtime)).resolves.toBe(0);
+    const firstUpdatedAt = hub.variables.get("MLCLAW_DEPLOYMENT_UPDATED_AT")?.value;
+
+    const replacement = "huggingface/moonshotai/Kimi-K3:fireworks-ai";
+    await expect(main(["bootstrap", "--model", replacement, "--yes"], runtime)).resolves.toBe(0);
+
+    expect(hub.variables.get("OPENCLAW_MODEL")?.value).toBe(replacement);
+    expect(hub.variables.get("MLCLAW_RUNTIME_SETTINGS_FILE")?.value).toBe(
+      "/data/mlclaw-state/openclaw-state/.mlclaw/runtime-settings.json",
+    );
+    expect(hub.variables.get("MLCLAW_DEPLOYMENT_UPDATED_AT")?.value).not.toBe(firstUpdatedAt);
+  });
+
   it("verifies an unchanged Space without redeploying it", async () => {
     const hub = createFakeHub();
     const runtime = await createRuntime(hub, createPrompt([], false).prompt);
@@ -3622,6 +3640,7 @@ describe("mlclaw CLI", () => {
     expect(output.join("\n")).toContain("mounted bucket alice/research-data at /data/mlclaw-state");
     expect(output.join("\n")).toContain("set secret MLCLAW_CREDENTIAL_KEY");
     expect(output.join("\n")).toContain("set protected Space visibility");
+    expect(output.join("\n")).toContain(`Runtime settings repair winner: deployment model ${DEFAULT_MODEL}`);
     expect(hub.calls).toContainEqual({
       name: "updateSpaceVisibility",
       args: ["alice/research", "protected"],
@@ -3674,7 +3693,7 @@ describe("mlclaw CLI", () => {
     await hub.addSpaceVariable(
       "alice/research",
       "MLCLAW_RUNTIME_SETTINGS_FILE",
-      "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json",
+      "/data/mlclaw-state/openclaw-state/.mlclaw/runtime-settings.json",
     );
     await hub.addSpaceVariable("alice/research", "MLCLAW_TEMPLATE_REV", "test-template");
     await hub.addSpaceVariable("alice/research", "MLCLAW_GATEWAY_LOCATION", "space");
@@ -3686,6 +3705,17 @@ describe("mlclaw CLI", () => {
     await hub.addSpaceSecret("alice/research", "MLCLAW_SESSION_SECRET", "session");
     await hub.addSpaceSecret("alice/research", "MLCLAW_CREDENTIAL_KEY", "credential-key");
     await hub.addSpaceSecret("alice/research", "MLCLAW_BROKER_HF_TOKEN", "hf_broker");
+    hub.bucketObjects.set(
+      "openclaw-state/.mlclaw/runtime-settings.json",
+      JSON.stringify(
+        buildRuntimeSettings({
+          model: DEFAULT_MODEL,
+          modelChoices: PRESET_MODEL_CHOICES,
+          generation: 1,
+          now: () => new Date("2026-08-07T00:00:00.000Z"),
+        }),
+      ),
+    );
     hub.calls.length = 0;
 
     const { prompt } = createPrompt([]);

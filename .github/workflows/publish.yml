@@ -87,6 +87,14 @@ jobs:
         env:
           MLCLAW_HF_BROKER_BINARY: ${{ runner.temp }}/hf-broker
         run: npm test -- --run test/mlclaw.unyolo-agent-tools.test.ts
+      - name: Install pinned OpenClaw integration package
+        run: |
+          npm install --prefix "$RUNNER_TEMP/openclaw-integration" --ignore-scripts --no-audit --no-fund \
+            "openclaw@${{ steps.runtime-config.outputs.openclaw_version }}"
+      - name: Test pinned OpenClaw integration
+        env:
+          MLCLAW_OPENCLAW_PACKAGE_DIR: ${{ runner.temp }}/openclaw-integration/node_modules/openclaw
+        run: npm test -- --run test/mlclaw.openclaw-integration.test.ts
       - run: npm run build
       - run: npm run format
       - run: npm run lint

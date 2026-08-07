@@ -310,8 +310,8 @@ import { spawn as spawn3 } from "node:child_process";
 import process2 from "node:process";
 
 // src/mlclaw-space-runtime/config.ts
-import { readFileSync as readFileSync2 } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { readFileSync as readFileSync3 } from "node:fs";
 import { isAbsolute as isAbsolute2 } from "node:path";
 
 // src/hf-state-sync/paths.ts
@@ -759,18 +759,13 @@ function normalizeModelChoices(value, activeModel) {
   }
   return ensureActiveModelChoice(dedupeModelChoices(choices), activeModel);
 }
-function serializeModelChoices(choices) {
-  return JSON.stringify(choices.map(serializableChoice));
-}
 function ensureActiveModelChoice(choices, activeModel) {
   const parsed = parseOpenClawModelRef(activeModel);
   if (!parsed) {
     return [...choices];
   }
   const active = freezeChoice({
-    ...PRESET_MODEL_CHOICES.find(
-      (choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider
-    ),
+    ...PRESET_MODEL_CHOICES.find((choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider),
     modelId: parsed.modelId,
     provider: parsed.provider,
     label: displayNameFromModelId(parsed.modelId)
@@ -831,26 +826,6 @@ function freezeChoice(params) {
     openclawModel: formatOpenClawModelRef(modelId, provider)
   };
 }
-function serializableChoice(choice) {
-  return {
-    key: choice.key,
-    modelId: choice.modelId,
-    provider: choice.provider,
-    openclawModel: choice.openclawModel,
-    label: choice.label,
-    ...choice.note ? { note: choice.note } : {},
-    ...choice.contextLength ? { contextLength: choice.contextLength } : {},
-    ...choice.pricing ? { pricing: choice.pricing } : {},
-    ...choice.supportsTools !== void 0 ? { supportsTools: choice.supportsTools } : {},
-    ...choice.supportsStructuredOutput !== void 0 ? { supportsStructuredOutput: choice.supportsStructuredOutput } : {},
-    ...choice.firstTokenLatencyMs ? { firstTokenLatencyMs: choice.firstTokenLatencyMs } : {},
-    ...choice.throughput ? { throughput: choice.throughput } : {},
-    ...choice.status ? { status: choice.status } : {},
-    ...choice.inputModalities ? { inputModalities: choice.inputModalities } : {},
-    ...choice.outputModalities ? { outputModalities: choice.outputModalities } : {},
-    ...choice.preset ? { preset: true } : {}
-  };
-}
 function normalizeModelId(value) {
   if (!value) {
     return void 0;
@@ -890,10 +865,14 @@ function normalizeModalities(value) {
   if (!Array.isArray(value)) {
     return void 0;
   }
-  const modalities = [...new Set(value.flatMap((item) => {
-    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
-    return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
-  }))];
+  const modalities = [
+    ...new Set(
+      value.flatMap((item) => {
+        const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+        return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
+      })
+    )
+  ];
   return modalities.length > 0 ? modalities : void 0;
 }
 function parseJsonArray(value) {
@@ -4370,6 +4349,205 @@ function localAccessTokenMatches(candidate, expected) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+// src/mlclaw-space-runtime/runtime-settings-file.ts
+import { randomUUID } from "node:crypto";
+import { readFileSync as readFileSync2 } from "node:fs";
+import fs from "node:fs/promises";
+import path from "node:path";
+var RUNTIME_SETTINGS_VERSION = 1;
+var MAX_RUNTIME_SETTINGS_BYTES = 256 * 1024;
+var RUNTIME_SETTINGS_KEYS = /* @__PURE__ */ new Set(["version", "generation", "model", "modelChoices", "updatedAt"]);
+var PROCESS_LOCK_ID = randomUUID();
+var INCOMPLETE_LOCK_STALE_MS = 5e3;
+var RuntimeSettingsConflictError = class extends Error {
+  constructor() {
+    super("runtime settings changed; refresh before saving");
+    this.name = "RuntimeSettingsConflictError";
+  }
+};
+function readRuntimeSettingsFile(file) {
+  let raw2;
+  try {
+    raw2 = readFileSync2(file, "utf8");
+  } catch (error) {
+    if (isNodeError(error, "ENOENT")) return void 0;
+    throw new Error("runtime settings are unavailable", { cause: error });
+  }
+  if (Buffer.byteLength(raw2) > MAX_RUNTIME_SETTINGS_BYTES) {
+    throw new Error("runtime settings exceed the size limit");
+  }
+  return parseRuntimeSettings(raw2);
+}
+async function initializeRuntimeSettingsFile(params) {
+  const current = readRuntimeSettingsFile(params.file);
+  if (current && !bootstrapSupersedes(current, params.model, params.bootstrapUpdatedAt)) return current;
+  return writeInitialRuntimeSettings(params, current?.generation ?? 0);
+}
+async function writeInitialRuntimeSettings(params, expectedGeneration) {
+  try {
+    return await writeRuntimeSettingsFile({
+      file: params.file,
+      model: params.model,
+      modelChoices: params.modelChoices,
+      expectedGeneration,
+      ...params.now ? { now: params.now } : {}
+    });
+  } catch (error) {
+    if (error instanceof RuntimeSettingsConflictError) {
+      const winner = readRuntimeSettingsFile(params.file);
+      if (winner) return winner;
+    }
+    throw error;
+  }
+}
+function bootstrapSupersedes(current, bootstrapModel, bootstrapUpdatedAt) {
+  return current.model !== bootstrapModel && typeof bootstrapUpdatedAt === "string" && validTimestamp(bootstrapUpdatedAt) && Date.parse(bootstrapUpdatedAt) > Date.parse(current.updatedAt);
+}
+async function writeRuntimeSettingsFile(params) {
+  await fs.mkdir(path.dirname(params.file), { recursive: true, mode: 448 });
+  const lockFile = `${params.file}.lock`;
+  const lock = await acquireRuntimeSettingsLock(lockFile);
+  try {
+    const current = readRuntimeSettingsFile(params.file);
+    if ((current?.generation ?? 0) !== params.expectedGeneration) throw new RuntimeSettingsConflictError();
+    const document = buildRuntimeSettings({
+      model: params.model,
+      modelChoices: params.modelChoices,
+      generation: params.expectedGeneration + 1,
+      now: params.now ?? (() => /* @__PURE__ */ new Date())
+    });
+    const temporary = `${params.file}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(temporary, `${JSON.stringify(document, null, 2)}
+`, { mode: 384, flag: "wx" });
+      await fs.rename(temporary, params.file);
+      await fs.chmod(params.file, 384);
+    } finally {
+      await fs.rm(temporary, { force: true });
+    }
+    return document;
+  } finally {
+    await lock.close();
+    await fs.rm(lockFile, { force: true });
+  }
+}
+async function acquireRuntimeSettingsLock(lockFile, recoverStale = true) {
+  let lock;
+  try {
+    lock = await fs.open(lockFile, "wx", 384);
+  } catch (error) {
+    if (!isNodeError(error, "EEXIST")) throw error;
+    if (!recoverStale || !await runtimeSettingsLockIsStale(lockFile)) {
+      throw new RuntimeSettingsConflictError();
+    }
+    await fs.rm(lockFile, { force: true });
+    return acquireRuntimeSettingsLock(lockFile, false);
+  }
+  try {
+    await lock.writeFile(`${JSON.stringify({ pid: process.pid, processLockId: PROCESS_LOCK_ID })}
+`);
+    return lock;
+  } catch (error) {
+    await lock.close();
+    await fs.rm(lockFile, { force: true });
+    throw error;
+  }
+}
+async function runtimeSettingsLockIsStale(lockFile) {
+  let owner;
+  try {
+    owner = JSON.parse(await fs.readFile(lockFile, "utf8"));
+  } catch {
+    return incompleteRuntimeSettingsLockIsStale(lockFile);
+  }
+  if (!isRecord(owner) || !Number.isSafeInteger(owner.pid) || typeof owner.processLockId !== "string") {
+    return incompleteRuntimeSettingsLockIsStale(lockFile);
+  }
+  const ownerPid = Number(owner.pid);
+  if (ownerPid === process.pid) return owner.processLockId !== PROCESS_LOCK_ID;
+  try {
+    process.kill(ownerPid, 0);
+    return false;
+  } catch (error) {
+    return isNodeError(error, "ESRCH");
+  }
+}
+async function incompleteRuntimeSettingsLockIsStale(lockFile) {
+  try {
+    const stat = await fs.stat(lockFile);
+    return Date.now() - stat.mtimeMs >= INCOMPLETE_LOCK_STALE_MS;
+  } catch {
+    return false;
+  }
+}
+function buildRuntimeSettings(params) {
+  const model = normalizeModelRef(params.model);
+  const modelChoices = normalizeModelChoices(params.modelChoices, model ?? "");
+  if (!model || !modelChoices || !Number.isSafeInteger(params.generation) || params.generation < 1) {
+    throw new Error("runtime settings are invalid");
+  }
+  return {
+    version: RUNTIME_SETTINGS_VERSION,
+    generation: params.generation,
+    model,
+    modelChoices,
+    updatedAt: params.now().toISOString()
+  };
+}
+function parseRuntimeSettings(raw2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw2);
+  } catch (error) {
+    throw new Error("runtime settings are invalid", { cause: error });
+  }
+  const fields = validatedRuntimeSettingsFields(parsed);
+  return buildRuntimeSettings({
+    model: fields.model,
+    modelChoices: fields.modelChoices,
+    generation: fields.generation,
+    now: () => new Date(fields.updatedAt)
+  });
+}
+function validatedRuntimeSettingsFields(value) {
+  if (!isRecord(value) || Object.keys(value).some((key) => !RUNTIME_SETTINGS_KEYS.has(key))) {
+    throw new Error("runtime settings are invalid");
+  }
+  if (value.version !== RUNTIME_SETTINGS_VERSION) throw new Error("runtime settings are invalid");
+  return {
+    model: requiredRuntimeSettingsModel(value.model),
+    modelChoices: requiredRuntimeSettingsChoices(value.modelChoices),
+    generation: requiredRuntimeSettingsGeneration(value.generation),
+    updatedAt: requiredRuntimeSettingsTimestamp(value.updatedAt)
+  };
+}
+function requiredRuntimeSettingsModel(value) {
+  if (typeof value !== "string") throw new Error("runtime settings are invalid");
+  return value;
+}
+function requiredRuntimeSettingsChoices(value) {
+  if (!Array.isArray(value)) throw new Error("runtime settings are invalid");
+  return value;
+}
+function requiredRuntimeSettingsGeneration(value) {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error("runtime settings are invalid");
+  return Number(value);
+}
+function requiredRuntimeSettingsTimestamp(value) {
+  if (typeof value !== "string" || !validTimestamp(value)) throw new Error("runtime settings are invalid");
+  return value;
+}
+function validTimestamp(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function isNodeError(error, code) {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
 // src/mlclaw-space-runtime/config.ts
 function loadConfig(env = process.env) {
   const port = integer(env.PORT ?? env.MLCLAW_SPACE_PORT, 7860);
@@ -4407,16 +4585,17 @@ function loadConfig(env = process.env) {
   const credentialKey = configuredCredentialKey ?? randomBytes(32).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
-  const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
   const stateMountDir = trim(env.MLCLAW_STATE_MOUNT_DIR);
   const statePrefix = trim(env.OPENCLAW_HF_STATE_PREFIX);
+  const runtimeSettingsFile = trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/runtime-settings.json` : "/home/node/.local/share/mlclaw/live/.mlclaw-protected/control/runtime-settings.json");
   const mcpCredentialFile = trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ?? (stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/mcp-oauth.enc` : `${pathDirname(runtimeSettingsFile)}/mcp-oauth.enc`);
   const protectedControlDir = `${pathDirname(pathDirname(runtimeSettingsFile))}/.mlclaw-protected/control`;
   const mountedControlDir = stateMountDir ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw` : void 0;
   const openaiCredentialStoreFile = trim(env.MLCLAW_OPENAI_CREDENTIAL_STORE_FILE) ?? (mountedControlDir ? `${mountedControlDir}/openai-api-key.enc` : `${protectedControlDir}/openai-api-key.enc`);
   const codexAuthStoreFile = trim(env.MLCLAW_CODEX_AUTH_STORE_FILE) ?? (mountedControlDir ? `${mountedControlDir}/codex-auth.enc` : `${protectedControlDir}/codex-auth.enc`);
-  const runtimeSettings2 = readRuntimeSettings(runtimeSettingsFile);
-  const model = runtimeSettings2.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const runtimeSettings2 = readRuntimeSettingsFile(runtimeSettingsFile);
+  const bootstrapModel = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const model = runtimeSettings2?.model ?? bootstrapModel;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
   const telegramBotMuxConfigPath = optionalAbsolutePath(
     env.MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH,
@@ -4466,6 +4645,9 @@ function loadConfig(env = process.env) {
     researchTimeoutMs: integer(env.MLCLAW_RESEARCH_TIMEOUT_MS, 30 * 60 * 1e3),
     researchPollMs: integer(env.MLCLAW_RESEARCH_POLL_MS, 1500),
     runtimeSettingsFile,
+    runtimeSettingsGeneration: runtimeSettings2?.generation ?? 0,
+    bootstrapModel,
+    bootstrapUpdatedAt: trim(env.MLCLAW_DEPLOYMENT_UPDATED_AT),
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
@@ -4478,7 +4660,7 @@ function loadConfig(env = process.env) {
     ),
     agentName,
     model,
-    modelChoices: runtimeSettings2.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    modelChoices: runtimeSettings2?.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket,
     stateMountDir,
@@ -4522,7 +4704,7 @@ function readOptionalSecret(file) {
     return void 0;
   }
   try {
-    return trim(readFileSync2(file, "utf8"));
+    return trim(readFileSync3(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -4594,30 +4776,14 @@ function trim(value) {
   return trimmed || void 0;
 }
 function optionalAbsolutePath(value, name) {
-  const path9 = trim(value);
-  if (path9 && !isAbsolute2(path9)) throw new Error(`${name} must be absolute`);
-  return path9;
-}
-function readRuntimeSettings(file) {
-  try {
-    const parsed = JSON.parse(readFileSync2(file, "utf8"));
-    const model = typeof parsed.model === "string" ? parsed.model.trim() : void 0;
-    if (!model) {
-      return {};
-    }
-    const modelChoices = normalizeModelChoices(parsed.modelChoices, model);
-    return {
-      model,
-      ...modelChoices ? { modelChoices } : {}
-    };
-  } catch {
-    return {};
-  }
+  const path10 = trim(value);
+  if (path10 && !isAbsolute2(path10)) throw new Error(`${name} must be absolute`);
+  return path10;
 }
 
 // src/mlclaw-space-runtime/openclaw-config.ts
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
+import fs3 from "node:fs/promises";
+import path3 from "node:path";
 
 // src/mlclaw-space-runtime/openai-models.ts
 var LEGACY_CODEX_MODEL_REF = "mlclaw-codex/gpt-5.4";
@@ -4625,8 +4791,8 @@ var DEFAULT_OPENAI_MODEL_REF = "openai/gpt-5.4";
 
 // src/mlclaw-space-runtime/openclaw-oauth-profile.ts
 import { constants as fsConstants } from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
 import { spawn } from "node:child_process";
 var OPENAI_OAUTH_PROFILE_ID = "openai:mlclaw";
 var MAX_HELPER_OUTPUT_BYTES = 64 * 1024;
@@ -4703,7 +4869,7 @@ process.stdout.write(JSON.stringify({ ok: true }) + "\n");
 async function syncOpenAiOAuthProfile(params) {
   const openclawEntry = await resolveOpenClawEntry(params.config.openclawCommand, params.env.PATH);
   if (!openclawEntry) return false;
-  const agentDir = path.join(path.dirname(params.config.openclawConfigPath), "agents", "main", "agent");
+  const agentDir = path2.join(path2.dirname(params.config.openclawConfigPath), "agents", "main", "agent");
   const credential = params.credential ? {
     type: "oauth",
     provider: "openai",
@@ -4728,22 +4894,22 @@ async function syncOpenAiOAuthProfile(params) {
   return true;
 }
 async function resolveOpenClawEntry(command, pathValue) {
-  const candidate = command.includes(path.sep) ? path.resolve(command) : await findOnPath(command, pathValue);
+  const candidate = command.includes(path2.sep) ? path2.resolve(command) : await findOnPath(command, pathValue);
   if (!candidate) return void 0;
   try {
-    const real = await fs.realpath(candidate);
-    if (path.basename(real) !== "openclaw.mjs") return void 0;
+    const real = await fs2.realpath(candidate);
+    if (path2.basename(real) !== "openclaw.mjs") return void 0;
     return real;
   } catch {
     return void 0;
   }
 }
 async function findOnPath(command, pathValue) {
-  for (const directory of (pathValue ?? "").split(path.delimiter)) {
+  for (const directory of (pathValue ?? "").split(path2.delimiter)) {
     if (!directory) continue;
-    const candidate = path.join(directory, command);
+    const candidate = path2.join(directory, command);
     try {
-      await fs.access(candidate, fsConstants.X_OK);
+      await fs2.access(candidate, fsConstants.X_OK);
       return candidate;
     } catch {
     }
@@ -5358,17 +5524,18 @@ function remainingUpstreamTimeout(deadline) {
 // src/mlclaw-space-runtime/openclaw-config.ts
 var BROKER_MCP_CONNECTION_TIMEOUT_MS = 1e4;
 var BROKER_MCP_REQUEST_TIMEOUT_MS = 45e3;
+var BROKER_SECRET_PROVIDER = "mlclaw_hf_broker";
 var AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2147483647;
 async function prepareUnyoloConfig(configPath) {
-  const parsed = objectValue2(JSON.parse(await fs2.readFile(configPath, "utf8")));
+  const parsed = objectValue2(JSON.parse(await fs3.readFile(configPath, "utf8")));
   if (!parsed) throw new Error("OpenClaw configuration must be an object");
   removeSupersededPluginConfig(parsed);
-  await fs2.writeFile(configPath, `${JSON.stringify(parsed, null, 2)}
+  await fs3.writeFile(configPath, `${JSON.stringify(parsed, null, 2)}
 `, { mode: 384 });
-  await fs2.chmod(configPath, 384);
+  await fs3.chmod(configPath, 384);
 }
 async function configureOpenClawGateway(config2, options = {}) {
-  const raw2 = await fs2.readFile(config2.openclawConfigPath, "utf8");
+  const raw2 = await fs3.readFile(config2.openclawConfigPath, "utf8");
   const openclawConfig = migrateLegacyCodexModelRefs(JSON.parse(raw2));
   const gateway = object(openclawConfig, "gateway");
   gateway.mode = "local";
@@ -5398,12 +5565,12 @@ async function configureOpenClawGateway(config2, options = {}) {
   configureManagedMcpServers(openclawConfig, config2);
   configureBrokerMcpServer(openclawConfig, config2);
   configureUnyoloPlugin(openclawConfig, config2);
-  await fs2.mkdir(path2.dirname(config2.openclawConfigPath), { recursive: true });
-  await fs2.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
+  await fs3.mkdir(path3.dirname(config2.openclawConfigPath), { recursive: true });
+  await fs3.writeFile(config2.openclawConfigPath, `${JSON.stringify(openclawConfig, null, 2)}
 `, { mode: 384 });
-  await fs2.chmod(config2.openclawConfigPath, 384);
+  await fs3.chmod(config2.openclawConfigPath, 384);
   if (process.getuid?.() === 0) {
-    await fs2.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
+    await fs3.chown(config2.openclawConfigPath, config2.openclawUid, config2.openclawGid);
   }
 }
 function disableAutomaticSessionResets(openclawConfig) {
@@ -5513,7 +5680,7 @@ function configureUnyoloPlugin(openclawConfig, config2) {
   };
 }
 async function managedMcpServerStatus(config2) {
-  const raw2 = JSON.parse(await fs2.readFile(config2.openclawConfigPath, "utf8"));
+  const raw2 = JSON.parse(await fs3.readFile(config2.openclawConfigPath, "utf8"));
   const servers = object(object(raw2, "mcp"), "servers");
   return [
     { id: "huggingface", name: "Hugging Face MCP" },
@@ -5550,7 +5717,7 @@ function configureOpenClawModels(openclawConfig, config2, codexConfigured, openA
   const models = object(openclawConfig, "models");
   models.mode = "merge";
   const providers = object(models, "providers");
-  configureHuggingFaceProvider(object(providers, "huggingface"), config2, routerChoices);
+  configureHuggingFaceProvider(openclawConfig, object(providers, "huggingface"), config2, routerChoices);
   configureNativeOpenAiProvider(providers);
 }
 function configureAgentModelChoices(defaults, config2, routerChoices, codexConfigured, openAiConfigured2) {
@@ -5577,12 +5744,28 @@ function resolvePrimaryModel(params) {
   if (!params.openAiAvailable && params.requested.startsWith("openai/")) return params.fallback;
   return params.requested;
 }
-function configureHuggingFaceProvider(huggingface, config2, routerChoices) {
+function configureHuggingFaceProvider(openclawConfig, huggingface, config2, routerChoices) {
   huggingface.baseUrl = config2.brokerAgentUrl ? `${config2.brokerAgentUrl.replace(/\/+$/, "")}/v1` : "https://router.huggingface.co/v1";
-  if (config2.brokerAgentSecret) huggingface.apiKey = config2.brokerAgentSecret;
-  else delete huggingface.apiKey;
+  configureBrokerSecretReference(openclawConfig, huggingface, config2);
   huggingface.api = "openai-completions";
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
+}
+function configureBrokerSecretReference(openclawConfig, huggingface, config2) {
+  const secrets = object(openclawConfig, "secrets");
+  const providers = object(secrets, "providers");
+  if (config2.brokerAgentUrl && config2.brokerAgentSecretFile) {
+    providers[BROKER_SECRET_PROVIDER] = {
+      source: "file",
+      path: config2.brokerAgentSecretFile,
+      mode: "singleValue"
+    };
+    huggingface.apiKey = { source: "file", provider: BROKER_SECRET_PROVIDER, id: "value" };
+    return;
+  }
+  delete providers[BROKER_SECRET_PROVIDER];
+  delete huggingface.apiKey;
+  if (Object.keys(providers).length === 0) delete secrets.providers;
+  if (Object.keys(secrets).length === 0) delete openclawConfig.secrets;
 }
 function configureNativeOpenAiProvider(providers) {
   delete providers["mlclaw-codex"];
@@ -5727,8 +5910,8 @@ import http3 from "node:http";
 import { Readable as Readable2 } from "node:stream";
 
 // src/mlclaw-space-runtime/app.ts
-import fs4 from "node:fs/promises";
-import path4 from "node:path";
+import fs5 from "node:fs/promises";
+import path5 from "node:path";
 
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
@@ -5869,26 +6052,26 @@ var handleParsingNestedValues = (form, key, value) => {
 };
 
 // node_modules/hono/dist/utils/url.js
-var splitPath = (path9) => {
-  const paths = path9.split("/");
+var splitPath = (path10) => {
+  const paths = path10.split("/");
   if (paths[0] === "") {
     paths.shift();
   }
   return paths;
 };
 var splitRoutingPath = (routePath) => {
-  const { groups, path: path9 } = extractGroupsFromPath(routePath);
-  const paths = splitPath(path9);
+  const { groups, path: path10 } = extractGroupsFromPath(routePath);
+  const paths = splitPath(path10);
   return replaceGroupMarks(paths, groups);
 };
-var extractGroupsFromPath = (path9) => {
+var extractGroupsFromPath = (path10) => {
   const groups = [];
-  path9 = path9.replace(/\{[^}]+\}/g, (match2, index) => {
+  path10 = path10.replace(/\{[^}]+\}/g, (match2, index) => {
     const mark = `@${index}`;
     groups.push([mark, match2]);
     return mark;
   });
-  return { groups, path: path9 };
+  return { groups, path: path10 };
 };
 var replaceGroupMarks = (paths, groups) => {
   for (let i = groups.length - 1; i >= 0; i--) {
@@ -5945,8 +6128,8 @@ var getPath = (request) => {
       const queryIndex = url.indexOf("?", i);
       const hashIndex = url.indexOf("#", i);
       const end = queryIndex === -1 ? hashIndex === -1 ? void 0 : hashIndex : hashIndex === -1 ? queryIndex : Math.min(queryIndex, hashIndex);
-      const path9 = url.slice(start, end);
-      return tryDecodeURI(path9.includes("%25") ? path9.replace(/%25/g, "%2525") : path9);
+      const path10 = url.slice(start, end);
+      return tryDecodeURI(path10.includes("%25") ? path10.replace(/%25/g, "%2525") : path10);
     } else if (charCode === 63 || charCode === 35) {
       break;
     }
@@ -5963,11 +6146,11 @@ var mergePath = (base, sub, ...rest) => {
   }
   return `${base?.[0] === "/" ? "" : "/"}${base}${sub === "/" ? "" : `${base?.at(-1) === "/" ? "" : "/"}${sub?.[0] === "/" ? sub.slice(1) : sub}`}`;
 };
-var checkOptionalParameter = (path9) => {
-  if (path9.charCodeAt(path9.length - 1) !== 63 || !path9.includes(":")) {
+var checkOptionalParameter = (path10) => {
+  if (path10.charCodeAt(path10.length - 1) !== 63 || !path10.includes(":")) {
     return null;
   }
-  const segments = path9.split("/");
+  const segments = path10.split("/");
   const results = [];
   let basePath = "";
   segments.forEach((segment) => {
@@ -6108,9 +6291,9 @@ var HonoRequest = class {
    */
   path;
   bodyCache = {};
-  constructor(request, path9 = "/", matchResult = [[]]) {
+  constructor(request, path10 = "/", matchResult = [[]]) {
     this.raw = request;
-    this.path = path9;
+    this.path = path10;
     this.#matchResult = matchResult;
     this.#validatedData = {};
   }
@@ -6862,8 +7045,8 @@ var Hono = class _Hono {
         return this;
       };
     });
-    this.on = (method, path9, ...handlers) => {
-      for (const p of [path9].flat()) {
+    this.on = (method, path10, ...handlers) => {
+      for (const p of [path10].flat()) {
         this.#path = p;
         for (const m of [method].flat()) {
           handlers.map((handler) => {
@@ -6920,8 +7103,8 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path9, app) {
-    const subApp = this.basePath(path9);
+  route(path10, app) {
+    const subApp = this.basePath(path10);
     app.routes.map((r) => {
       let handler;
       if (app.errorHandler === errorHandler) {
@@ -6947,9 +7130,9 @@ var Hono = class _Hono {
    * const api = new Hono().basePath('/api')
    * ```
    */
-  basePath(path9) {
+  basePath(path10) {
     const subApp = this.#clone();
-    subApp._basePath = mergePath(this._basePath, path9);
+    subApp._basePath = mergePath(this._basePath, path10);
     return subApp;
   }
   /**
@@ -7023,7 +7206,7 @@ var Hono = class _Hono {
    * })
    * ```
    */
-  mount(path9, applicationHandler, options) {
+  mount(path10, applicationHandler, options) {
     let replaceRequest;
     let optionHandler;
     if (options) {
@@ -7050,7 +7233,7 @@ var Hono = class _Hono {
       return [c.env, executionContext];
     };
     replaceRequest ||= (() => {
-      const mergedPath = mergePath(this._basePath, path9);
+      const mergedPath = mergePath(this._basePath, path10);
       const pathPrefixLength = mergedPath === "/" ? 0 : mergedPath.length;
       return (request) => {
         const url = new URL(request.url);
@@ -7065,19 +7248,19 @@ var Hono = class _Hono {
       }
       await next();
     };
-    this.#addRoute(METHOD_NAME_ALL, mergePath(path9, "*"), handler);
+    this.#addRoute(METHOD_NAME_ALL, mergePath(path10, "*"), handler);
     return this;
   }
-  #addRoute(method, path9, handler, baseRoutePath) {
+  #addRoute(method, path10, handler, baseRoutePath) {
     method = method.toUpperCase();
-    path9 = mergePath(this._basePath, path9);
+    path10 = mergePath(this._basePath, path10);
     const r = {
       basePath: baseRoutePath !== void 0 ? mergePath(this._basePath, baseRoutePath) : this._basePath,
-      path: path9,
+      path: path10,
       method,
       handler
     };
-    this.router.add(method, path9, [handler, r]);
+    this.router.add(method, path10, [handler, r]);
     this.routes.push(r);
   }
   #handleError(err, c) {
@@ -7090,10 +7273,10 @@ var Hono = class _Hono {
     if (method === "HEAD") {
       return (async () => new Response(null, await this.#dispatch(request, executionCtx, env, "GET")))();
     }
-    const path9 = this.getPath(request, { env });
-    const matchResult = this.router.match(method, path9);
+    const path10 = this.getPath(request, { env });
+    const matchResult = this.router.match(method, path10);
     const c = new Context(request, {
-      path: path9,
+      path: path10,
       matchResult,
       env,
       executionCtx,
@@ -7193,7 +7376,7 @@ var Hono = class _Hono {
 
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
-function match(method, path9) {
+function match(method, path10) {
   const matchers = this.buildAllMatchers();
   const match2 = ((method2, path22) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
@@ -7209,7 +7392,7 @@ function match(method, path9) {
     return [matcher[1][index], match3];
   });
   this.match = match2;
-  return match2(method, path9);
+  return match2(method, path10);
 }
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
@@ -7324,12 +7507,12 @@ var Node = class _Node {
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
-  insert(path9, index, pathErrorCheckOnly) {
+  insert(path10, index, pathErrorCheckOnly) {
     const paramAssoc = [];
     const groups = [];
     for (let i = 0; ; ) {
       let replaced = false;
-      path9 = path9.replace(/\{[^}]+\}/g, (m) => {
+      path10 = path10.replace(/\{[^}]+\}/g, (m) => {
         const mark = `@\\${i}`;
         groups[i] = [mark, m];
         i++;
@@ -7340,7 +7523,7 @@ var Trie = class {
         break;
       }
     }
-    const tokens = path9.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
+    const tokens = path10.match(/(?::[^\/]+)|(?:\/\*$)|./g) || [];
     for (let i = groups.length - 1; i >= 0; i--) {
       const [mark] = groups[i];
       for (let j = tokens.length - 1; j >= 0; j--) {
@@ -7379,9 +7562,9 @@ var Trie = class {
 // node_modules/hono/dist/router/reg-exp-router/router.js
 var nullMatcher = [/^$/, [], /* @__PURE__ */ Object.create(null)];
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
-function buildWildcardRegExp(path9) {
-  return wildcardRegExpCache[path9] ??= new RegExp(
-    path9 === "*" ? "" : `^${path9.replace(
+function buildWildcardRegExp(path10) {
+  return wildcardRegExpCache[path10] ??= new RegExp(
+    path10 === "*" ? "" : `^${path10.replace(
       /\/\*$|([.\\+*[^\]$()])/g,
       (_, metaChar) => metaChar ? `\\${metaChar}` : "(?:|/.*)"
     )}$`
@@ -7403,17 +7586,17 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   );
   const staticMap = /* @__PURE__ */ Object.create(null);
   for (let i = 0, j = -1, len = routesWithStaticPathFlag.length; i < len; i++) {
-    const [pathErrorCheckOnly, path9, handlers] = routesWithStaticPathFlag[i];
+    const [pathErrorCheckOnly, path10, handlers] = routesWithStaticPathFlag[i];
     if (pathErrorCheckOnly) {
-      staticMap[path9] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
+      staticMap[path10] = [handlers.map(([h]) => [h, /* @__PURE__ */ Object.create(null)]), emptyParam];
     } else {
       j++;
     }
     let paramAssoc;
     try {
-      paramAssoc = trie.insert(path9, j, pathErrorCheckOnly);
+      paramAssoc = trie.insert(path10, j, pathErrorCheckOnly);
     } catch (e) {
-      throw e === PATH_ERROR ? new UnsupportedPathError(path9) : e;
+      throw e === PATH_ERROR ? new UnsupportedPathError(path10) : e;
     }
     if (pathErrorCheckOnly) {
       continue;
@@ -7447,12 +7630,12 @@ function buildMatcherFromPreprocessedRoutes(routes) {
   }
   return [regexp, handlerMap, staticMap];
 }
-function findMiddleware(middleware, path9) {
+function findMiddleware(middleware, path10) {
   if (!middleware) {
     return void 0;
   }
   for (const k of Object.keys(middleware).sort((a, b) => b.length - a.length)) {
-    if (buildWildcardRegExp(k).test(path9)) {
+    if (buildWildcardRegExp(k).test(path10)) {
       return [...middleware[k]];
     }
   }
@@ -7466,7 +7649,7 @@ var RegExpRouter = class {
     this.#middleware = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
     this.#routes = { [METHOD_NAME_ALL]: /* @__PURE__ */ Object.create(null) };
   }
-  add(method, path9, handler) {
+  add(method, path10, handler) {
     const middleware = this.#middleware;
     const routes = this.#routes;
     if (!middleware || !routes) {
@@ -7481,18 +7664,18 @@ var RegExpRouter = class {
         });
       });
     }
-    if (path9 === "/*") {
-      path9 = "*";
+    if (path10 === "/*") {
+      path10 = "*";
     }
-    const paramCount = (path9.match(/\/:/g) || []).length;
-    if (/\*$/.test(path9)) {
-      const re = buildWildcardRegExp(path9);
+    const paramCount = (path10.match(/\/:/g) || []).length;
+    if (/\*$/.test(path10)) {
+      const re = buildWildcardRegExp(path10);
       if (method === METHOD_NAME_ALL) {
         Object.keys(middleware).forEach((m) => {
-          middleware[m][path9] ||= findMiddleware(middleware[m], path9) || findMiddleware(middleware[METHOD_NAME_ALL], path9) || [];
+          middleware[m][path10] ||= findMiddleware(middleware[m], path10) || findMiddleware(middleware[METHOD_NAME_ALL], path10) || [];
         });
       } else {
-        middleware[method][path9] ||= findMiddleware(middleware[method], path9) || findMiddleware(middleware[METHOD_NAME_ALL], path9) || [];
+        middleware[method][path10] ||= findMiddleware(middleware[method], path10) || findMiddleware(middleware[METHOD_NAME_ALL], path10) || [];
       }
       Object.keys(middleware).forEach((m) => {
         if (method === METHOD_NAME_ALL || method === m) {
@@ -7510,7 +7693,7 @@ var RegExpRouter = class {
       });
       return;
     }
-    const paths = checkOptionalParameter(path9) || [path9];
+    const paths = checkOptionalParameter(path10) || [path10];
     for (let i = 0, len = paths.length; i < len; i++) {
       const path22 = paths[i];
       Object.keys(routes).forEach((m) => {
@@ -7537,13 +7720,13 @@ var RegExpRouter = class {
     const routes = [];
     let hasOwnRoute = method === METHOD_NAME_ALL;
     [this.#middleware, this.#routes].forEach((r) => {
-      const ownRoute = r[method] ? Object.keys(r[method]).map((path9) => [path9, r[method][path9]]) : [];
+      const ownRoute = r[method] ? Object.keys(r[method]).map((path10) => [path10, r[method][path10]]) : [];
       if (ownRoute.length !== 0) {
         hasOwnRoute ||= true;
         routes.push(...ownRoute);
       } else if (method !== METHOD_NAME_ALL) {
         routes.push(
-          ...Object.keys(r[METHOD_NAME_ALL]).map((path9) => [path9, r[METHOD_NAME_ALL][path9]])
+          ...Object.keys(r[METHOD_NAME_ALL]).map((path10) => [path10, r[METHOD_NAME_ALL][path10]])
         );
       }
     });
@@ -7563,13 +7746,13 @@ var SmartRouter = class {
   constructor(init) {
     this.#routers = init.routers;
   }
-  add(method, path9, handler) {
+  add(method, path10, handler) {
     if (!this.#routes) {
       throw new Error(MESSAGE_MATCHER_IS_ALREADY_BUILT);
     }
-    this.#routes.push([method, path9, handler]);
+    this.#routes.push([method, path10, handler]);
   }
-  match(method, path9) {
+  match(method, path10) {
     if (!this.#routes) {
       throw new Error("Fatal error");
     }
@@ -7584,7 +7767,7 @@ var SmartRouter = class {
         for (let i2 = 0, len2 = routes.length; i2 < len2; i2++) {
           router.add(...routes[i2]);
         }
-        res = router.match(method, path9);
+        res = router.match(method, path10);
       } catch (e) {
         if (e instanceof UnsupportedPathError) {
           continue;
@@ -7634,10 +7817,10 @@ var Node2 = class _Node2 {
     }
     this.#patterns = [];
   }
-  insert(method, path9, handler) {
+  insert(method, path10, handler) {
     this.#order = ++this.#order;
     let curNode = this;
-    const parts = splitRoutingPath(path9);
+    const parts = splitRoutingPath(path10);
     const possibleKeys = [];
     for (let i = 0, len = parts.length; i < len; i++) {
       const p = parts[i];
@@ -7686,12 +7869,12 @@ var Node2 = class _Node2 {
       }
     }
   }
-  search(method, path9) {
+  search(method, path10) {
     const handlerSets = [];
     this.#params = emptyParams;
     const curNode = this;
     let curNodes = [curNode];
-    const parts = splitPath(path9);
+    const parts = splitPath(path10);
     const curNodesQueue = [];
     const len = parts.length;
     let partOffsets = null;
@@ -7733,13 +7916,13 @@ var Node2 = class _Node2 {
           if (matcher instanceof RegExp) {
             if (partOffsets === null) {
               partOffsets = new Array(len);
-              let offset = path9[0] === "/" ? 1 : 0;
+              let offset = path10[0] === "/" ? 1 : 0;
               for (let p = 0; p < len; p++) {
                 partOffsets[p] = offset;
                 offset += parts[p].length + 1;
               }
             }
-            const restPathString = path9.substring(partOffsets[i]);
+            const restPathString = path10.substring(partOffsets[i]);
             const m = matcher.exec(restPathString);
             if (m) {
               params[name] = m[0];
@@ -7792,18 +7975,18 @@ var TrieRouter = class {
   constructor() {
     this.#node = new Node2();
   }
-  add(method, path9, handler) {
-    const results = checkOptionalParameter(path9);
+  add(method, path10, handler) {
+    const results = checkOptionalParameter(path10);
     if (results) {
       for (let i = 0, len = results.length; i < len; i++) {
         this.#node.insert(method, results[i], handler);
       }
       return;
     }
-    this.#node.insert(method, path9, handler);
+    this.#node.insert(method, path10, handler);
   }
-  match(method, path9) {
-    return this.#node.search(method, path9);
+  match(method, path10) {
+    return this.#node.search(method, path10);
   }
 };
 
@@ -8327,6 +8510,7 @@ function runtimeSettings(config2) {
   return {
     agentName: config2.agentName ?? null,
     model: config2.model,
+    generation: config2.runtimeSettingsGeneration,
     stateBucket: config2.stateBucket ?? null,
     stateMountDir: config2.stateMountDir ?? null,
     statePrefix: config2.statePrefix ?? null,
@@ -8343,16 +8527,6 @@ function runtimeSettings(config2) {
 }
 function normalizeModel(value) {
   return normalizeModelRef(value);
-}
-async function setCurrentSpaceVariable(config2, key, value) {
-  if (!config2.spaceId || !config2.hfToken) {
-    throw new Error("Space mutation requires SPACE_ID and HF_TOKEN");
-  }
-  await hubRequest(config2, `/api/spaces/${config2.spaceId}/variables`, {
-    method: "POST",
-    body: JSON.stringify({ key, value }),
-    headers: { "content-type": "application/json" }
-  });
 }
 async function setCurrentSpaceSecret(config2, key, value) {
   if (!config2.spaceId || !config2.hfToken) {
@@ -8375,8 +8549,8 @@ async function restartCurrentSpace(config2) {
   });
   return true;
 }
-async function hubRequest(config2, path9, init) {
-  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path9}`, {
+async function hubRequest(config2, path10, init) {
+  const response = await fetch(`${config2.hubUrl.replace(/\/+$/, "")}${path10}`, {
     ...init,
     headers: {
       authorization: `Bearer ${config2.hfToken}`,
@@ -8867,8 +9041,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path9, errorMaps, issueData } = params;
-  const fullPath = [...path9, ...issueData.path || []];
+  const { data, path: path10, errorMaps, issueData } = params;
+  const fullPath = [...path10, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -8984,11 +9158,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path9, key) {
+  constructor(parent, value, path10, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path9;
+    this._path = path10;
     this._key = key;
   }
   get path() {
@@ -12512,14 +12686,14 @@ function normalizeScope(value) {
 
 // src/mlclaw-space-runtime/openai-credentials.ts
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes as randomBytes5 } from "node:crypto";
-import fs3 from "node:fs/promises";
-import path3 from "node:path";
+import fs4 from "node:fs/promises";
+import path4 from "node:path";
 function openAiConfigured(env = process.env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
 }
 async function loadOpenAiCredentialFile(file) {
   try {
-    const raw2 = await fs3.readFile(file, "utf8");
+    const raw2 = await fs4.readFile(file, "utf8");
     const match2 = raw2.match(/(?:^|\n)OPENAI_API_KEY=([^\n]+)/);
     return match2?.[1]?.trim() || void 0;
   } catch {
@@ -12527,10 +12701,10 @@ async function loadOpenAiCredentialFile(file) {
   }
 }
 async function writeEphemeralOpenAiCredential(file, apiKey) {
-  await fs3.mkdir(path3.dirname(file), { recursive: true, mode: 448 });
-  await fs3.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
+  await fs4.mkdir(path4.dirname(file), { recursive: true, mode: 448 });
+  await fs4.writeFile(file, `OPENAI_API_KEY=${apiKey.trim()}
 `, { encoding: "utf8", mode: 384 });
-  await fs3.chmod(file, 384);
+  await fs4.chmod(file, 384);
 }
 var OpenAiCredentialStore = class {
   constructor(file, secret) {
@@ -12549,7 +12723,7 @@ var OpenAiCredentialStore = class {
   async load() {
     let raw2;
     try {
-      raw2 = await fs3.readFile(this.file, "utf8");
+      raw2 = await fs4.readFile(this.file, "utf8");
     } catch (err) {
       if (err instanceof Error && "code" in err && err.code === "ENOENT") {
         return void 0;
@@ -12590,17 +12764,17 @@ var OpenAiCredentialStore = class {
       tag: cipher.getAuthTag().toString("base64url"),
       ciphertext: ciphertext.toString("base64url")
     };
-    const directory = path3.dirname(this.file);
+    const directory = path4.dirname(this.file);
     const temporary = `${this.file}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
-    await fs3.mkdir(directory, { recursive: true, mode: 448 });
+    await fs4.mkdir(directory, { recursive: true, mode: 448 });
     try {
-      await fs3.writeFile(temporary, `${JSON.stringify(envelope)}
+      await fs4.writeFile(temporary, `${JSON.stringify(envelope)}
 `, { encoding: "utf8", mode: 384 });
-      await fs3.chmod(temporary, 384);
-      await fs3.rename(temporary, this.file);
-      await fs3.chmod(this.file, 384);
+      await fs4.chmod(temporary, 384);
+      await fs4.rename(temporary, this.file);
+      await fs4.chmod(this.file, 384);
     } finally {
-      await fs3.rm(temporary, { force: true });
+      await fs4.rm(temporary, { force: true });
     }
   }
 };
@@ -13411,15 +13585,15 @@ function createSpaceRuntimeApp(config2, controls) {
   app.get("/healthz", (c) => health(c, config2, controls));
   app.get(
     "/assets/mlclaw.svg",
-    async () => serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path5.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/hf-logo.svg",
-    async () => serveFile(path4.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path5.join(config2.assetsDir, "hf-logo.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get(
     "/assets/assistant-avatar.svg",
-    async () => serveFile(path4.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
+    async () => serveFile(path5.join(config2.assetsDir, "assistant-avatar.svg"), "image/svg+xml; charset=utf-8")
   );
   app.get("/assets/mlclaw-control-branding.js", () => staticScript(CONTROL_BRANDING_SCRIPT));
   app.get("/plugins/unyolo/ui", (c) => c.redirect("/plugins/unyolo/ui/", 308));
@@ -13499,7 +13673,7 @@ function createSpaceRuntimeApp(config2, controls) {
     if (!safe) {
       return c.text("not found\n", 404);
     }
-    const file = path4.join(config2.assetsDir, "mlclaw-control-ui", safe);
+    const file = path5.join(config2.assetsDir, "mlclaw-control-ui", safe);
     return serveFile(file, contentType(file), true);
   });
   app.get("/mlclaw/openai", (c) => c.redirect("/mlclaw/credentials", 302));
@@ -13680,27 +13854,37 @@ function createSpaceRuntimeApp(config2, controls) {
         400
       );
     }
-    let persistent = false;
-    if (config2.spaceId && config2.hfToken) {
-      await setCurrentSpaceVariable(config2, "OPENCLAW_MODEL", model);
-      await setCurrentSpaceVariable(config2, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
-      persistent = true;
+    const expectedGeneration = body?.generation;
+    if (typeof expectedGeneration !== "number" || !Number.isSafeInteger(expectedGeneration) || expectedGeneration !== config2.runtimeSettingsGeneration) {
+      return c.json({ ok: false, error: "runtime settings changed; refresh before saving" }, 409);
     }
-    await writeRuntimeSettingsFile(config2, model, choices);
+    const persistent = Boolean(config2.stateMountDir || config2.gatewayLocation === "local");
+    let settings;
+    try {
+      settings = await writeRuntimeSettingsFile({
+        file: config2.runtimeSettingsFile,
+        model,
+        modelChoices: choices,
+        expectedGeneration
+      });
+    } catch (error) {
+      if (error instanceof RuntimeSettingsConflictError) {
+        return c.json({ ok: false, error: error.message }, 409);
+      }
+      throw error;
+    }
+    config2.runtimeSettingsGeneration = settings.generation;
     controls.setModelSettings(model, choices);
     await configureOpenClawGateway(config2);
-    let restartPending = false;
-    if (persistent) {
-      try {
-        restartPending = await restartCurrentSpace(config2);
-      } catch (err) {
-        process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}
-`);
-      }
-    } else {
-      await controls.restartOpenClaw();
-    }
-    return c.json({ ok: true, model, modelChoices: choices, persistent, restartPending });
+    await controls.restartOpenClaw();
+    return c.json({
+      ok: true,
+      model,
+      modelChoices: choices,
+      generation: settings.generation,
+      persistent,
+      restartPending: false
+    });
   });
   app.post("/mlclaw/api/credentials/openai", async (c) => {
     const auth = requireAdmin(c, config2);
@@ -13873,15 +14057,15 @@ async function controlUi(c, config2) {
   if (auth instanceof Response) {
     return auth;
   }
-  return serveFile(path4.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
+  return serveFile(path5.join(config2.assetsDir, "mlclaw-control-ui", "index.html"), "text/html; charset=utf-8");
 }
 async function trustedUnyoloUi(c, config2, delegatedUnyolo) {
   const prefix = "/plugins/unyolo/ui/";
   const requested = c.req.path.slice(prefix.length);
   const relative = requested ? safeRelativePath(requested) : "index.html";
   if (!relative) return c.text("not found\n", 404);
-  const uiDir = path4.join(config2.unyoloPluginPath, "dist", "ui");
-  const file = path4.join(uiDir, relative);
+  const uiDir = path5.join(config2.unyoloPluginPath, "dist", "ui");
+  const file = path5.join(uiDir, relative);
   if (relative === "index.html") {
     const destination = c.req.header("sec-fetch-dest");
     if (destination !== "iframe" && destination !== "document") return c.text("not found\n", 404);
@@ -13891,7 +14075,7 @@ async function trustedUnyoloUi(c, config2, delegatedUnyolo) {
     const auth = requireAdmin(c, config2);
     if (auth instanceof Response) return auth;
     try {
-      const template = await fs4.readFile(file, "utf8");
+      const template = await fs5.readFile(file, "utf8");
       const delegatedSession = destination === "document" || embeddedPopover;
       const marker = !delegatedSession ? '<meta name="unyolo-delegated-top-level">' : `<meta name="unyolo-delegated-session" content="${Buffer.from(
         JSON.stringify(
@@ -14241,31 +14425,9 @@ function fixedWindowRateLimit(limit, windowMs) {
 function recordValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
-async function writeRuntimeSettingsFile(config2, model, choices) {
-  await fs4.mkdir(path4.dirname(config2.runtimeSettingsFile), { recursive: true });
-  await fs4.writeFile(
-    config2.runtimeSettingsFile,
-    `${JSON.stringify(
-      {
-        version: 1,
-        model,
-        modelChoices: choices,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      },
-      null,
-      2
-    )}
-`,
-    { encoding: "utf8", mode: 384 }
-  );
-  await fs4.chmod(config2.runtimeSettingsFile, 384);
-  if (process.getuid?.() === 0) {
-    await fs4.chown(config2.runtimeSettingsFile, config2.openclawUid, config2.openclawGid);
-  }
-}
 async function serveFile(file, contentTypeHeader, immutable = false) {
   try {
-    const body = await fs4.readFile(file);
+    const body = await fs5.readFile(file);
     const headers = new Headers({ "content-type": contentTypeHeader });
     if (immutable) {
       headers.set("cache-control", "public, max-age=31536000, immutable");
@@ -14279,11 +14441,11 @@ async function serveFile(file, contentTypeHeader, immutable = false) {
   }
 }
 async function serveBrandAsset(config2, asset) {
-  const response = await serveFile(path4.join(config2.assetsDir, asset), contentType(asset));
+  const response = await serveFile(path5.join(config2.assetsDir, asset), contentType(asset));
   if (response.status !== 404 || asset === "mlclaw.svg") {
     return response;
   }
-  return serveFile(path4.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
+  return serveFile(path5.join(config2.assetsDir, "mlclaw.svg"), "image/svg+xml; charset=utf-8");
 }
 function safeRelativePath(value) {
   let decoded;
@@ -14292,7 +14454,7 @@ function safeRelativePath(value) {
   } catch {
     return void 0;
   }
-  const normalized = path4.posix.normalize(decoded).replace(/^\/+/, "");
+  const normalized = path5.posix.normalize(decoded).replace(/^\/+/, "");
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
     return void 0;
   }
@@ -14324,8 +14486,8 @@ function contentType(file) {
 }
 
 // src/mlclaw-space-runtime/codex-credentials.ts
-import fs6 from "node:fs/promises";
-import path6 from "node:path";
+import fs7 from "node:fs/promises";
+import path7 from "node:path";
 
 // src/vendor/hfjs-xet/error.ts
 async function createApiError(response, opts) {
@@ -18147,10 +18309,10 @@ var CurrentXorbInfo = class {
       hash: computeXorbHash(xorbChunksCleaned),
       chunks: xorbChunksCleaned,
       id: this.id,
-      files: Object.entries(this.fileProcessedBytes).map(([path9, processedBytes]) => ({
-        path: path9,
-        progress: processedBytes / this.fileSize[path9],
-        lastSentProgress: ((this.fileUploadedBytes[path9] ?? 0) + (processedBytes - (this.fileUploadedBytes[path9] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path9]
+      files: Object.entries(this.fileProcessedBytes).map(([path10, processedBytes]) => ({
+        path: path10,
+        progress: processedBytes / this.fileSize[path10],
+        lastSentProgress: ((this.fileUploadedBytes[path10] ?? 0) + (processedBytes - (this.fileUploadedBytes[path10] ?? 0)) * PROCESSING_PROGRESS_RATIO) / this.fileSize[path10]
       }))
     };
   }
@@ -19023,7 +19185,7 @@ var BucketClient = class {
     if (paths.length === 0) {
       return;
     }
-    await this.batch(paths.map((path9) => ({ type: "deleteFile", path: path9 })));
+    await this.batch(paths.map((path10) => ({ type: "deleteFile", path: path10 })));
   }
   async batch(operations) {
     const body = `${operations.map((op) => JSON.stringify(op)).join("\n")}
@@ -19039,8 +19201,8 @@ var BucketClient = class {
    * any other failure (including bucket/auth errors), so a missing object is
    * never conflated with an unreachable bucket.
    */
-  async downloadFile(path9) {
-    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path9)}`;
+  async downloadFile(path10) {
+    const url = `${this.hubUrl}/buckets/${this.bucket}/resolve/${encodeURIComponent(path10)}`;
     const response = await this.fetchWithRetry(url);
     if (response.status === 404) {
       await this.assertBucketAccessible();
@@ -19077,8 +19239,8 @@ var BucketClient = class {
 
 // src/mlclaw/codex-auth.ts
 import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, hkdfSync as hkdfSync2, randomBytes as randomBytes7 } from "node:crypto";
-import fs5 from "node:fs/promises";
-import path5 from "node:path";
+import fs6 from "node:fs/promises";
+import path6 from "node:path";
 var CODEX_AUTH_OBJECT_BASENAME = ".mlclaw/codex-auth.enc";
 var CODEX_AUTH_REVOCATION_BASENAME = ".mlclaw/codex-auth.revoked";
 function codexAuthObjectPath(statePrefix) {
@@ -19150,7 +19312,7 @@ function decryptCodexAuthDocument(params) {
 async function readEncryptedCodexAuthFile(params) {
   let encrypted;
   try {
-    encrypted = await fs5.readFile(params.file, "utf8");
+    encrypted = await fs6.readFile(params.file, "utf8");
   } catch (error) {
     if (isNotFound(error)) return void 0;
     throw new Error("Could not read encrypted Codex credentials");
@@ -19174,7 +19336,7 @@ async function writeEncryptedCodexAuthFile(params) {
   await writePrivateFile(params.file, encrypted);
 }
 async function deleteEncryptedCodexAuthFile(file) {
-  await fs5.rm(file, { force: true });
+  await fs6.rm(file, { force: true });
 }
 function decodeCodexAuthDocument(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -19224,15 +19386,15 @@ function contextAad(context) {
   return Buffer.from(JSON.stringify(compactContext(context)), "utf8");
 }
 async function writePrivateFile(file, content) {
-  await fs5.mkdir(path5.dirname(file), { recursive: true, mode: 448 });
+  await fs6.mkdir(path6.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${randomBytes7(6).toString("hex")}.tmp`;
   try {
-    await fs5.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs5.chmod(temporary, 384);
-    await fs5.rename(temporary, file);
-    await fs5.chmod(file, 384);
+    await fs6.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs6.chmod(temporary, 384);
+    await fs6.rename(temporary, file);
+    await fs6.chmod(file, 384);
   } finally {
-    await fs5.rm(temporary, { force: true });
+    await fs6.rm(temporary, { force: true });
   }
 }
 function isNotFound(error) {
@@ -19533,7 +19695,7 @@ var CodexCredentialStore = class {
       context: this.expectedContext()
     });
     if (!this.config.stateMountDir && this.config.stateBucket && this.config.hfToken) {
-      const encrypted = await fs6.readFile(this.config.codexAuthStoreFile, "utf8");
+      const encrypted = await fs7.readFile(this.config.codexAuthStoreFile, "utf8");
       await this.bucketClient().uploadFiles([
         { path: codexAuthObjectPath(this.config.statePrefix), content: new Blob([encrypted]) }
       ]);
@@ -19541,7 +19703,7 @@ var CodexCredentialStore = class {
   }
   async hasRevocationMarker() {
     if (this.config.stateMountDir || !this.config.stateBucket || !this.config.hfToken) {
-      return await fileExists(path6.join(path6.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
+      return await fileExists(path7.join(path7.dirname(this.config.codexAuthStoreFile), "codex-auth.revoked"));
     }
     return Boolean(await this.bucketClient().downloadFile(codexAuthRevocationObjectPath(this.config.statePrefix)));
   }
@@ -19564,20 +19726,20 @@ var CodexCredentialStore = class {
   }
 };
 async function writePrivateRawFile(file, content) {
-  await fs6.mkdir(path6.dirname(file), { recursive: true, mode: 448 });
+  await fs7.mkdir(path7.dirname(file), { recursive: true, mode: 448 });
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
-    await fs6.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
-    await fs6.chmod(temporary, 384);
-    await fs6.rename(temporary, file);
-    await fs6.chmod(file, 384);
+    await fs7.writeFile(temporary, content, { encoding: "utf8", mode: 384, flag: "wx" });
+    await fs7.chmod(temporary, 384);
+    await fs7.rename(temporary, file);
+    await fs7.chmod(file, 384);
   } finally {
-    await fs6.rm(temporary, { force: true });
+    await fs7.rm(temporary, { force: true });
   }
 }
 async function fileExists(file) {
   try {
-    await fs6.access(file);
+    await fs7.access(file);
     return true;
   } catch (error) {
     if (isNotFound2(error)) return false;
@@ -19593,8 +19755,8 @@ function stableJson(value) {
 
 // src/mlclaw-space-runtime/mcp-credentials.ts
 import { createCipheriv as createCipheriv3, createDecipheriv as createDecipheriv3, hkdfSync as hkdfSync3, randomBytes as randomBytes8 } from "node:crypto";
-import fs7 from "node:fs/promises";
-import path7 from "node:path";
+import fs8 from "node:fs/promises";
+import path8 from "node:path";
 var DEFAULT_REFRESH_TIMEOUT_MS = 3e4;
 var McpCredentialStore = class {
   constructor(options) {
@@ -19691,7 +19853,7 @@ var McpCredentialStore = class {
   async loadFromDisk() {
     let raw2;
     try {
-      raw2 = await fs7.readFile(this.options.file, "utf8");
+      raw2 = await fs8.readFile(this.options.file, "utf8");
     } catch (err) {
       if (isNotFound3(err)) {
         return;
@@ -19723,18 +19885,18 @@ var McpCredentialStore = class {
     return result;
   }
   async persist() {
-    const directory = path7.dirname(this.options.file);
-    await fs7.mkdir(directory, { recursive: true, mode: 448 });
+    const directory = path8.dirname(this.options.file);
+    await fs8.mkdir(directory, { recursive: true, mode: 448 });
     const temporary = `${this.options.file}.${process.pid}.${randomBytes8(6).toString("hex")}.tmp`;
     const encrypted = encryptDocument(this.document, this.key);
     try {
-      await fs7.writeFile(temporary, `${JSON.stringify(encrypted)}
+      await fs8.writeFile(temporary, `${JSON.stringify(encrypted)}
 `, { encoding: "utf8", mode: 384 });
-      await fs7.chmod(temporary, 384);
-      await fs7.rename(temporary, this.options.file);
-      await fs7.chmod(this.options.file, 384);
+      await fs8.chmod(temporary, 384);
+      await fs8.rename(temporary, this.options.file);
+      await fs8.chmod(this.options.file, 384);
     } finally {
-      await fs7.rm(temporary, { force: true });
+      await fs8.rm(temporary, { force: true });
     }
   }
   async refresh(slot, credential) {
@@ -19877,20 +20039,20 @@ function isNotFound3(err) {
 
 // src/mlclaw-space-runtime/openclaw-state-migration.ts
 import { existsSync } from "node:fs";
-import fs8 from "node:fs/promises";
-import path8 from "node:path";
+import fs9 from "node:fs/promises";
+import path9 from "node:path";
 import { DatabaseSync } from "node:sqlite";
 var LEGACY_PROVIDER_ID = "mlclaw-codex";
 var NATIVE_PROVIDER_ID = "openai";
 var MAX_SESSION_STORE_BYTES = 64 * 1024 * 1024;
 async function migrateLegacyOpenAiSessionRefs(config2, now = Date.now) {
-  const stateDir = path8.dirname(config2.openclawConfigPath);
-  const agentsDir = path8.join(stateDir, "agents");
+  const stateDir = path9.dirname(config2.openclawConfigPath);
+  const agentsDir = path9.join(stateDir, "agents");
   let changed = 0;
   for (const agentId of await directoryNames(agentsDir)) {
-    const agentRoot = path8.join(agentsDir, agentId);
-    changed += await migrateJsonSessionStore(path8.join(agentRoot, "sessions", "sessions.json"), now);
-    changed += migrateSqliteSessionStore(path8.join(agentRoot, "agent", "openclaw-agent.sqlite"), now);
+    const agentRoot = path9.join(agentsDir, agentId);
+    changed += await migrateJsonSessionStore(path9.join(agentRoot, "sessions", "sessions.json"), now);
+    changed += migrateSqliteSessionStore(path9.join(agentRoot, "agent", "openclaw-agent.sqlite"), now);
   }
   return changed;
 }
@@ -19936,7 +20098,7 @@ async function migrateJsonSessionStore(file, now) {
   if (stat.size > MAX_SESSION_STORE_BYTES) {
     throw new Error(`OpenClaw session store exceeds ${MAX_SESSION_STORE_BYTES} bytes: ${file}`);
   }
-  const value = parseSessionStore(await fs8.readFile(file, "utf8"), file);
+  const value = parseSessionStore(await fs9.readFile(file, "utf8"), file);
   const result = migrateSessionStore(value, now);
   if (result.changed === 0) return 0;
   await writeJsonAtomic(file, result.value, {
@@ -19948,7 +20110,7 @@ async function migrateJsonSessionStore(file, now) {
 }
 async function optionalStat(file) {
   try {
-    return await fs8.stat(file);
+    return await fs9.stat(file);
   } catch (error) {
     if (isNotFound4(error)) return void 0;
     throw error;
@@ -20024,7 +20186,7 @@ function isMutableRecord(value) {
 }
 async function directoryNames(directory) {
   try {
-    return (await fs8.readdir(directory, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    return (await fs9.readdir(directory, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   } catch (error) {
     if (isNotFound4(error)) return [];
     throw error;
@@ -20033,16 +20195,16 @@ async function directoryNames(directory) {
 async function writeJsonAtomic(file, value, ownership) {
   const temporary = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   try {
-    await fs8.writeFile(temporary, `${JSON.stringify(value, null, 2)}
+    await fs9.writeFile(temporary, `${JSON.stringify(value, null, 2)}
 `, {
       mode: ownership.mode,
       flag: "wx"
     });
-    if (process.getuid?.() === 0) await fs8.chown(temporary, ownership.uid, ownership.gid);
-    await fs8.rename(temporary, file);
-    await fs8.chmod(file, ownership.mode);
+    if (process.getuid?.() === 0) await fs9.chown(temporary, ownership.uid, ownership.gid);
+    await fs9.rename(temporary, file);
+    await fs9.chmod(file, ownership.mode);
   } finally {
-    await fs8.rm(temporary, { force: true });
+    await fs9.rm(temporary, { force: true });
   }
 }
 function isNotFound4(error) {
@@ -20490,9 +20652,20 @@ var SpaceRuntimeServer = class {
         process.stdout.write(`[mlclaw] Migrated ${migratedSessions} native OpenAI session route(s)
 `);
       }
+      const resolvedLegacyModel = codexConfigured || persistedOpenAiKey ? DEFAULT_OPENAI_MODEL_REF : this.config.modelChoices[0]?.openclawModel ?? this.config.model;
       if (this.config.model === LEGACY_CODEX_MODEL_REF) {
-        this.config.model = codexConfigured || persistedOpenAiKey ? DEFAULT_OPENAI_MODEL_REF : this.config.modelChoices[0]?.openclawModel ?? this.config.model;
+        this.config.model = resolvedLegacyModel;
       }
+      const bootstrapModel = this.config.bootstrapModel === LEGACY_CODEX_MODEL_REF ? resolvedLegacyModel : this.config.bootstrapModel;
+      const runtimeSettings2 = await initializeRuntimeSettingsFile({
+        file: this.config.runtimeSettingsFile,
+        model: bootstrapModel,
+        modelChoices: this.config.modelChoices,
+        ...this.config.bootstrapUpdatedAt ? { bootstrapUpdatedAt: this.config.bootstrapUpdatedAt } : {}
+      });
+      this.config.model = runtimeSettings2.model;
+      this.config.modelChoices = runtimeSettings2.modelChoices;
+      this.config.runtimeSettingsGeneration = runtimeSettings2.generation;
       await configureOpenClawGateway(this.config, {
         codexConfigured,
         openAiConfigured: Boolean(persistedOpenAiKey)
@@ -20508,10 +20681,7 @@ var SpaceRuntimeServer = class {
         ...persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {},
         ...extraEnv
       };
-      if (this.config.brokerAgentSecret) {
-        env.HF_TOKEN = this.config.brokerAgentSecret;
-        env.HUGGINGFACE_HUB_TOKEN = this.config.brokerAgentSecret;
-      } else if (!this.config.brokerAgentUrl && this.config.routerToken) {
+      if (!this.config.brokerAgentUrl && this.config.routerToken) {
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }

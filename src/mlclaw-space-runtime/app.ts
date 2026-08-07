@@ -8,19 +8,8 @@ import { BrokerOperatorError, OperatorBrokerRegistry } from "./operator-brokers.
 import type { McpCredentialStatus } from "./mcp-credentials.js";
 import { createCsrfToken, verifyCsrfToken } from "./csrf.js";
 import { DelegatedUnyolo, DelegatedUnyoloError, type DelegatedSessionIdentity } from "./delegated-unyolo.js";
-import {
-  normalizeModel,
-  restartCurrentSpace,
-  runtimeSettings,
-  setCurrentSpaceSecret,
-  setCurrentSpaceVariable,
-} from "./hub-settings.js";
-import {
-  normalizeModelChoices,
-  parseOpenClawModelRef,
-  serializeModelChoices,
-  type ModelChoice,
-} from "./model-choices.js";
+import { normalizeModel, restartCurrentSpace, runtimeSettings, setCurrentSpaceSecret } from "./hub-settings.js";
+import { normalizeModelChoices, parseOpenClawModelRef, type ModelChoice } from "./model-choices.js";
 import { authorizeUrl, exchangeCodeForIdentity, HF_MCP_OAUTH_SCOPES, type OAuthIdentity } from "./oauth.js";
 import { configureOpenClawGateway } from "./openclaw-config.js";
 import {
@@ -34,6 +23,7 @@ import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
 import { localLoginPage } from "./pages.js";
 import { localAccessTokenMatches } from "./local-access.js";
 import { loadRouterModelChoices } from "./router-models.js";
+import { RuntimeSettingsConflictError, writeRuntimeSettingsFile } from "./runtime-settings-file.js";
 import {
   clearOauthStateCookie,
   clearSessionCookie,
@@ -371,26 +361,41 @@ export function createSpaceRuntimeApp(config: SpaceRuntimeConfig, controls: Runt
         400,
       );
     }
-    let persistent = false;
-    if (config.spaceId && config.hfToken) {
-      await setCurrentSpaceVariable(config, "OPENCLAW_MODEL", model);
-      await setCurrentSpaceVariable(config, "MLCLAW_MODEL_CHOICES", serializeModelChoices(choices));
-      persistent = true;
+    const expectedGeneration = body?.generation;
+    if (
+      typeof expectedGeneration !== "number" ||
+      !Number.isSafeInteger(expectedGeneration) ||
+      expectedGeneration !== config.runtimeSettingsGeneration
+    ) {
+      return c.json({ ok: false, error: "runtime settings changed; refresh before saving" }, 409);
     }
-    await writeRuntimeSettingsFile(config, model, choices);
+    const persistent = Boolean(config.stateMountDir || config.gatewayLocation === "local");
+    let settings;
+    try {
+      settings = await writeRuntimeSettingsFile({
+        file: config.runtimeSettingsFile,
+        model,
+        modelChoices: choices,
+        expectedGeneration,
+      });
+    } catch (error) {
+      if (error instanceof RuntimeSettingsConflictError) {
+        return c.json({ ok: false, error: error.message }, 409);
+      }
+      throw error;
+    }
+    config.runtimeSettingsGeneration = settings.generation;
     controls.setModelSettings(model, choices);
     await configureOpenClawGateway(config);
-    let restartPending = false;
-    if (persistent) {
-      try {
-        restartPending = await restartCurrentSpace(config);
-      } catch (err) {
-        process.stderr.write(`[mlclaw] failed to restart Space after model update: ${formatError(err)}\n`);
-      }
-    } else {
-      await controls.restartOpenClaw();
-    }
-    return c.json({ ok: true, model, modelChoices: choices, persistent, restartPending });
+    await controls.restartOpenClaw();
+    return c.json({
+      ok: true,
+      model,
+      modelChoices: choices,
+      generation: settings.generation,
+      persistent,
+      restartPending: false,
+    });
   });
 
   app.post("/mlclaw/api/credentials/openai", async (c) => {
@@ -1031,32 +1036,6 @@ function fixedWindowRateLimit(limit: number, windowMs: number): (key: string) =>
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-async function writeRuntimeSettingsFile(
-  config: SpaceRuntimeConfig,
-  model: string,
-  choices: ModelChoice[],
-): Promise<void> {
-  await fs.mkdir(path.dirname(config.runtimeSettingsFile), { recursive: true });
-  await fs.writeFile(
-    config.runtimeSettingsFile,
-    `${JSON.stringify(
-      {
-        version: 1,
-        model,
-        modelChoices: choices,
-        updatedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
-    { encoding: "utf8", mode: 0o600 },
-  );
-  await fs.chmod(config.runtimeSettingsFile, 0o600);
-  if (process.getuid?.() === 0) {
-    await fs.chown(config.runtimeSettingsFile, config.openclawUid, config.openclawGid);
-  }
 }
 
 async function serveFile(file: string, contentTypeHeader: string, immutable = false): Promise<Response> {

@@ -193,11 +193,20 @@ async function toolResult(
 
 async function callMcp(url: string, method: string, params?: Record<string, unknown>): Promise<McpResponse> {
   if (!brokerBinary) throw new Error("MLCLAW_HF_BROKER_BINARY is required");
+  const secretDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-hf-broker-mcp-secret-"));
+  const secretFile = path.join(secretDirectory, "shared-secret");
+  await fs.writeFile(secretFile, "agent-secret-agent-secret-agent-secret-1234\n", { mode: 0o600 });
+  const {
+    HF_TOKEN: _hfToken,
+    HUGGINGFACE_HUB_TOKEN: _hubToken,
+    HF_BROKER_SHARED_SECRET: _sharedSecret,
+    ...safeEnvironment
+  } = process.env;
   const child = spawn(brokerBinary, ["mcp"], {
     env: {
-      ...process.env,
+      ...safeEnvironment,
       HF_BROKER_AGENT_ENDPOINT: `tcp://${new URL(url).host}`,
-      HF_BROKER_SHARED_SECRET: "agent-secret-agent-secret-agent-secret-1234",
+      HF_BROKER_SHARED_SECRET_FILE: secretFile,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -209,7 +218,7 @@ async function callMcp(url: string, method: string, params?: Record<string, unkn
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     child.once("error", reject);
     child.once("close", resolve);
-  });
+  }).finally(() => fs.rm(secretDirectory, { recursive: true, force: true }));
   if (exitCode !== 0) throw new Error(`hf-broker mcp exited ${String(exitCode)}: ${stderr}`);
   const parsed: unknown = JSON.parse(stdout.trim());
   const response = jsonObject(parsed, "MCP response");

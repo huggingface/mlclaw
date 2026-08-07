@@ -327,8 +327,9 @@ After signing into the Space, open:
 
 Use the browser control UI for:
 
-- `/mlclaw/settings`: choose Router model/provider rows, update `OPENCLAW_MODEL`
-  and `MLCLAW_MODEL_CHOICES`, and request a Space restart.
+- `/mlclaw/settings`: choose Router model/provider rows and restart OpenClaw with
+  the saved deployment setting. If another update wins first, refresh before
+  saving again.
 - `/mlclaw/status`: inspect runtime, bucket, model, OAuth, and integration status.
 
 OpenClaw's unYOLO plugin adds an **Approvals** tab to the gateway. The tab

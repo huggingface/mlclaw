@@ -356,22 +356,13 @@ export function normalizeModelChoices(value: unknown, activeModel: string): Mode
   return ensureActiveModelChoice(dedupeModelChoices(choices), activeModel);
 }
 
-export function serializeModelChoices(choices: readonly ModelChoice[]): string {
-  return JSON.stringify(choices.map(serializableChoice));
-}
-
-export function ensureActiveModelChoice(
-  choices: readonly ModelChoice[],
-  activeModel: string,
-): ModelChoice[] {
+export function ensureActiveModelChoice(choices: readonly ModelChoice[], activeModel: string): ModelChoice[] {
   const parsed = parseOpenClawModelRef(activeModel);
   if (!parsed) {
     return [...choices];
   }
   const active = freezeChoice({
-    ...PRESET_MODEL_CHOICES.find(
-      (choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider,
-    ),
+    ...PRESET_MODEL_CHOICES.find((choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider),
     modelId: parsed.modelId,
     provider: parsed.provider,
     label: displayNameFromModelId(parsed.modelId),
@@ -440,29 +431,6 @@ function freezeChoice(params: Omit<ModelChoice, "key" | "openclawModel">): Model
   };
 }
 
-function serializableChoice(choice: ModelChoice): ModelChoice {
-  return {
-    key: choice.key,
-    modelId: choice.modelId,
-    provider: choice.provider,
-    openclawModel: choice.openclawModel,
-    label: choice.label,
-    ...(choice.note ? { note: choice.note } : {}),
-    ...(choice.contextLength ? { contextLength: choice.contextLength } : {}),
-    ...(choice.pricing ? { pricing: choice.pricing } : {}),
-    ...(choice.supportsTools !== undefined ? { supportsTools: choice.supportsTools } : {}),
-    ...(choice.supportsStructuredOutput !== undefined
-      ? { supportsStructuredOutput: choice.supportsStructuredOutput }
-      : {}),
-    ...(choice.firstTokenLatencyMs ? { firstTokenLatencyMs: choice.firstTokenLatencyMs } : {}),
-    ...(choice.throughput ? { throughput: choice.throughput } : {}),
-    ...(choice.status ? { status: choice.status } : {}),
-    ...(choice.inputModalities ? { inputModalities: choice.inputModalities } : {}),
-    ...(choice.outputModalities ? { outputModalities: choice.outputModalities } : {}),
-    ...(choice.preset ? { preset: true } : {}),
-  };
-}
-
 function normalizeModelId(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -505,10 +473,14 @@ function normalizeModalities(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  const modalities = [...new Set(value.flatMap((item) => {
-    const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
-    return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
-  }))];
+  const modalities = [
+    ...new Set(
+      value.flatMap((item) => {
+        const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+        return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
+      }),
+    ),
+  ];
   return modalities.length > 0 ? modalities : undefined;
 }
 
@@ -548,7 +520,7 @@ function optionalBoolean(value: unknown): boolean | undefined {
 }
 
 function optional<K extends string, T>(key: K, value: T | undefined): Record<K, T> | {} {
-  return value === undefined ? {} : { [key]: value } as Record<K, T>;
+  return value === undefined ? {} : ({ [key]: value } as Record<K, T>);
 }
 
 function positiveInteger(value: unknown): number | undefined {

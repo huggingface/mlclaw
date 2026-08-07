@@ -1,11 +1,12 @@
-import { readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { normalizeBucketPrefix } from "../hf-state-sync/paths.js";
 import { resolveBranding, type RuntimeBranding } from "./branding.js";
-import { DEFAULT_MODEL, normalizeModelChoices, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
+import { DEFAULT_MODEL, parseModelChoicesEnv, type ModelChoice } from "./model-choices.js";
 import { loadOperatorBrokers, type OperatorBrokerConfig } from "./operator-brokers.js";
 import { deriveLocalAccessToken } from "./local-access.js";
+import { readRuntimeSettingsFile } from "./runtime-settings-file.js";
 
 export type RuntimeMode = "template" | "app";
 
@@ -53,6 +54,9 @@ export type SpaceRuntimeConfig = {
   researchTimeoutMs: number;
   researchPollMs: number;
   runtimeSettingsFile: string;
+  runtimeSettingsGeneration: number;
+  bootstrapModel: string;
+  bootstrapUpdatedAt: string | undefined;
   openclawConfigPath: string;
   openclawCommand: string;
   openclawArgs: string[];
@@ -118,10 +122,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const credentialKey = configuredCredentialKey ?? randomBytes(32).toString("base64url");
   const openclawCommand = trim(env.MLCLAW_OPENCLAW_COMMAND) ?? "openclaw";
   const openclawArgs = splitArgs(env.MLCLAW_OPENCLAW_ARGS) ?? ["gateway"];
-  const runtimeSettingsFile =
-    trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ?? "/home/node/.local/share/mlclaw/live/.mlclaw/settings.json";
   const stateMountDir = trim(env.MLCLAW_STATE_MOUNT_DIR);
   const statePrefix = trim(env.OPENCLAW_HF_STATE_PREFIX);
+  const runtimeSettingsFile =
+    trim(env.MLCLAW_RUNTIME_SETTINGS_FILE) ??
+    (stateMountDir
+      ? `${stateMountDir.replace(/\/+$/, "")}/${normalizeBucketPrefix(statePrefix)}/.mlclaw/runtime-settings.json`
+      : "/home/node/.local/share/mlclaw/live/.mlclaw-protected/control/runtime-settings.json");
   const mcpCredentialFile =
     trim(env.MLCLAW_MCP_CREDENTIAL_FILE) ??
     (stateMountDir
@@ -137,8 +144,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
   const codexAuthStoreFile =
     trim(env.MLCLAW_CODEX_AUTH_STORE_FILE) ??
     (mountedControlDir ? `${mountedControlDir}/codex-auth.enc` : `${protectedControlDir}/codex-auth.enc`);
-  const runtimeSettings = readRuntimeSettings(runtimeSettingsFile);
-  const model = runtimeSettings.model ?? trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const runtimeSettings = readRuntimeSettingsFile(runtimeSettingsFile);
+  const bootstrapModel = trim(env.OPENCLAW_MODEL) ?? DEFAULT_MODEL;
+  const model = runtimeSettings?.model ?? bootstrapModel;
   const agentName = trim(env.OPENCLAW_AGENT_NAME);
   const telegramBotMuxConfigPath = optionalAbsolutePath(
     env.MLCLAW_TELEGRAM_BOT_MUX_CONFIG_PATH,
@@ -195,6 +203,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     researchTimeoutMs: integer(env.MLCLAW_RESEARCH_TIMEOUT_MS, 30 * 60 * 1000),
     researchPollMs: integer(env.MLCLAW_RESEARCH_POLL_MS, 1500),
     runtimeSettingsFile,
+    runtimeSettingsGeneration: runtimeSettings?.generation ?? 0,
+    bootstrapModel,
+    bootstrapUpdatedAt: trim(env.MLCLAW_DEPLOYMENT_UPDATED_AT),
     openclawConfigPath: trim(env.OPENCLAW_CONFIG_PATH) ?? "/home/node/.local/share/mlclaw/live/.openclaw/openclaw.json",
     openclawCommand,
     openclawArgs,
@@ -207,7 +218,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): SpaceRuntimeCo
     ),
     agentName,
     model,
-    modelChoices: runtimeSettings.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
+    modelChoices: runtimeSettings?.modelChoices ?? parseModelChoicesEnv(env.MLCLAW_MODEL_CHOICES, model),
     routerModelsUrl: trim(env.MLCLAW_ROUTER_MODELS_URL) ?? "https://router.huggingface.co/v1/models",
     stateBucket,
     stateMountDir,
@@ -370,21 +381,4 @@ function optionalAbsolutePath(value: string | undefined, name: string): string |
   const path = trim(value);
   if (path && !isAbsolute(path)) throw new Error(`${name} must be absolute`);
   return path;
-}
-
-function readRuntimeSettings(file: string): { model?: string; modelChoices?: ModelChoice[] } {
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-    const model = typeof parsed.model === "string" ? parsed.model.trim() : undefined;
-    if (!model) {
-      return {};
-    }
-    const modelChoices = normalizeModelChoices(parsed.modelChoices, model);
-    return {
-      model,
-      ...(modelChoices ? { modelChoices } : {}),
-    };
-  } catch {
-    return {};
-  }
 }

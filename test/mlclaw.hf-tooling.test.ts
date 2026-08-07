@@ -102,6 +102,8 @@ describe("Hugging Face tooling baseline", () => {
     expect(agentsMd).toContain("`hf-broker`");
     expect(agentsMd).toContain("`hf-cli`");
     expect(agentsMd).toContain("`hf_grant_request`");
+    expect(agentsMd).toContain("`hf auth whoami` to report no login");
+    expect(agentsMd).toContain("never run `hf auth login`");
     expect(agentsMd).toContain("deployment state bucket");
     expect(agentsMd).toContain("`.agents/skills`");
     expect(agentsMd).toContain("`skills`");
@@ -158,7 +160,7 @@ describe("Hugging Face tooling baseline", () => {
     expect(agentsMd).toContain("ML Claw Hugging Face Tooling");
     expect(agentsMd).toContain("`huggingface-datasets`");
     expect(agentsMd).toContain("Never ask");
-    expect(agentsMd).toContain("matching `hf_*` MCP tool for the operation");
+    expect(agentsMd).toContain("`hf_*` MCP tool for the operation");
     expect(agentsMd).toContain("Omit `request_id` for a new");
     expect(agentsMd).toContain("`hf_operation_list`");
     expect(agentsMd).toContain("Never reuse a request ID");

@@ -6,6 +6,7 @@ import { normalizeModelRef, PRESET_MODEL_CHOICES, type ModelChoice } from "./mod
 export type RuntimeSettings = {
   agentName: string | null;
   model: string;
+  generation: number;
   stateBucket: string | null;
   stateMountDir: string | null;
   statePrefix: string | null;
@@ -24,6 +25,7 @@ export function runtimeSettings(config: SpaceRuntimeConfig): RuntimeSettings {
   return {
     agentName: config.agentName ?? null,
     model: config.model,
+    generation: config.runtimeSettingsGeneration,
     stateBucket: config.stateBucket ?? null,
     stateMountDir: config.stateMountDir ?? null,
     statePrefix: config.statePrefix ?? null,
@@ -43,26 +45,7 @@ export function normalizeModel(value: unknown): string | undefined {
   return normalizeModelRef(value);
 }
 
-export async function setCurrentSpaceVariable(
-  config: SpaceRuntimeConfig,
-  key: string,
-  value: string,
-): Promise<void> {
-  if (!config.spaceId || !config.hfToken) {
-    throw new Error("Space mutation requires SPACE_ID and HF_TOKEN");
-  }
-  await hubRequest(config, `/api/spaces/${config.spaceId}/variables`, {
-    method: "POST",
-    body: JSON.stringify({ key, value }),
-    headers: { "content-type": "application/json" },
-  });
-}
-
-export async function setCurrentSpaceSecret(
-  config: SpaceRuntimeConfig,
-  key: string,
-  value: string,
-): Promise<void> {
+export async function setCurrentSpaceSecret(config: SpaceRuntimeConfig, key: string, value: string): Promise<void> {
   if (!config.spaceId || !config.hfToken) {
     throw new Error("Space mutation requires SPACE_ID and HF_TOKEN");
   }

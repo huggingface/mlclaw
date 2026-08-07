@@ -8,6 +8,7 @@ import { displayNameFromModelId, parseOpenClawModelRef, type ModelChoice } from 
 
 export const BROKER_MCP_CONNECTION_TIMEOUT_MS = 10_000;
 export const BROKER_MCP_REQUEST_TIMEOUT_MS = 45_000;
+export const BROKER_SECRET_PROVIDER = "mlclaw_hf_broker";
 // OpenClaw has no disabled reset mode. This valid idle window is over 4,000 years.
 export const AUTOMATIC_SESSION_RESET_DISABLED_MINUTES = 2_147_483_647;
 
@@ -238,7 +239,7 @@ function configureOpenClawModels(
   const models = object(openclawConfig, "models");
   models.mode = "merge";
   const providers = object(models, "providers");
-  configureHuggingFaceProvider(object(providers, "huggingface"), config, routerChoices);
+  configureHuggingFaceProvider(openclawConfig, object(providers, "huggingface"), config, routerChoices);
   configureNativeOpenAiProvider(providers);
 }
 
@@ -280,6 +281,7 @@ function resolvePrimaryModel(params: {
 }
 
 function configureHuggingFaceProvider(
+  openclawConfig: Record<string, unknown>,
   huggingface: Record<string, unknown>,
   config: SpaceRuntimeConfig,
   routerChoices: ModelChoice[],
@@ -287,10 +289,31 @@ function configureHuggingFaceProvider(
   huggingface.baseUrl = config.brokerAgentUrl
     ? `${config.brokerAgentUrl.replace(/\/+$/, "")}/v1`
     : "https://router.huggingface.co/v1";
-  if (config.brokerAgentSecret) huggingface.apiKey = config.brokerAgentSecret;
-  else delete huggingface.apiKey;
+  configureBrokerSecretReference(openclawConfig, huggingface, config);
   huggingface.api = "openai-completions";
   huggingface.models = routerChoices.map(modelDefinitionFromChoice);
+}
+
+function configureBrokerSecretReference(
+  openclawConfig: Record<string, unknown>,
+  huggingface: Record<string, unknown>,
+  config: SpaceRuntimeConfig,
+): void {
+  const secrets = object(openclawConfig, "secrets");
+  const providers = object(secrets, "providers");
+  if (config.brokerAgentUrl && config.brokerAgentSecretFile) {
+    providers[BROKER_SECRET_PROVIDER] = {
+      source: "file",
+      path: config.brokerAgentSecretFile,
+      mode: "singleValue",
+    };
+    huggingface.apiKey = { source: "file", provider: BROKER_SECRET_PROVIDER, id: "value" };
+    return;
+  }
+  delete providers[BROKER_SECRET_PROVIDER];
+  delete huggingface.apiKey;
+  if (Object.keys(providers).length === 0) delete secrets.providers;
+  if (Object.keys(secrets).length === 0) delete openclawConfig.secrets;
 }
 
 function configureNativeOpenAiProvider(providers: Record<string, unknown>): void {

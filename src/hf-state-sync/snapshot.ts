@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createTarZst, sha256File, stageLiveDir } from "./archive.js";
+import { assertNoForbiddenSnapshotValues, createTarZst, extractTarZst, sha256File, stageLiveDir } from "./archive.js";
 import type { BucketHub } from "./hub.js";
 import {
   MANIFEST_REMOTE_NAME,
@@ -19,13 +19,9 @@ export type SnapshotOutcome =
   | { kind: "failed"; detail: string };
 
 export type StagedArchiveOutcome =
-  | { kind: "staged"; databaseCount: number }
-  | { kind: "corrupt-database"; database: string; detail: string };
+  { kind: "staged"; databaseCount: number } | { kind: "corrupt-database"; database: string; detail: string };
 
-export type StageArchive = (params: {
-  liveDir: string;
-  archivePath: string;
-}) => Promise<StagedArchiveOutcome>;
+export type StageArchive = (params: { liveDir: string; archivePath: string }) => Promise<StagedArchiveOutcome>;
 
 // Object names must be unique across overlapping containers (run-id suffix)
 // AND within one run (counter): a final snapshot can land in the same second
@@ -38,25 +34,16 @@ function snapshotId(now: Date, runId: string): string {
   return `${stamp}-${runId.slice(0, 8)}-${snapshotCounter}`;
 }
 
-type FetchManifestResult =
-  | { kind: "none" }
-  | { kind: "ok"; manifest: Manifest }
-  | { kind: "invalid"; reason: string };
+type FetchManifestResult = { kind: "none" } | { kind: "ok"; manifest: Manifest } | { kind: "invalid"; reason: string };
 
-async function fetchManifest(
-  config: SyncConfig,
-  hub: BucketHub,
-  workDir: string,
-): Promise<FetchManifestResult> {
+async function fetchManifest(config: SyncConfig, hub: BucketHub, workDir: string): Promise<FetchManifestResult> {
   const localPath = path.join(workDir, "manifest.remote.json");
   const result = await hub.download(remotePath(config, MANIFEST_REMOTE_NAME), localPath);
   if (result === "not-found") {
     return { kind: "none" };
   }
   const parsed = parseManifest(await fs.readFile(localPath, "utf8"));
-  return parsed.kind === "ok"
-    ? { kind: "ok", manifest: parsed.manifest }
-    : { kind: "invalid", reason: parsed.reason };
+  return parsed.kind === "ok" ? { kind: "ok", manifest: parsed.manifest } : { kind: "invalid", reason: parsed.reason };
 }
 
 /**
@@ -88,15 +75,17 @@ export async function runSnapshot(params: {
     const id = snapshotId(now, config.runId);
     const archiveName = `state-${id}.tar.zst`;
     const archivePath = path.join(workDir, archiveName);
+    const forbiddenValues = await readSnapshotSecretValues(config.snapshotSecretFiles ?? []);
     const staged = params.stageArchive
       ? await params.stageArchive({ liveDir: config.liveDir, archivePath })
-      : await stageArchiveInProcess(config.liveDir, path.join(workDir, "stage"), archivePath);
+      : await stageArchiveInProcess(config.liveDir, path.join(workDir, "stage"), archivePath, forbiddenValues);
     if (staged.kind === "corrupt-database") {
       return {
         kind: "failed",
         detail: `live database ${staged.database} failed integrity check: ${staged.detail}`,
       };
     }
+    await assertArchiveHasNoForbiddenValues(archivePath, path.join(workDir, "secret-scan"), forbiddenValues);
 
     const entry: SnapshotEntry = {
       id,
@@ -145,11 +134,32 @@ async function stageArchiveInProcess(
   liveDir: string,
   stagingDir: string,
   archivePath: string,
+  forbiddenValues: readonly string[],
 ): Promise<StagedArchiveOutcome> {
   const staged = await stageLiveDir(liveDir, stagingDir);
   if (staged.kind === "corrupt-database") {
     return staged;
   }
+  await assertNoForbiddenSnapshotValues(stagingDir, forbiddenValues);
   await createTarZst(stagingDir, archivePath);
   return { kind: "staged", databaseCount: staged.databases.length };
+}
+
+async function readSnapshotSecretValues(files: readonly string[]): Promise<string[]> {
+  const values: string[] = [];
+  for (const file of files) {
+    const value = (await fs.readFile(file, "utf8")).trim();
+    if (value) values.push(value);
+  }
+  return values;
+}
+
+async function assertArchiveHasNoForbiddenValues(
+  archivePath: string,
+  extractionDir: string,
+  forbiddenValues: readonly string[],
+): Promise<void> {
+  if (forbiddenValues.length === 0) return;
+  await extractTarZst(archivePath, extractionDir);
+  await assertNoForbiddenSnapshotValues(extractionDir, forbiddenValues);
 }

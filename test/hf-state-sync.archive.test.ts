@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   PROTECTED_STATE_DIR_NAME,
+  assertNoForbiddenSnapshotValues,
   createTarZst,
   extractTarZst,
   sha256File,
@@ -85,6 +86,19 @@ async function buildFakeLiveDir(): Promise<string> {
 }
 
 describe("staging", () => {
+  it("rejects protected values even when they cross stream chunk boundaries", async () => {
+    const staging = path.join(dir, "secret-scan");
+    const secret = "protected-broker-agent-secret";
+    await fs.mkdir(staging, { recursive: true });
+    await fs.writeFile(path.join(staging, "safe.txt"), "ordinary state");
+    await expect(assertNoForbiddenSnapshotValues(staging, [secret])).resolves.toBeUndefined();
+
+    await fs.writeFile(path.join(staging, "leak.bin"), Buffer.concat([Buffer.alloc(65_525, 97), Buffer.from(secret)]));
+    await expect(assertNoForbiddenSnapshotValues(staging, [secret])).rejects.toThrow(
+      "snapshot contains protected credential material in leak.bin",
+    );
+  });
+
   it("excludes secrets/scratch, keeps workspace, vacuums only non-excluded dbs", async () => {
     const live = await buildFakeLiveDir();
     const staging = path.join(dir, "staging");

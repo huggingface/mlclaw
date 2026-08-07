@@ -101,6 +101,29 @@ describe("snapshot/restore round-trip", () => {
     await expect(fs.access(path.dirname(liveDir))).resolves.toBeUndefined();
   });
 
+  it("fails closed before upload when a protected credential appears in the final archive", async () => {
+    const hub = createFakeHub();
+    const live = path.join(dir, "live-secret-scan");
+    const secretFile = path.join(dir, "broker-agent-secret");
+    const secret = "protected-broker-agent-secret-value";
+    await writeState(live, "secret-scan");
+    await fs.writeFile(secretFile, `${secret}\n`, { mode: 0o600 });
+    await fs.writeFile(path.join(live, ".openclaw/openclaw.json"), JSON.stringify({ apiKey: secret }));
+
+    const snap = await runSnapshot({
+      config: configFor(live, { snapshotSecretFiles: [secretFile] }),
+      hub,
+      bootTime: BOOT,
+    });
+
+    expect(snap).toMatchObject({
+      kind: "failed",
+      detail: "snapshot contains protected credential material in .openclaw/openclaw.json",
+    });
+    expect(JSON.stringify(snap)).not.toContain(secret);
+    expect(hub.objects.size).toBe(0);
+  });
+
   it("stages snapshots in a secret-free unprivileged worker", async () => {
     const hub = createFakeHub();
     const live = path.join(dir, "live-worker");
