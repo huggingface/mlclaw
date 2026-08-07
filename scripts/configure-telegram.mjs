@@ -7,10 +7,14 @@ if (!configPath) {
   process.exit(2);
 }
 
-const allowedUsers = (allowedUsersRaw || "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
+const allowedUsers = [
+  ...new Set(
+    (allowedUsersRaw || "")
+      .split(",")
+      .map((value) => value.trim().replace(/^telegram:/i, ""))
+      .filter(Boolean),
+  ),
+];
 if (allowedUsers.length === 0) {
   process.exit(0);
 }
@@ -18,6 +22,7 @@ if (allowedUsers.length === 0) {
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 config.channels ||= {};
 config.channels.telegram ||= {};
+config.commands ||= {};
 config.messages ||= {};
 config.messages.queue ||= {};
 config.messages.queue.byChannel ||= {};
@@ -27,6 +32,14 @@ config.messages.queue.byChannel.telegram ||= "collect";
 config.messages.queue.debounceMsByChannel.telegram ??= 1500;
 config.messages.queue.cap ??= 20;
 config.messages.queue.drop ||= "summarize";
+const existingOwners = Array.isArray(config.commands.ownerAllowFrom)
+  ? config.commands.ownerAllowFrom.filter(
+      (value) => typeof value === "string" && !value.toLowerCase().startsWith("telegram:"),
+    )
+  : [];
+config.commands.ownerAllowFrom = [
+  ...new Set([...existingOwners, ...allowedUsers.map((userId) => `telegram:${userId}`)]),
+];
 
 const managedApiRoot = process.env.TELEGRAM_API_ROOT?.trim();
 

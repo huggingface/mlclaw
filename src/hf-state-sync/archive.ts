@@ -87,6 +87,41 @@ async function copyTreeFiltered(params: {
 export type StageResult =
   { kind: "staged"; databases: string[] } | { kind: "corrupt-database"; database: string; detail: string };
 
+const MIN_SCANNED_SECRET_BYTES = 8;
+
+/** Fail closed when any exact protected credential value occurs in staged bytes. */
+export async function assertNoForbiddenSnapshotValues(rootDir: string, values: readonly string[]): Promise<void> {
+  const forbidden = [
+    ...new Set(values.map((value) => value.trim()).filter((value) => value.length >= MIN_SCANNED_SECRET_BYTES)),
+  ].map((value) => Buffer.from(value));
+  if (forbidden.length === 0) return;
+  await scanSnapshotDirectory(rootDir, rootDir, forbidden);
+}
+
+async function scanSnapshotDirectory(rootDir: string, directory: string, forbidden: readonly Buffer[]): Promise<void> {
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const candidate = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await scanSnapshotDirectory(rootDir, candidate, forbidden);
+    } else if (entry.isFile() && (await fileContainsForbiddenValue(candidate, forbidden))) {
+      throw new Error(`snapshot contains protected credential material in ${path.relative(rootDir, candidate)}`);
+    }
+  }
+}
+
+async function fileContainsForbiddenValue(file: string, forbidden: readonly Buffer[]): Promise<boolean> {
+  const overlap = Math.max(...forbidden.map((value) => value.length)) - 1;
+  let tail = Buffer.alloc(0);
+  for await (const raw of createReadStream(file)) {
+    const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+    const searchable = tail.length > 0 ? Buffer.concat([tail, chunk]) : chunk;
+    if (forbidden.some((value) => searchable.indexOf(value) >= 0)) return true;
+    tail = overlap > 0 ? searchable.subarray(Math.max(0, searchable.length - overlap)) : Buffer.alloc(0);
+  }
+  return false;
+}
+
 /**
  * Stage a snapshot of the live dir: filtered file copy plus a consistent,
  * integrity-checked VACUUM INTO copy of every live SQLite DB.

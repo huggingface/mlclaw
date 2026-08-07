@@ -56,6 +56,7 @@ import {
 } from "./openai-codex-device-auth.js";
 import { DEFAULT_MODEL as DEFAULT_ROUTER_MODEL } from "../mlclaw-space-runtime/model-default.js";
 import { deriveLocalAccessToken } from "../mlclaw-space-runtime/local-access.js";
+import { parseRuntimeSettings } from "../mlclaw-space-runtime/runtime-settings-file.js";
 import {
   defaultConfigRoot,
   listManifests,
@@ -124,6 +125,15 @@ export const LOCAL_VOLUME_MOUNT_PATH = "/tmp/mlclaw-local";
 export const LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
 export const SPACE_STATE_MOUNT_DIR = "/data/mlclaw-state";
 export const SPACE_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
+export const LOCAL_RUNTIME_SETTINGS_FILE = `${LOCAL_VOLUME_MOUNT_PATH}/.mlclaw/runtime-settings.json`;
+
+export function spaceRuntimeSettingsFile(bucketPrefix?: string): string {
+  return `${SPACE_STATE_MOUNT_DIR}/${runtimeSettingsObjectPath(bucketPrefix)}`;
+}
+
+function runtimeSettingsObjectPath(bucketPrefix?: string): string {
+  return `${normalizeBucketPrefix(bucketPrefix)}/.mlclaw/runtime-settings.json`;
+}
 export const SPACE_HANDOFF_TIMEOUT_MS = 120_000;
 export const SPACE_HANDOFF_POLL_MS = 5_000;
 export const LOCAL_START_SETTLE_MS = 500;
@@ -948,7 +958,13 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
             hub.getSpaceVariables(activePlan.manifest.space),
           ]);
           observed = { runtime: spaceRuntime, variables };
-          requiresDeployment = spaceGatewayNeedsRepair(activePlan.manifest, variables, spaceRuntime, me.name);
+          requiresDeployment = spaceGatewayNeedsRepair(
+            activePlan.manifest,
+            variables,
+            spaceRuntime,
+            me.name,
+            activePlan.bucketPrefix,
+          );
         }
         if (spacePlan.currentVisibility !== spacePlan.visibility) {
           await assertLease();
@@ -963,6 +979,7 @@ async function bootstrap(opts: BootstrapOptions, runtime: Required<CliRuntime>):
             manifest: activePlan.manifest,
             secrets: activePlan.secrets,
             allowedUsers: me.name,
+            ...(activePlan.bucketPrefix ? { bucketPrefix: activePlan.bucketPrefix } : {}),
             spaceExists: spacePlan.exists,
             spacePrepared: true,
             assertLease,
@@ -1095,6 +1112,7 @@ async function reconcileDeployment(
     runtime,
     apply: async ({ manifest, changed, assertLease }) => {
       plan.manifest = manifest;
+      plan.secrets.MLCLAW_DEPLOYMENT_UPDATED_AT = manifest.updatedAt;
       return await apply(changed, assertLease);
     },
   });
@@ -1275,7 +1293,9 @@ async function reconcileManifest(params: {
       ...requestedManifest,
       spaceVisibility: visibility,
       desiredGeneration: generation,
-      updatedAt: runtime.now().toISOString(),
+      updatedAt: sameDesired
+        ? requestedManifest.updatedAt
+        : nextDeploymentUpdatedAt(requestedManifest.updatedAt, runtime.now()),
     };
     let operation =
       interruptedOperation ??
@@ -1517,7 +1537,7 @@ async function resolveBootstrapPlan(params: {
       ? { networkAccess: existingManifest.networkAccess }
       : {}),
     createdAt: existingManifest?.createdAt ?? now,
-    updatedAt: now,
+    updatedAt: existingManifest?.updatedAt ?? now,
   };
   const effectiveTelegramToken = telegramToken ?? existingSecrets.TELEGRAM_BOT_TOKEN;
   const effectiveApprovalTelegramToken = approvalTelegramToken ?? existingSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
@@ -1538,6 +1558,7 @@ async function resolveBootstrapPlan(params: {
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
     deploymentId: manifest.deploymentId,
+    updatedAt: manifest.updatedAt,
     ...(bucketPrefix ? { bucketPrefix } : {}),
     ...(routerToken ? { routerToken } : {}),
   });
@@ -1991,6 +2012,7 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
     MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
     MLCLAW_RUNTIME_ID: runtimeIdFor(updated),
     MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt,
   };
   const reconciled = await reconcileManifest({
     manifest: updated,
@@ -2059,10 +2081,11 @@ async function stateAdopt(agent: string, opts: StateAdoptOptions, runtime: Requi
           OPENCLAW_HF_STATE_BUCKET: bucket,
           MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
           OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-          MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+          MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(bucketPrefix),
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
           MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt,
         },
         assertLease,
       );
@@ -2246,6 +2269,15 @@ async function confirmBucketChange(params: {
   }
 }
 
+function nextDeploymentUpdatedAt(previous: string, now: Date): string {
+  const previousMilliseconds = Date.parse(previous);
+  const nextMilliseconds = Math.max(
+    now.getTime(),
+    Number.isFinite(previousMilliseconds) ? previousMilliseconds + 1 : 0,
+  );
+  return new Date(nextMilliseconds).toISOString();
+}
+
 function parseBucketId(raw: string): string {
   const bucket = raw.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(bucket)) {
@@ -2271,6 +2303,7 @@ function deploymentSecrets(params: {
   localPort: number;
   runtimeId: string;
   deploymentId: string;
+  updatedAt: string;
   bucketPrefix?: string;
 }): Record<string, string> {
   return {
@@ -2283,6 +2316,9 @@ function deploymentSecrets(params: {
     MLCLAW_RUNTIME_IMAGE: params.runtimeImage,
     MLCLAW_RUNTIME_ID: params.runtimeId,
     MLCLAW_DEPLOYMENT_ID: params.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: params.updatedAt,
+    MLCLAW_RUNTIME_SETTINGS_FILE:
+      params.gatewayLocation === "local" ? LOCAL_RUNTIME_SETTINGS_FILE : spaceRuntimeSettingsFile(params.bucketPrefix),
     MLCLAW_SESSION_SECRET: params.sessionSecret,
     MLCLAW_CREDENTIAL_KEY: params.credentialKey,
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
@@ -2475,18 +2511,20 @@ function spaceGatewayNeedsRepair(
   variables: Map<string, { value?: string }>,
   runtime: SpaceRuntime,
   allowedUsers: string,
+  bucketPrefix?: string,
 ): boolean {
   const expected = {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
     MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
     OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-    MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+    MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(bucketPrefix),
     OPENCLAW_MODEL: manifest.model,
     OPENCLAW_AGENT_NAME: manifest.agent,
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
     MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
     MLCLAW_ALLOWED_USERS: allowedUsers,
     MLCLAW_ADMINS: allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -2511,6 +2549,7 @@ async function deploySpaceGateway(params: {
   sleepTime?: number;
   templateRuntimeImage?: string;
   visibility?: HostedSpaceVisibility;
+  bucketPrefix?: string;
   spaceExists?: boolean;
   spacePrepared?: boolean;
   assertLease?: () => Promise<void>;
@@ -2558,7 +2597,7 @@ async function deploySpaceGateway(params: {
       OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
       MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
       OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-      MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+      MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(params.bucketPrefix),
       ...(secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {}),
       MLCLAW_TEMPLATE_REV: templateRev,
       OPENCLAW_MODEL: manifest.model,
@@ -2567,6 +2606,7 @@ async function deploySpaceGateway(params: {
       MLCLAW_RUNTIME_IMAGE: spaceRuntimeRef,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
       MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+      MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
       MLCLAW_ALLOWED_USERS: params.allowedUsers,
       MLCLAW_ADMINS: params.allowedUsers,
       MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -3034,6 +3074,7 @@ async function gatewayMigrate(
           secrets: deploymentSecrets,
           allowedUsers: me.name,
           visibility: updated.spaceVisibility === "public" ? "public" : "protected",
+          ...(bucketPrefix ? { bucketPrefix } : {}),
           spaceExists,
           assertLease,
           ...(paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {}),
@@ -3047,6 +3088,7 @@ async function gatewayMigrate(
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
           MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt,
         });
         await writeManifest(runtime.configRoot, updated);
       },
@@ -3099,6 +3141,7 @@ async function gatewayMigrate(
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: updated.localRuntimeId,
           MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt,
           ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess),
         });
         await assertLease();
@@ -3971,6 +4014,7 @@ async function update(
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   if (localManifest) {
     await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_ID", localManifest.deploymentId);
+    await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_UPDATED_AT", localManifest.updatedAt);
   }
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
@@ -3978,7 +4022,11 @@ async function update(
   if (bucket) {
     await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
     await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
-    await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", `${SPACE_LIVE_DIR}/.mlclaw/settings.json`);
+    await hub.addSpaceVariable(
+      repoId,
+      "MLCLAW_RUNTIME_SETTINGS_FILE",
+      spaceRuntimeSettingsFile(variables.get("OPENCLAW_HF_STATE_PREFIX")?.value),
+    );
     await ensureSpaceStateVolume(hub, repoId, bucket);
   }
   await doctor(repoId, { fix: true }, hub, runtime);
@@ -4015,6 +4063,7 @@ async function reconcileUpdatedDeployment(
         MLCLAW_RUNTIME_IMAGE: runtimeImage,
         MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
         MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+        MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
       });
     },
   });
@@ -4063,6 +4112,33 @@ async function ensureUpdateCredentials(params: {
     ...(routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}),
   });
   return localManifest;
+}
+
+async function checkCanonicalRuntimeSettings(params: {
+  hub: HubApi;
+  repoId: string;
+  bucket: string;
+  bucketPrefix?: string;
+  deploymentModel: string;
+  fix: boolean;
+  runtime: Required<CliRuntime>;
+}): Promise<{ issues: string[]; fixed: string[] }> {
+  const objectPath = runtimeSettingsObjectPath(params.bucketPrefix);
+  const currentBlob = await params.hub.bucket(params.bucket).downloadFile(objectPath);
+  const current = currentBlob ? parseRuntimeSettings(await currentBlob.text()) : undefined;
+  if (current?.model === params.deploymentModel) return { issues: [], fixed: [] };
+  const detail = current
+    ? `canonical runtime model ${current.model} differs from deployment model ${params.deploymentModel}`
+    : "canonical runtime settings are missing";
+  if (!params.fix) return { issues: [detail], fixed: [] };
+  params.runtime.stdout.log(`Runtime settings repair winner: deployment model ${params.deploymentModel}`);
+  await params.hub.addSpaceVariable(params.repoId, "OPENCLAW_MODEL", params.deploymentModel);
+  await params.hub.addSpaceVariable(
+    params.repoId,
+    "MLCLAW_DEPLOYMENT_UPDATED_AT",
+    nextDeploymentUpdatedAt(current?.updatedAt ?? "", params.runtime.now()),
+  );
+  return { issues: [], fixed: ["scheduled canonical runtime settings repair from deployment model"] };
 }
 
 async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime: Required<CliRuntime>): Promise<void> {
@@ -4124,6 +4200,7 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
   }
 
   const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value ?? opts.bucket;
+  const statePrefix = variables.get("OPENCLAW_HF_STATE_PREFIX")?.value;
   let signedInUser: string | undefined;
   const currentUsername = async () => {
     signedInUser ??= (await hub.whoami()).name;
@@ -4131,9 +4208,22 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
   };
   if (!bucket) {
     issues.push("OPENCLAW_HF_STATE_BUCKET is missing");
-  } else if (!variables.has("OPENCLAW_HF_STATE_BUCKET") && fix) {
-    await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
-    fixed.push("set OPENCLAW_HF_STATE_BUCKET");
+  } else {
+    if (!variables.has("OPENCLAW_HF_STATE_BUCKET") && fix) {
+      await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
+      fixed.push("set OPENCLAW_HF_STATE_BUCKET");
+    }
+    const runtimeSettingsCheck = await checkCanonicalRuntimeSettings({
+      hub,
+      repoId,
+      bucket,
+      ...(statePrefix ? { bucketPrefix: statePrefix } : {}),
+      deploymentModel: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL,
+      fix,
+      runtime,
+    });
+    issues.push(...runtimeSettingsCheck.issues);
+    fixed.push(...runtimeSettingsCheck.fixed);
   }
   if ((variables.get("MLCLAW_STATE_MOUNT_DIR")?.value ?? "") !== SPACE_STATE_MOUNT_DIR) {
     if (fix) {
@@ -4151,7 +4241,7 @@ async function doctor(repoId: string, opts: DoctorOptions, hub: HubApi, runtime:
       issues.push(`OPENCLAW_LIVE_DIR is not ${SPACE_LIVE_DIR}`);
     }
   }
-  const expectedRuntimeSettingsFile = `${SPACE_LIVE_DIR}/.mlclaw/settings.json`;
+  const expectedRuntimeSettingsFile = spaceRuntimeSettingsFile(statePrefix);
   if ((variables.get("MLCLAW_RUNTIME_SETTINGS_FILE")?.value ?? "") !== expectedRuntimeSettingsFile) {
     if (fix) {
       await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", expectedRuntimeSettingsFile);
@@ -5020,16 +5110,23 @@ async function ensureRuntimeDeploymentId(
   runtime: Required<CliRuntime>,
   assertLease: () => Promise<void>,
 ): Promise<void> {
-  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (
+    secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId &&
+    secrets.MLCLAW_DEPLOYMENT_UPDATED_AT === manifest.updatedAt
+  ) {
+    return;
+  }
   if (manifest.gatewayLocation === "space") {
     await assertLease();
     await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_UPDATED_AT", manifest.updatedAt);
     return;
   }
   await assertLease();
   await writeSecretEnv(runtime.configRoot, manifest.agent, {
     ...secrets,
     MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
   });
 }
 

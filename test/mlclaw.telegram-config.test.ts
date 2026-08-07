@@ -8,6 +8,10 @@ import { describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 
 type TelegramConfig = {
+  commands: {
+    ownerAllowFrom?: string[];
+    [key: string]: unknown;
+  };
   channels: {
     telegram: {
       enabled?: boolean;
@@ -40,6 +44,7 @@ describe("Telegram channel config", () => {
       apiRoot: "http://127.0.0.1:7865/client/openclaw",
       allowFrom: ["42"],
     });
+    expect(config.commands.ownerAllowFrom).toEqual(["telegram:42"]);
   });
 
   it("removes a stale managed API root when using a separate bot", async () => {
@@ -49,5 +54,21 @@ describe("Telegram channel config", () => {
     );
 
     expect(config.channels.telegram.apiRoot).toBeUndefined();
+  });
+
+  it("replaces managed Telegram owners while preserving unrelated command settings", async () => {
+    const config = await configureTelegram(
+      {
+        commands: { ownerAllowFrom: ["discord:alice", "telegram:old"], custom: true },
+        channels: { telegram: { allowFrom: ["old"] } },
+      },
+      "",
+    );
+
+    expect(config.channels.telegram.allowFrom).toEqual(["42"]);
+    expect(config.commands).toMatchObject({
+      ownerAllowFrom: ["discord:alice", "telegram:42"],
+      custom: true,
+    });
   });
 });

@@ -17,6 +17,7 @@ import { loadOpenAiCredentialFile, openAiConfigured, OpenAiCredentialStore } fro
 import { loginPage, templatePage, unauthorizedPage } from "./pages.js";
 import { proxyHttp, proxyWebSocket, rejectWebSocket } from "./proxy.js";
 import { normalizeNext, readSession } from "./session.js";
+import { initializeRuntimeSettingsFile } from "./runtime-settings-file.js";
 
 type SpaceRuntimeServerOptions = {
   exitProcess?: (code: number) => void;
@@ -348,12 +349,24 @@ export class SpaceRuntimeServer {
       if (migratedSessions > 0) {
         process.stdout.write(`[mlclaw] Migrated ${migratedSessions} native OpenAI session route(s)\n`);
       }
+      const resolvedLegacyModel =
+        codexConfigured || persistedOpenAiKey
+          ? DEFAULT_OPENAI_MODEL_REF
+          : (this.config.modelChoices[0]?.openclawModel ?? this.config.model);
       if (this.config.model === LEGACY_CODEX_MODEL_REF) {
-        this.config.model =
-          codexConfigured || persistedOpenAiKey
-            ? DEFAULT_OPENAI_MODEL_REF
-            : (this.config.modelChoices[0]?.openclawModel ?? this.config.model);
+        this.config.model = resolvedLegacyModel;
       }
+      const bootstrapModel =
+        this.config.bootstrapModel === LEGACY_CODEX_MODEL_REF ? resolvedLegacyModel : this.config.bootstrapModel;
+      const runtimeSettings = await initializeRuntimeSettingsFile({
+        file: this.config.runtimeSettingsFile,
+        model: bootstrapModel,
+        modelChoices: this.config.modelChoices,
+        ...(this.config.bootstrapUpdatedAt ? { bootstrapUpdatedAt: this.config.bootstrapUpdatedAt } : {}),
+      });
+      this.config.model = runtimeSettings.model;
+      this.config.modelChoices = runtimeSettings.modelChoices;
+      this.config.runtimeSettingsGeneration = runtimeSettings.generation;
       await configureOpenClawGateway(this.config, {
         codexConfigured,
         openAiConfigured: Boolean(persistedOpenAiKey),
@@ -369,10 +382,9 @@ export class SpaceRuntimeServer {
         ...(persistedOpenAiKey ? { OPENAI_API_KEY: persistedOpenAiKey } : {}),
         ...extraEnv,
       };
-      if (this.config.brokerAgentSecret) {
-        env.HF_TOKEN = this.config.brokerAgentSecret;
-        env.HUGGINGFACE_HUB_TOKEN = this.config.brokerAgentSecret;
-      } else if (!this.config.brokerAgentUrl && this.config.routerToken) {
+      if (!this.config.brokerAgentUrl && this.config.routerToken) {
+        // Legacy direct-Router mode uses its dedicated token. Broker mode resolves
+        // its narrow agent credential through OpenClaw's protected file provider.
         env.HF_TOKEN = this.config.routerToken;
         env.HUGGINGFACE_HUB_TOKEN = this.config.routerToken;
       }

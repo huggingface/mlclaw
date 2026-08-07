@@ -4917,7 +4917,8 @@ function resolveSyncConfig(env = process.env) {
     runtimeImage: env.MLCLAW_RUNTIME_IMAGE?.trim() || "unknown",
     ...snapshotUid !== void 0 ? { snapshotUid } : {},
     ...snapshotGid !== void 0 ? { snapshotGid } : {},
-    ...env.MLCLAW_PROTECTED_STATE_DIR?.trim() ? { protectedStateDir: env.MLCLAW_PROTECTED_STATE_DIR.trim() } : {}
+    ...env.MLCLAW_PROTECTED_STATE_DIR?.trim() ? { protectedStateDir: env.MLCLAW_PROTECTED_STATE_DIR.trim() } : {},
+    ...env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE?.trim() ? { snapshotSecretFiles: [env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE.trim()] } : {}
   };
 }
 function nonNegativeIntFromEnv(value) {
@@ -5047,6 +5048,36 @@ async function copyTreeFiltered(params) {
       await fs3.symlink(await fs3.readlink(source), dest);
     }
   }
+}
+var MIN_SCANNED_SECRET_BYTES = 8;
+async function assertNoForbiddenSnapshotValues(rootDir, values) {
+  const forbidden = [
+    ...new Set(values.map((value) => value.trim()).filter((value) => value.length >= MIN_SCANNED_SECRET_BYTES))
+  ].map((value) => Buffer.from(value));
+  if (forbidden.length === 0) return;
+  await scanSnapshotDirectory(rootDir, rootDir, forbidden);
+}
+async function scanSnapshotDirectory(rootDir, directory, forbidden) {
+  const entries = await fs3.readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const candidate = path3.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await scanSnapshotDirectory(rootDir, candidate, forbidden);
+    } else if (entry.isFile() && await fileContainsForbiddenValue(candidate, forbidden)) {
+      throw new Error(`snapshot contains protected credential material in ${path3.relative(rootDir, candidate)}`);
+    }
+  }
+}
+async function fileContainsForbiddenValue(file, forbidden) {
+  const overlap = Math.max(...forbidden.map((value) => value.length)) - 1;
+  let tail = Buffer.alloc(0);
+  for await (const raw of createReadStream(file)) {
+    const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+    const searchable = tail.length > 0 ? Buffer.concat([tail, chunk]) : chunk;
+    if (forbidden.some((value) => searchable.indexOf(value) >= 0)) return true;
+    tail = overlap > 0 ? searchable.subarray(Math.max(0, searchable.length - overlap)) : Buffer.alloc(0);
+  }
+  return false;
 }
 async function stageLiveDir(liveDir, stagingDir, options = {}) {
   const databases = [];
@@ -9355,13 +9386,15 @@ async function runSnapshot(params) {
     const id = snapshotId(now, config.runId);
     const archiveName = `state-${id}.tar.zst`;
     const archivePath = path6.join(workDir, archiveName);
-    const staged = params.stageArchive ? await params.stageArchive({ liveDir: config.liveDir, archivePath }) : await stageArchiveInProcess(config.liveDir, path6.join(workDir, "stage"), archivePath);
+    const forbiddenValues = await readSnapshotSecretValues(config.snapshotSecretFiles ?? []);
+    const staged = params.stageArchive ? await params.stageArchive({ liveDir: config.liveDir, archivePath }) : await stageArchiveInProcess(config.liveDir, path6.join(workDir, "stage"), archivePath, forbiddenValues);
     if (staged.kind === "corrupt-database") {
       return {
         kind: "failed",
         detail: `live database ${staged.database} failed integrity check: ${staged.detail}`
       };
     }
+    await assertArchiveHasNoForbiddenValues(archivePath, path6.join(workDir, "secret-scan"), forbiddenValues);
     const entry = {
       id,
       path: remotePath(config, `snapshots/${archiveName}`),
@@ -9398,13 +9431,27 @@ async function runSnapshot(params) {
     await fs6.rm(workDir, { recursive: true, force: true });
   }
 }
-async function stageArchiveInProcess(liveDir, stagingDir, archivePath) {
+async function stageArchiveInProcess(liveDir, stagingDir, archivePath, forbiddenValues) {
   const staged = await stageLiveDir(liveDir, stagingDir);
   if (staged.kind === "corrupt-database") {
     return staged;
   }
+  await assertNoForbiddenSnapshotValues(stagingDir, forbiddenValues);
   await createTarZst(stagingDir, archivePath);
   return { kind: "staged", databaseCount: staged.databases.length };
+}
+async function readSnapshotSecretValues(files) {
+  const values = [];
+  for (const file of files) {
+    const value = (await fs6.readFile(file, "utf8")).trim();
+    if (value) values.push(value);
+  }
+  return values;
+}
+async function assertArchiveHasNoForbiddenValues(archivePath, extractionDir, forbiddenValues) {
+  if (forbiddenValues.length === 0) return;
+  await extractTarZst(archivePath, extractionDir);
+  await assertNoForbiddenSnapshotValues(extractionDir, forbiddenValues);
 }
 
 // src/hf-state-sync/supervise.ts

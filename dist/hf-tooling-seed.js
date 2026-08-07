@@ -127,8 +127,10 @@ This workspace has Hugging Face tooling preinstalled. Use the Hugging Face CLI
 work.
 
 Protected Hugging Face mutations use the preconfigured HF Broker. Never ask
-the user for a Hugging Face token and never run \`hf auth login\`. Choose the
-matching \`hf_*\` MCP tool for the operation. Omit \`request_id\` for a new
+the user for a Hugging Face token and never run \`hf auth login\`. It is
+expected for \`hf auth whoami\` to report no login in this workspace; do not
+treat that as a failure or attempt an interactive login. Choose the matching
+\`hf_*\` MCP tool for the operation. Omit \`request_id\` for a new
 operation unless you deliberately need an exact retry identity. Record the
 returned operation \`id\`, then use \`hf_operation_wait\` or
 \`hf_operation_get\` to observe completion. Use the bounded

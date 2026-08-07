@@ -8956,7 +8956,7 @@ import fs15 from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import os8 from "node:os";
 import process4 from "node:process";
-import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as randomUUID2 } from "node:crypto";
+import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as randomUUID3 } from "node:crypto";
 import { pathToFileURL as pathToFileURL2 } from "node:url";
 import { setTimeout as delay2 } from "node:timers/promises";
 
@@ -16117,6 +16117,541 @@ function deriveLocalAccessToken(sessionSecret) {
   return createHmac("sha256", sessionSecret).update(LOCAL_ACCESS_CONTEXT).digest("base64url");
 }
 
+// src/mlclaw-space-runtime/runtime-settings-file.ts
+import { randomUUID } from "node:crypto";
+
+// src/mlclaw-space-runtime/model-choices.ts
+var DEFAULT_ROUTER_PROVIDER = "deepinfra";
+var PRESET_MODEL_CHOICES = [
+  freezeChoice({
+    modelId: "google/gemma-4-26B-A4B-it",
+    provider: "deepinfra",
+    label: "Gemma 4 26B A4B",
+    note: "Low-cost Gemma preset on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.07, output: 0.34 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 414.2,
+    throughput: 34.79003450519141,
+    status: "live",
+    inputModalities: ["text", "image"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "Qwen/Qwen3.6-35B-A3B",
+    provider: "deepinfra",
+    label: "Qwen 3.6 35B A3B",
+    note: "Strong Qwen 3.6 preset on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.15, output: 0.95 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 401,
+    throughput: 43.13170843671405,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "Qwen/Qwen3.6-27B",
+    provider: "deepinfra",
+    label: "Qwen 3.6 27B",
+    note: "Live Qwen 3.6 preset on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.32, output: 3.2 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 347.8,
+    throughput: 39.47002845464158,
+    status: "live",
+    inputModalities: ["text", "image"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "zai-org/GLM-5.2",
+    provider: "deepinfra",
+    label: "GLM 5.2",
+    note: "Long-context GLM preset on DeepInfra",
+    contextLength: 1048576,
+    pricing: { input: 0.93, output: 3 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 467.5,
+    throughput: 16.52283992136833,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "moonshotai/Kimi-K2.7-Code",
+    provider: "deepinfra",
+    label: "Kimi K2.7 Code",
+    note: "Kimi K2.7 coding preset on DeepInfra",
+    contextLength: 262144,
+    pricing: { input: 0.74, output: 3.5 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 692,
+    throughput: 29.26330731892916,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "openai/gpt-oss-120b",
+    provider: "deepinfra",
+    label: "GPT-OSS 120B",
+    note: "Large GPT-OSS preset on DeepInfra",
+    contextLength: 131072,
+    pricing: { input: 0.037, output: 0.17 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 362.2,
+    throughput: 32.98392643597656,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "openai/gpt-oss-20b",
+    provider: "deepinfra",
+    label: "GPT-OSS 20B",
+    note: "Lower-cost GPT-OSS preset on DeepInfra",
+    contextLength: 131072,
+    pricing: { input: 0.03, output: 0.14 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 255,
+    throughput: 115.64765388606148,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "deepseek-ai/DeepSeek-V4-Flash",
+    provider: "deepinfra",
+    label: "DeepSeek V4 Flash",
+    note: "Lower-cost DeepSeek V4 preset on DeepInfra",
+    contextLength: 1048576,
+    pricing: { input: 0.09, output: 0.18 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 719.8,
+    throughput: 24.5757632831937,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "deepseek-ai/DeepSeek-V4-Pro",
+    provider: "deepinfra",
+    label: "DeepSeek V4 Pro",
+    note: "Higher-quality DeepSeek V4 preset on DeepInfra",
+    contextLength: 1048576,
+    pricing: { input: 1.3, output: 2.6 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 489.2,
+    throughput: 37.30647476533069,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "MiniMaxAI/MiniMax-M3",
+    provider: "together",
+    label: "MiniMax M3",
+    note: "Long-context MiniMax preset on Together",
+    contextLength: 524288,
+    pricing: { input: 0.3, output: 1.2 },
+    supportsTools: true,
+    supportsStructuredOutput: true,
+    firstTokenLatencyMs: 505.6,
+    throughput: 59.79726580207129,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "zai-org/GLM-5.2",
+    provider: "fireworks-ai",
+    label: "GLM 5.2",
+    note: "Default long-context GLM preset on Fireworks",
+    contextLength: 1048576,
+    pricing: { input: 1.4, output: 4.4 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 931,
+    throughput: 44.001300948170254,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "moonshotai/Kimi-K2.7-Code",
+    provider: "fireworks-ai",
+    label: "Kimi K2.7 Code",
+    note: "Kimi K2.7 coding alternative on Fireworks",
+    contextLength: 262144,
+    pricing: { input: 0.95, output: 4 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 598.8,
+    throughput: 139.36660684183386,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "openai/gpt-oss-120b",
+    provider: "fireworks-ai",
+    label: "GPT-OSS 120B",
+    note: "Large GPT-OSS alternative on Fireworks",
+    contextLength: 131072,
+    pricing: { input: 0.15, output: 0.6 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 436.8,
+    throughput: 150.7430218155076,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "openai/gpt-oss-20b",
+    provider: "fireworks-ai",
+    label: "GPT-OSS 20B",
+    note: "Lower-cost GPT-OSS alternative on Fireworks",
+    contextLength: 131072,
+    pricing: { input: 0.07, output: 0.3 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 576.4,
+    throughput: 48.80341799488286,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "deepseek-ai/DeepSeek-V4-Flash",
+    provider: "fireworks-ai",
+    label: "DeepSeek V4 Flash",
+    note: "Lower-cost DeepSeek V4 alternative on Fireworks",
+    contextLength: 1048576,
+    pricing: { input: 0.14, output: 0.28 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 556.2,
+    throughput: 112.3238326192391,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "deepseek-ai/DeepSeek-V4-Pro",
+    provider: "fireworks-ai",
+    label: "DeepSeek V4 Pro",
+    note: "Higher-quality DeepSeek V4 alternative on Fireworks",
+    contextLength: 1048576,
+    pricing: { input: 1.74, output: 3.48 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 787.2,
+    throughput: 59.92780906440809,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  }),
+  freezeChoice({
+    modelId: "MiniMaxAI/MiniMax-M3",
+    provider: "fireworks-ai",
+    label: "MiniMax M3",
+    note: "Long-context MiniMax alternative on Fireworks",
+    contextLength: 512e3,
+    pricing: { input: 0.3, output: 1.2 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    firstTokenLatencyMs: 756,
+    throughput: 131.4435735979844,
+    status: "live",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    preset: true
+  })
+];
+function normalizeModelChoice(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const item = value;
+  const parsed = parseOpenClawModelRef(stringValue2(item.openclawModel));
+  const modelId = normalizeModelId(stringValue2(item.modelId) ?? parsed?.modelId);
+  const provider = normalizeProvider(stringValue2(item.provider) ?? parsed?.provider);
+  if (!modelId || !provider) {
+    return void 0;
+  }
+  return freezeChoice({
+    modelId,
+    provider,
+    label: cleanLabel(stringValue2(item.label)) ?? displayNameFromModelId(modelId),
+    ...optional("note", cleanNote(stringValue2(item.note))),
+    ...optional("contextLength", positiveInteger(item.contextLength)),
+    ...optional("pricing", normalizePricing(item.pricing)),
+    ...optional("supportsTools", optionalBoolean(item.supportsTools)),
+    ...optional("supportsStructuredOutput", optionalBoolean(item.supportsStructuredOutput)),
+    ...optional("firstTokenLatencyMs", positiveNumber(item.firstTokenLatencyMs)),
+    ...optional("throughput", positiveNumber(item.throughput)),
+    ...optional("status", cleanStatus(stringValue2(item.status))),
+    ...optional("inputModalities", normalizeModalities(item.inputModalities)),
+    ...optional("outputModalities", normalizeModalities(item.outputModalities)),
+    ...optionalBoolean(item.preset) === true ? { preset: true } : {}
+  });
+}
+function normalizeModelChoices(value, activeModel) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const choices = value.flatMap((item) => {
+    const choice = normalizeModelChoice(item);
+    return choice ? [choice] : [];
+  });
+  if (choices.length === 0 || choices.length > 80) {
+    return void 0;
+  }
+  return ensureActiveModelChoice(dedupeModelChoices(choices), activeModel);
+}
+function ensureActiveModelChoice(choices, activeModel) {
+  const parsed = parseOpenClawModelRef(activeModel);
+  if (!parsed) {
+    return [...choices];
+  }
+  const active = freezeChoice({
+    ...PRESET_MODEL_CHOICES.find((choice) => choice.modelId === parsed.modelId && choice.provider === parsed.provider),
+    modelId: parsed.modelId,
+    provider: parsed.provider,
+    label: displayNameFromModelId(parsed.modelId)
+  });
+  return dedupeModelChoices([active, ...choices]);
+}
+function dedupeModelChoices(choices) {
+  const seen = /* @__PURE__ */ new Set();
+  const deduped = [];
+  for (const choice of choices) {
+    if (seen.has(choice.key)) {
+      continue;
+    }
+    seen.add(choice.key);
+    deduped.push(choice);
+  }
+  return deduped;
+}
+function formatOpenClawModelRef(modelId, provider) {
+  return `huggingface/${modelId}:${provider}`;
+}
+function parseOpenClawModelRef(value) {
+  const normalized = normalizeModelRef(value);
+  if (!normalized?.startsWith("huggingface/")) {
+    return void 0;
+  }
+  const rest = normalized.slice("huggingface/".length);
+  const split = rest.lastIndexOf(":");
+  const modelId = normalizeModelId(split >= 0 ? rest.slice(0, split) : rest);
+  const provider = normalizeProvider(split >= 0 ? rest.slice(split + 1) : DEFAULT_ROUTER_PROVIDER);
+  return modelId && provider ? { modelId, provider } : void 0;
+}
+function normalizeModelRef(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 260 || /[\r\n\t]/.test(trimmed) || /\s/.test(trimmed)) {
+    return void 0;
+  }
+  return trimmed;
+}
+function choiceKey(modelId, provider) {
+  return `${provider}::${modelId}`;
+}
+function displayNameFromModelId(id) {
+  const base = id.split("/").pop() || id;
+  return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+function freezeChoice(params) {
+  const modelId = normalizeModelId(params.modelId) ?? params.modelId;
+  const provider = normalizeProvider(params.provider) ?? params.provider;
+  return {
+    ...params,
+    modelId,
+    provider,
+    key: choiceKey(modelId, provider),
+    openclawModel: formatOpenClawModelRef(modelId, provider)
+  };
+}
+function normalizeModelId(value) {
+  if (!value) {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 220 || /[\r\n\t:]/.test(trimmed) || /\s/.test(trimmed) || !trimmed.includes("/")) {
+    return void 0;
+  }
+  return trimmed;
+}
+function normalizeProvider(value) {
+  if (!value) {
+    return void 0;
+  }
+  const trimmed = value.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(trimmed)) {
+    return void 0;
+  }
+  return trimmed;
+}
+function normalizePricing(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return void 0;
+  }
+  const raw = value;
+  const input = positiveNumber(raw.input);
+  const output = positiveNumber(raw.output);
+  if (input === void 0 && output === void 0) {
+    return void 0;
+  }
+  return {
+    ...input !== void 0 ? { input } : {},
+    ...output !== void 0 ? { output } : {}
+  };
+}
+function normalizeModalities(value) {
+  if (!Array.isArray(value)) {
+    return void 0;
+  }
+  const modalities = [
+    ...new Set(
+      value.flatMap((item) => {
+        const normalized = typeof item === "string" ? item.trim().toLowerCase() : "";
+        return /^[a-z][a-z0-9_-]{0,31}$/.test(normalized) ? [normalized] : [];
+      })
+    )
+  ];
+  return modalities.length > 0 ? modalities : void 0;
+}
+function stringValue2(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function cleanLabel(value) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 80 ? trimmed : void 0;
+}
+function cleanNote(value) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 160 ? trimmed : void 0;
+}
+function cleanStatus(value) {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed && /^[a-z][a-z0-9_-]{0,31}$/.test(trimmed) ? trimmed : void 0;
+}
+function optionalBoolean(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+function optional(key, value) {
+  return value === void 0 ? {} : { [key]: value };
+}
+function positiveInteger(value) {
+  const parsed = positiveNumber(value);
+  return parsed === void 0 ? void 0 : Math.trunc(parsed);
+}
+function positiveNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
+}
+
+// src/mlclaw-space-runtime/runtime-settings-file.ts
+var RUNTIME_SETTINGS_VERSION = 1;
+var MAX_RUNTIME_SETTINGS_BYTES = 256 * 1024;
+var RUNTIME_SETTINGS_KEYS = /* @__PURE__ */ new Set(["version", "generation", "model", "modelChoices", "updatedAt"]);
+var PROCESS_LOCK_ID = randomUUID();
+function buildRuntimeSettings(params) {
+  const model = normalizeModelRef(params.model);
+  const modelChoices = normalizeModelChoices(params.modelChoices, model ?? "");
+  if (!model || !modelChoices || !Number.isSafeInteger(params.generation) || params.generation < 1) {
+    throw new Error("runtime settings are invalid");
+  }
+  return {
+    version: RUNTIME_SETTINGS_VERSION,
+    generation: params.generation,
+    model,
+    modelChoices,
+    updatedAt: params.now().toISOString()
+  };
+}
+function parseRuntimeSettings(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error("runtime settings are invalid", { cause: error });
+  }
+  const fields = validatedRuntimeSettingsFields(parsed);
+  return buildRuntimeSettings({
+    model: fields.model,
+    modelChoices: fields.modelChoices,
+    generation: fields.generation,
+    now: () => new Date(fields.updatedAt)
+  });
+}
+function validatedRuntimeSettingsFields(value) {
+  if (!isRecord(value) || Object.keys(value).some((key) => !RUNTIME_SETTINGS_KEYS.has(key))) {
+    throw new Error("runtime settings are invalid");
+  }
+  if (value.version !== RUNTIME_SETTINGS_VERSION) throw new Error("runtime settings are invalid");
+  return {
+    model: requiredRuntimeSettingsModel(value.model),
+    modelChoices: requiredRuntimeSettingsChoices(value.modelChoices),
+    generation: requiredRuntimeSettingsGeneration(value.generation),
+    updatedAt: requiredRuntimeSettingsTimestamp(value.updatedAt)
+  };
+}
+function requiredRuntimeSettingsModel(value) {
+  if (typeof value !== "string") throw new Error("runtime settings are invalid");
+  return value;
+}
+function requiredRuntimeSettingsChoices(value) {
+  if (!Array.isArray(value)) throw new Error("runtime settings are invalid");
+  return value;
+}
+function requiredRuntimeSettingsGeneration(value) {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error("runtime settings are invalid");
+  return Number(value);
+}
+function requiredRuntimeSettingsTimestamp(value) {
+  if (typeof value !== "string" || !validTimestamp(value)) throw new Error("runtime settings are invalid");
+  return value;
+}
+function validTimestamp(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 // src/mlclaw/local-config.ts
 import fs13 from "node:fs/promises";
 import os6 from "node:os";
@@ -20369,7 +20904,7 @@ async function writePrivateFile(file, content) {
 import fs14 from "node:fs/promises";
 import os7 from "node:os";
 import path15 from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 var DEPLOYMENT_PATH = ".mlclaw/deployment.json";
 var DESIRED_STATE_PATH = ".mlclaw/desired-state.json";
 var TOMBSTONE_PATH = ".mlclaw/tombstone.json";
@@ -20505,7 +21040,7 @@ async function writeDeploymentIdentity(client, identity) {
 function newOperation(manifest, now) {
   return operationSchema.parse({
     schemaVersion: 1,
-    operationId: randomUUID(),
+    operationId: randomUUID2(),
     deploymentId: manifest.deploymentId,
     targetGeneration: manifest.desiredGeneration,
     state: "planned",
@@ -20548,7 +21083,7 @@ async function readResumableOperation(root, deploymentId, targetGeneration) {
 async function withDeploymentLock(root, deploymentId, task) {
   const file = path15.join(localConfigPaths(root).locksDir, `${deploymentId}.lock`);
   await fs14.mkdir(path15.dirname(file), { recursive: true, mode: 448 });
-  const token = randomUUID();
+  const token = randomUUID2();
   const lock = stringify({ pid: process.pid, host: os7.hostname(), token, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
   try {
     await fs14.writeFile(file, lock, { flag: "wx", mode: 384 });
@@ -20630,7 +21165,7 @@ async function acquireControlLease(store, manifest, operation, now) {
     deploymentId: manifest.deploymentId,
     operationId: operation.operationId,
     holderId: `${os7.hostname()}:${process.pid}`,
-    fencingToken: randomUUID(),
+    fencingToken: randomUUID2(),
     generation: manifest.desiredGeneration,
     acquiredAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 12e4).toISOString()
@@ -20824,7 +21359,7 @@ function parseTailscaleStatus(value) {
     return { ready: false, reason: "Tailscale returned an invalid status" };
   }
   if (status.BackendState !== "Running") {
-    return { ready: false, reason: `Tailscale is ${stringValue2(status.BackendState) ?? "not running"}` };
+    return { ready: false, reason: `Tailscale is ${stringValue3(status.BackendState) ?? "not running"}` };
   }
   const self = recordValue(status.Self);
   if (self?.Online === false) {
@@ -20834,8 +21369,8 @@ function parseTailscaleStatus(value) {
     (candidate) => typeof candidate === "string" && isTailscaleIpv4(candidate)
   );
   if (typeof ipv4 !== "string") return { ready: false, reason: "Tailscale IPv4 address is unavailable" };
-  const dnsName = normalizeTailscaleDnsName(stringValue2(self?.DNSName));
-  const tailnet = stringValue2(recordValue(status.CurrentTailnet)?.Name);
+  const dnsName = normalizeTailscaleDnsName(stringValue3(self?.DNSName));
+  const tailnet = stringValue3(recordValue(status.CurrentTailnet)?.Name);
   return { ready: true, ipv4, ...dnsName ? { dnsName } : {}, ...tailnet ? { tailnet } : {} };
 }
 var TailscaleApprovalRequiredError = class extends Error {
@@ -20942,7 +21477,7 @@ function commandErrorMessage(error) {
 function recordValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
-function stringValue2(value) {
+function stringValue3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function arrayValue(value) {
@@ -20966,6 +21501,13 @@ var LOCAL_VOLUME_MOUNT_PATH = "/tmp/mlclaw-local";
 var LOCAL_LIVE_DIR = `${LOCAL_VOLUME_MOUNT_PATH}/openclaw-live`;
 var SPACE_STATE_MOUNT_DIR = "/data/mlclaw-state";
 var SPACE_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
+var LOCAL_RUNTIME_SETTINGS_FILE = `${LOCAL_VOLUME_MOUNT_PATH}/.mlclaw/runtime-settings.json`;
+function spaceRuntimeSettingsFile(bucketPrefix) {
+  return `${SPACE_STATE_MOUNT_DIR}/${runtimeSettingsObjectPath(bucketPrefix)}`;
+}
+function runtimeSettingsObjectPath(bucketPrefix) {
+  return `${normalizeBucketPrefix(bucketPrefix)}/.mlclaw/runtime-settings.json`;
+}
 var SPACE_HANDOFF_TIMEOUT_MS = 12e4;
 var SPACE_HANDOFF_POLL_MS = 5e3;
 var LOCAL_START_SETTLE_MS = 500;
@@ -21404,7 +21946,13 @@ async function bootstrap(opts, runtime) {
             hub.getSpaceVariables(activePlan.manifest.space)
           ]);
           observed = { runtime: spaceRuntime, variables };
-          requiresDeployment = spaceGatewayNeedsRepair(activePlan.manifest, variables, spaceRuntime, me2.name);
+          requiresDeployment = spaceGatewayNeedsRepair(
+            activePlan.manifest,
+            variables,
+            spaceRuntime,
+            me2.name,
+            activePlan.bucketPrefix
+          );
         }
         if (spacePlan.currentVisibility !== spacePlan.visibility) {
           await assertLease();
@@ -21419,6 +21967,7 @@ async function bootstrap(opts, runtime) {
             manifest: activePlan.manifest,
             secrets: activePlan.secrets,
             allowedUsers: me2.name,
+            ...activePlan.bucketPrefix ? { bucketPrefix: activePlan.bucketPrefix } : {},
             spaceExists: spacePlan.exists,
             spacePrepared: true,
             assertLease,
@@ -21540,6 +22089,7 @@ async function reconcileDeployment(plan, hub, runtime, apply) {
     runtime,
     apply: async ({ manifest, changed, assertLease }) => {
       plan.manifest = manifest;
+      plan.secrets.MLCLAW_DEPLOYMENT_UPDATED_AT = manifest.updatedAt;
       return await apply(changed, assertLease);
     }
   });
@@ -21658,7 +22208,7 @@ async function reconcileManifest(params) {
       ...requestedManifest,
       spaceVisibility: visibility,
       desiredGeneration: generation,
-      updatedAt: runtime.now().toISOString()
+      updatedAt: sameDesired ? requestedManifest.updatedAt : nextDeploymentUpdatedAt(requestedManifest.updatedAt, runtime.now())
     };
     let operation = interruptedOperation ?? await readResumableOperation(runtime.configRoot, manifest.deploymentId, manifest.desiredGeneration) ?? newOperation(manifest, runtime.now());
     const control = currentIdentity ? await hub.deploymentControlStore(requestedManifest.owner, requestedManifest.deploymentId) : await hub.deploymentClaimStore(requestedManifest.owner);
@@ -21838,7 +22388,7 @@ async function resolveBootstrapPlan(params) {
   const effectiveRuntimeImage = opts.runtimeImage ? runtimeImage : existingManifest?.runtimeImage ?? runtimeImage;
   const manifest = {
     version: 2,
-    deploymentId: existingManifest?.deploymentId ?? randomUUID2(),
+    deploymentId: existingManifest?.deploymentId ?? randomUUID3(),
     desiredGeneration: existingManifest?.desiredGeneration ?? 0,
     agent: agentName,
     owner,
@@ -21859,7 +22409,7 @@ async function resolveBootstrapPlan(params) {
     ...localGateway ? { localGateway } : {},
     ...gatewayLocation === "local" && existingManifest?.networkAccess ? { networkAccess: existingManifest.networkAccess } : {},
     createdAt: existingManifest?.createdAt ?? now,
-    updatedAt: now
+    updatedAt: existingManifest?.updatedAt ?? now
   };
   const effectiveTelegramToken = telegramToken ?? existingSecrets.TELEGRAM_BOT_TOKEN;
   const effectiveApprovalTelegramToken = approvalTelegramToken ?? existingSecrets.MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN;
@@ -21880,6 +22430,7 @@ async function resolveBootstrapPlan(params) {
     localPort,
     runtimeId: gatewayLocation === "local" ? manifest.localRuntimeId : spaceRuntimeId(agentName),
     deploymentId: manifest.deploymentId,
+    updatedAt: manifest.updatedAt,
     ...bucketPrefix ? { bucketPrefix } : {},
     ...routerToken ? { routerToken } : {}
   });
@@ -22248,7 +22799,8 @@ async function stateAdopt(agent, opts, runtime) {
     MLCLAW_GATEWAY_LOCATION: updated.gatewayLocation,
     MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
     MLCLAW_RUNTIME_ID: runtimeIdFor(updated),
-    MLCLAW_DEPLOYMENT_ID: updated.deploymentId
+    MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt
   };
   const reconciled = await reconcileManifest({
     manifest: updated,
@@ -22314,10 +22866,11 @@ async function stateAdopt(agent, opts, runtime) {
           OPENCLAW_HF_STATE_BUCKET: bucket,
           MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
           OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-          MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+          MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(bucketPrefix),
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_ID: spaceRuntimeId(updated.agent),
-          MLCLAW_DEPLOYMENT_ID: updated.deploymentId
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt
         },
         assertLease
       );
@@ -22456,6 +23009,14 @@ async function confirmBucketChange(params) {
     throw new Error("state bucket adoption was not confirmed");
   }
 }
+function nextDeploymentUpdatedAt(previous, now) {
+  const previousMilliseconds = Date.parse(previous);
+  const nextMilliseconds = Math.max(
+    now.getTime(),
+    Number.isFinite(previousMilliseconds) ? previousMilliseconds + 1 : 0
+  );
+  return new Date(nextMilliseconds).toISOString();
+}
 function parseBucketId(raw) {
   const bucket = raw.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(bucket)) {
@@ -22474,6 +23035,8 @@ function deploymentSecrets(params) {
     MLCLAW_RUNTIME_IMAGE: params.runtimeImage,
     MLCLAW_RUNTIME_ID: params.runtimeId,
     MLCLAW_DEPLOYMENT_ID: params.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: params.updatedAt,
+    MLCLAW_RUNTIME_SETTINGS_FILE: params.gatewayLocation === "local" ? LOCAL_RUNTIME_SETTINGS_FILE : spaceRuntimeSettingsFile(params.bucketPrefix),
     MLCLAW_SESSION_SECRET: params.sessionSecret,
     MLCLAW_CREDENTIAL_KEY: params.credentialKey,
     MLCLAW_OPENCLAW_PORT: String(DEFAULT_SPACE_OPENCLAW_PORT),
@@ -22622,18 +23185,19 @@ async function removeFailedBootstrapContainer(manifest, runtime, removeVolume) {
     await runner.rmVolume(volumeNameFor(manifest.agent), connection);
   }
 }
-function spaceGatewayNeedsRepair(manifest, variables, runtime, allowedUsers) {
+function spaceGatewayNeedsRepair(manifest, variables, runtime, allowedUsers, bucketPrefix) {
   const expected = {
     OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
     MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
     OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-    MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+    MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(bucketPrefix),
     OPENCLAW_MODEL: manifest.model,
     OPENCLAW_AGENT_NAME: manifest.agent,
     MLCLAW_GATEWAY_LOCATION: "space",
     MLCLAW_RUNTIME_IMAGE: manifest.runtimeImage,
     MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
     MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
     MLCLAW_ALLOWED_USERS: allowedUsers,
     MLCLAW_ADMINS: allowedUsers,
     MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -22681,7 +23245,7 @@ async function deploySpaceGateway(params) {
       OPENCLAW_HF_STATE_BUCKET: manifest.bucket,
       MLCLAW_STATE_MOUNT_DIR: SPACE_STATE_MOUNT_DIR,
       OPENCLAW_LIVE_DIR: SPACE_LIVE_DIR,
-      MLCLAW_RUNTIME_SETTINGS_FILE: `${SPACE_LIVE_DIR}/.mlclaw/settings.json`,
+      MLCLAW_RUNTIME_SETTINGS_FILE: spaceRuntimeSettingsFile(params.bucketPrefix),
       ...secrets.OPENCLAW_HF_STATE_PREFIX ? { OPENCLAW_HF_STATE_PREFIX: secrets.OPENCLAW_HF_STATE_PREFIX } : {},
       MLCLAW_TEMPLATE_REV: templateRev,
       OPENCLAW_MODEL: manifest.model,
@@ -22690,6 +23254,7 @@ async function deploySpaceGateway(params) {
       MLCLAW_RUNTIME_IMAGE: spaceRuntimeRef,
       MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
       MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+      MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt,
       MLCLAW_ALLOWED_USERS: params.allowedUsers,
       MLCLAW_ADMINS: params.allowedUsers,
       MLCLAW_CANONICAL_SPACE_ID: DEFAULT_CANONICAL_TEMPLATE_SPACE,
@@ -23118,6 +23683,7 @@ async function gatewayMigrate(agent, opts, runtime) {
           secrets: deploymentSecrets2,
           allowedUsers: me2.name,
           visibility: updated.spaceVisibility === "public" ? "public" : "protected",
+          ...bucketPrefix ? { bucketPrefix } : {},
           spaceExists,
           assertLease,
           ...paidHardware.kind === "explicit" ? { hardware: paidHardware.hardware } : {},
@@ -23130,7 +23696,8 @@ async function gatewayMigrate(agent, opts, runtime) {
           MLCLAW_GATEWAY_LOCATION: "space",
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: spaceRuntimeId(agent),
-          MLCLAW_DEPLOYMENT_ID: updated.deploymentId
+          MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt
         });
         await writeManifest(runtime.configRoot, updated);
       }
@@ -23182,6 +23749,7 @@ async function gatewayMigrate(agent, opts, runtime) {
           MLCLAW_RUNTIME_IMAGE: updated.runtimeImage,
           MLCLAW_RUNTIME_ID: updated.localRuntimeId,
           MLCLAW_DEPLOYMENT_ID: updated.deploymentId,
+          MLCLAW_DEPLOYMENT_UPDATED_AT: updated.updatedAt,
           ...localAccessSecrets(updated.owner, localGatewayPort(updated), secrets, updated.networkAccess)
         });
         await assertLease();
@@ -23877,6 +24445,7 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_ID", spaceRuntimeId(agentName));
   if (localManifest) {
     await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_ID", localManifest.deploymentId);
+    await hub.addSpaceVariable(repoId, "MLCLAW_DEPLOYMENT_UPDATED_AT", localManifest.updatedAt);
   }
   await hub.addSpaceVariable(repoId, "MLCLAW_OPENCLAW_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
   await hub.addSpaceVariable(repoId, "OPENCLAW_GATEWAY_PORT", String(DEFAULT_SPACE_OPENCLAW_PORT));
@@ -23884,7 +24453,11 @@ async function update(repoId, opts, hub, hfToken, runtime) {
   if (bucket) {
     await hub.addSpaceVariable(repoId, "MLCLAW_STATE_MOUNT_DIR", SPACE_STATE_MOUNT_DIR);
     await hub.addSpaceVariable(repoId, "OPENCLAW_LIVE_DIR", SPACE_LIVE_DIR);
-    await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", `${SPACE_LIVE_DIR}/.mlclaw/settings.json`);
+    await hub.addSpaceVariable(
+      repoId,
+      "MLCLAW_RUNTIME_SETTINGS_FILE",
+      spaceRuntimeSettingsFile(variables.get("OPENCLAW_HF_STATE_PREFIX")?.value)
+    );
     await ensureSpaceStateVolume(hub, repoId, bucket);
   }
   await doctor(repoId, { fix: true }, hub, runtime);
@@ -23914,7 +24487,8 @@ async function reconcileUpdatedDeployment(localManifest, runtimeImage, hub, runt
         MLCLAW_GATEWAY_LOCATION: "space",
         MLCLAW_RUNTIME_IMAGE: runtimeImage,
         MLCLAW_RUNTIME_ID: spaceRuntimeId(manifest.agent),
-        MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
+        MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+        MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt
       });
     }
   });
@@ -23953,6 +24527,22 @@ async function ensureUpdateCredentials(params) {
     ...routerToken ? { MLCLAW_ROUTER_TOKEN: routerToken } : {}
   });
   return localManifest;
+}
+async function checkCanonicalRuntimeSettings(params) {
+  const objectPath = runtimeSettingsObjectPath(params.bucketPrefix);
+  const currentBlob = await params.hub.bucket(params.bucket).downloadFile(objectPath);
+  const current = currentBlob ? parseRuntimeSettings(await currentBlob.text()) : void 0;
+  if (current?.model === params.deploymentModel) return { issues: [], fixed: [] };
+  const detail = current ? `canonical runtime model ${current.model} differs from deployment model ${params.deploymentModel}` : "canonical runtime settings are missing";
+  if (!params.fix) return { issues: [detail], fixed: [] };
+  params.runtime.stdout.log(`Runtime settings repair winner: deployment model ${params.deploymentModel}`);
+  await params.hub.addSpaceVariable(params.repoId, "OPENCLAW_MODEL", params.deploymentModel);
+  await params.hub.addSpaceVariable(
+    params.repoId,
+    "MLCLAW_DEPLOYMENT_UPDATED_AT",
+    nextDeploymentUpdatedAt(current?.updatedAt ?? "", params.runtime.now())
+  );
+  return { issues: [], fixed: ["scheduled canonical runtime settings repair from deployment model"] };
 }
 async function doctor(repoId, opts, hub, runtime) {
   if (!repoId.includes("/") && await manifestExists(runtime.configRoot, repoId)) {
@@ -24010,6 +24600,7 @@ async function doctor(repoId, opts, hub, runtime) {
     }
   }
   const bucket = variables.get("OPENCLAW_HF_STATE_BUCKET")?.value ?? opts.bucket;
+  const statePrefix = variables.get("OPENCLAW_HF_STATE_PREFIX")?.value;
   let signedInUser;
   const currentUsername = async () => {
     signedInUser ??= (await hub.whoami()).name;
@@ -24017,9 +24608,22 @@ async function doctor(repoId, opts, hub, runtime) {
   };
   if (!bucket) {
     issues.push("OPENCLAW_HF_STATE_BUCKET is missing");
-  } else if (!variables.has("OPENCLAW_HF_STATE_BUCKET") && fix) {
-    await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
-    fixed.push("set OPENCLAW_HF_STATE_BUCKET");
+  } else {
+    if (!variables.has("OPENCLAW_HF_STATE_BUCKET") && fix) {
+      await hub.addSpaceVariable(repoId, "OPENCLAW_HF_STATE_BUCKET", bucket);
+      fixed.push("set OPENCLAW_HF_STATE_BUCKET");
+    }
+    const runtimeSettingsCheck = await checkCanonicalRuntimeSettings({
+      hub,
+      repoId,
+      bucket,
+      ...statePrefix ? { bucketPrefix: statePrefix } : {},
+      deploymentModel: variables.get("OPENCLAW_MODEL")?.value ?? DEFAULT_MODEL2,
+      fix,
+      runtime
+    });
+    issues.push(...runtimeSettingsCheck.issues);
+    fixed.push(...runtimeSettingsCheck.fixed);
   }
   if ((variables.get("MLCLAW_STATE_MOUNT_DIR")?.value ?? "") !== SPACE_STATE_MOUNT_DIR) {
     if (fix) {
@@ -24037,7 +24641,7 @@ async function doctor(repoId, opts, hub, runtime) {
       issues.push(`OPENCLAW_LIVE_DIR is not ${SPACE_LIVE_DIR}`);
     }
   }
-  const expectedRuntimeSettingsFile = `${SPACE_LIVE_DIR}/.mlclaw/settings.json`;
+  const expectedRuntimeSettingsFile = spaceRuntimeSettingsFile(statePrefix);
   if ((variables.get("MLCLAW_RUNTIME_SETTINGS_FILE")?.value ?? "") !== expectedRuntimeSettingsFile) {
     if (fix) {
       await hub.addSpaceVariable(repoId, "MLCLAW_RUNTIME_SETTINGS_FILE", expectedRuntimeSettingsFile);
@@ -24744,16 +25348,20 @@ async function deleteCodexRevocationMarker(hub, bucket, statePrefix) {
   await hub.bucket(bucket).deleteFiles([codexAuthRevocationObjectPath(statePrefix)]);
 }
 async function ensureRuntimeDeploymentId(manifest, secrets, hub, runtime, assertLease) {
-  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId) return;
+  if (secrets.MLCLAW_DEPLOYMENT_ID === manifest.deploymentId && secrets.MLCLAW_DEPLOYMENT_UPDATED_AT === manifest.updatedAt) {
+    return;
+  }
   if (manifest.gatewayLocation === "space") {
     await assertLease();
     await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_ID", manifest.deploymentId);
+    await hub.addSpaceVariable(manifest.space, "MLCLAW_DEPLOYMENT_UPDATED_AT", manifest.updatedAt);
     return;
   }
   await assertLease();
   await writeSecretEnv(runtime.configRoot, manifest.agent, {
     ...secrets,
-    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId
+    MLCLAW_DEPLOYMENT_ID: manifest.deploymentId,
+    MLCLAW_DEPLOYMENT_UPDATED_AT: manifest.updatedAt
   });
 }
 async function restartDeploymentForCredentialChange(manifest, runtime, hub, assertLease) {
@@ -25107,6 +25715,7 @@ export {
   DEFAULT_MODEL2 as DEFAULT_MODEL,
   DEFAULT_SPACE_OPENCLAW_PORT,
   LOCAL_LIVE_DIR,
+  LOCAL_RUNTIME_SETTINGS_FILE,
   LOCAL_START_SETTLE_MS,
   LOCAL_VOLUME_MOUNT_PATH,
   SPACE_HANDOFF_POLL_MS,
@@ -25118,5 +25727,6 @@ export {
   createProgram,
   main,
   mergeStateVolume,
-  migrateCodexCredentialForBucketAdoption
+  migrateCodexCredentialForBucketAdoption,
+  spaceRuntimeSettingsFile
 };

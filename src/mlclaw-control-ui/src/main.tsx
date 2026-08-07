@@ -41,6 +41,7 @@ type ModelChoice = {
 type Settings = {
   agentName: string | null;
   model: string;
+  generation: number;
   stateBucket: string | null;
   stateMountDir: string | null;
   statePrefix: string | null;
@@ -409,7 +410,7 @@ function SettingsPage(props: {
     }
     if (
       !window.confirm(
-        `Save ${selectedChoices.length} model/provider option(s), set ${activeModel} active, and restart the Space?`,
+        `Save ${selectedChoices.length} model/provider option(s), set ${activeModel} active, and restart OpenClaw?`,
       )
     ) {
       return;
@@ -420,16 +421,15 @@ function SettingsPage(props: {
         ok: boolean;
         model: string;
         modelChoices: ModelChoice[];
+        generation: number;
         persistent: boolean;
         restartPending: boolean;
-      }>("/mlclaw/api/settings/model", { model: activeModel, modelChoices: selectedChoices }, props.session.csrfToken);
-      props.onNotice(
-        !result.persistent
-          ? `Saved ${result.modelChoices.length} model option(s) to runtime state. OpenClaw restarted.`
-          : result.restartPending
-            ? `Saved ${result.modelChoices.length} model option(s). Space restart requested.`
-            : `Saved ${result.modelChoices.length} model option(s). Restart could not be requested from this runtime.`,
+      }>(
+        "/mlclaw/api/settings/model",
+        { model: activeModel, modelChoices: selectedChoices, generation: props.settings.generation },
+        props.session.csrfToken,
       );
+      props.onNotice(`Saved ${result.modelChoices.length} model option(s). OpenClaw restarted.`);
       await props.onRefresh();
     } catch (err) {
       props.onNotice(errorMessage(err));

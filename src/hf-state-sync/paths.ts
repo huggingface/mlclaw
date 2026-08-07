@@ -29,6 +29,8 @@ export type SyncConfig = {
   snapshotGid?: number;
   /** Root-owned runtime state overlaid by the trusted snapshot supervisor. */
   protectedStateDir?: string;
+  /** Protected credential files whose values must never appear in an archive. */
+  snapshotSecretFiles?: string[];
 };
 
 const DEFAULT_LIVE_DIR = "/home/node/.local/share/mlclaw/live";
@@ -65,6 +67,9 @@ export function resolveSyncConfig(env: NodeJS.ProcessEnv = process.env): SyncCon
     ...(snapshotUid !== undefined ? { snapshotUid } : {}),
     ...(snapshotGid !== undefined ? { snapshotGid } : {}),
     ...(env.MLCLAW_PROTECTED_STATE_DIR?.trim() ? { protectedStateDir: env.MLCLAW_PROTECTED_STATE_DIR.trim() } : {}),
+    ...(env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE?.trim()
+      ? { snapshotSecretFiles: [env.MLCLAW_HF_BROKER_AGENT_SECRET_FILE.trim()] }
+      : {}),
   };
 }
 

@@ -1246,7 +1246,11 @@ describe("ML Claw Space runtime", () => {
         "content-type": "application/json",
         "x-mlclaw-csrf": csrf,
       },
-      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
+      body: JSON.stringify({
+        model: qwenChoice.openclawModel,
+        modelChoices: [qwenChoice],
+        generation: config.runtimeSettingsGeneration,
+      }),
     });
 
     expect(response.status).toBe(400);
@@ -1256,7 +1260,7 @@ describe("ML Claw Space runtime", () => {
     });
   });
 
-  it("writes model choices to the current Space, updates OpenClaw config, and requests restart", async () => {
+  it("writes canonical model settings and restarts only the OpenClaw child", async () => {
     const captured: Array<{ path: string; body: unknown; authorization: string | undefined }> = [];
     const hubPort = await freePort();
     const hub = http.createServer((req, res) => {
@@ -1303,7 +1307,11 @@ describe("ML Claw Space runtime", () => {
         "content-type": "application/json",
         "x-mlclaw-csrf": csrf,
       },
-      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
+      body: JSON.stringify({
+        model: qwenChoice.openclawModel,
+        modelChoices: [qwenChoice],
+        generation: config.runtimeSettingsGeneration,
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -1316,30 +1324,10 @@ describe("ML Claw Space runtime", () => {
           provider: "deepinfra",
         },
       ],
-      restartPending: true,
+      persistent: true,
+      restartPending: false,
     });
-    expect(captured[0]).toEqual({
-      path: "/api/spaces/alice/research/variables",
-      body: { key: "OPENCLAW_MODEL", value: "huggingface/Qwen/Qwen3.6-27B:deepinfra" },
-      authorization: "Bearer hf_test",
-    });
-    expect(captured[1]).toMatchObject({
-      path: "/api/spaces/alice/research/variables",
-      body: { key: "MLCLAW_MODEL_CHOICES" },
-      authorization: "Bearer hf_test",
-    });
-    const storedChoices = JSON.parse((captured[1]?.body as { value: string }).value);
-    expect(storedChoices).toMatchObject([
-      {
-        modelId: "Qwen/Qwen3.6-27B",
-        provider: "deepinfra",
-      },
-    ]);
-    expect(captured[2]).toEqual({
-      path: "/api/spaces/alice/research/restart",
-      body: { factoryReboot: false },
-      authorization: "Bearer hf_test",
-    });
+    expect(captured).toEqual([]);
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(rewritten.agents.defaults.model.primary).toBe("huggingface/Qwen/Qwen3.6-27B:deepinfra");
     expect(rewritten.models.providers.huggingface.models).toMatchObject([
@@ -1358,36 +1346,8 @@ describe("ML Claw Space runtime", () => {
     expect(runtimeSettings.gid).toBe(config.openclawGid);
   });
 
-  it("reports a saved model when the restart request fails", async () => {
-    const captured: Array<{ path: string; body: unknown }> = [];
-    const hubPort = await freePort();
-    const hub = http.createServer((req, res) => {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += String(chunk);
-      });
-      req.on("end", () => {
-        captured.push({
-          path: req.url ?? "",
-          body: body ? JSON.parse(body) : undefined,
-        });
-        if (req.url?.endsWith("/restart")) {
-          res.writeHead(500, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "restart failed" }));
-          return;
-        }
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end("{}");
-      });
-    });
-    await listen(hub, hubPort);
-    cleanups.push(() => closeServer(hub));
-
-    const config = await testConfig({
-      hfToken: "hf_test",
-      hubUrl: `http://127.0.0.1:${hubPort}`,
-      spaceId: "alice/research",
-    });
+  it("rejects a stale model-settings generation before changing runtime state", async () => {
+    const config = await testConfig({ routerToken: "hf_router_test" });
     const runtime = new SpaceRuntimeServer(config);
     const server = await runtime.start();
     cleanups.push(
@@ -1396,11 +1356,8 @@ describe("ML Claw Space runtime", () => {
     );
     const cookie = sessionCookie(config, "alice");
     const csrf = await csrfToken(config, cookie);
-
     const qwenChoice = PRESET_MODEL_CHOICES.find((choice) => choice.modelId === "Qwen/Qwen3.6-27B");
-    if (!qwenChoice) {
-      throw new Error("Qwen preset is missing");
-    }
+    if (!qwenChoice) throw new Error("Qwen preset is missing");
 
     const response = await fetch(`http://127.0.0.1:${config.port}/mlclaw/api/settings/model`, {
       method: "POST",
@@ -1409,20 +1366,19 @@ describe("ML Claw Space runtime", () => {
         "content-type": "application/json",
         "x-mlclaw-csrf": csrf,
       },
-      body: JSON.stringify({ model: qwenChoice.openclawModel, modelChoices: [qwenChoice] }),
+      body: JSON.stringify({
+        model: qwenChoice.openclawModel,
+        modelChoices: [qwenChoice],
+        generation: config.runtimeSettingsGeneration + 1,
+      }),
     });
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      ok: true,
-      model: "huggingface/Qwen/Qwen3.6-27B:deepinfra",
-      restartPending: false,
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "runtime settings changed; refresh before saving",
     });
-    expect(captured.map((item) => item.path)).toEqual([
-      "/api/spaces/alice/research/variables",
-      "/api/spaces/alice/research/variables",
-      "/api/spaces/alice/research/restart",
-    ]);
+    expect(config.model).not.toBe(qwenChoice.openclawModel);
   });
 
   it("injects a small ML Claw shell into authenticated OpenClaw HTML", async () => {
@@ -1932,6 +1888,37 @@ describe("ML Claw Space runtime", () => {
       HF_TOKEN: "hf_router",
       HUGGINGFACE_HUB_TOKEN: "hf_router",
     });
+  });
+
+  it("keeps the broker agent credential out of the OpenClaw child environment", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mlclaw-broker-child-env-"));
+    cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
+    const envFile = path.join(root, "env.json");
+    const brokerSecret = "narrow-broker-secret-value";
+    const secretFile = path.join(root, "broker-secret");
+    await fs.writeFile(secretFile, `${brokerSecret}\n`, { mode: 0o600 });
+    const config = await testConfig({
+      brokerAgentUrl: "http://127.0.0.1:7863",
+      brokerAgentSecret: brokerSecret,
+      brokerAgentSecretFile: secretFile,
+      routerToken: undefined,
+      openclawArgs: [
+        "-e",
+        `require("fs").writeFileSync(${JSON.stringify(envFile)},JSON.stringify({HF_TOKEN:process.env.HF_TOKEN??null,HUGGINGFACE_HUB_TOKEN:process.env.HUGGINGFACE_HUB_TOKEN??null,containsBrokerSecret:Object.values(process.env).includes(${JSON.stringify(brokerSecret)})}));setInterval(()=>undefined,100000)`,
+      ],
+    });
+    const runtime = new SpaceRuntimeServer(config);
+    const server = await runtime.start();
+    cleanups.push(
+      () => closeServer(server),
+      () => runtime.stop(),
+    );
+
+    await waitFor(async () => fileExists(envFile));
+    await expect(fs.readFile(envFile, "utf8")).resolves.toBe(
+      JSON.stringify({ HF_TOKEN: null, HUGGINGFACE_HUB_TOKEN: null, containsBrokerSecret: false }),
+    );
+    await expect(fs.readFile(config.openclawConfigPath, "utf8")).resolves.not.toContain(brokerSecret);
   });
 
   it("does not expose wrapper-only secrets to the OpenClaw child", async () => {
@@ -2502,7 +2489,7 @@ describe("ML Claw Space runtime", () => {
   it("configures OpenClaw inference with only the broker agent credential", async () => {
     const config = await testConfig({
       brokerAgentUrl: "http://127.0.0.1:7863/",
-      brokerAgentSecret: "agent-secret",
+      brokerAgentSecret: "narrow-secret-value",
       brokerAgentSecretFile: "/run/mlclaw-hf-broker/agent-secret",
       routerToken: undefined,
     });
@@ -2512,8 +2499,13 @@ describe("ML Claw Space runtime", () => {
     const rewritten = JSON.parse(await fs.readFile(config.openclawConfigPath, "utf8"));
     expect(rewritten.models.providers.huggingface).toMatchObject({
       baseUrl: "http://127.0.0.1:7863/v1",
-      apiKey: "agent-secret",
+      apiKey: { source: "file", provider: "mlclaw_hf_broker", id: "value" },
       api: "openai-completions",
+    });
+    expect(rewritten.secrets.providers.mlclaw_hf_broker).toEqual({
+      source: "file",
+      path: "/run/mlclaw-hf-broker/agent-secret",
+      mode: "singleValue",
     });
     expect(rewritten.mcp.servers["huggingface-broker"]).toEqual({
       command: "/usr/local/bin/hf-broker",
@@ -2526,6 +2518,7 @@ describe("ML Claw Space runtime", () => {
       },
       enabled: true,
     });
+    expect(JSON.stringify(rewritten)).not.toContain("narrow-secret-value");
     expect(JSON.stringify(rewritten)).not.toContain("operator-secret");
     expect(BROKER_MCP_REQUEST_TIMEOUT_MS).toBeGreaterThan(25_000);
   });
@@ -2848,7 +2841,10 @@ async function testConfig(overrides: Partial<SpaceRuntimeConfig> = {}): Promise<
     researchMcpUrl: "https://evalstate-research-agent-two.hf.space/mcp",
     researchTimeoutMs: 30 * 60 * 1000,
     researchPollMs: 1500,
-    runtimeSettingsFile: path.join(root, ".mlclaw", "settings.json"),
+    runtimeSettingsFile: path.join(root, ".mlclaw", "runtime-settings.json"),
+    runtimeSettingsGeneration: 0,
+    bootstrapModel: overrides.model ?? "huggingface/google/gemma-4-26B-A4B-it:deepinfra",
+    bootstrapUpdatedAt: undefined,
     openclawConfigPath: configPath,
     openclawCommand: process.execPath,
     openclawArgs: ["-e", "setInterval(() => undefined, 100000)"],
