@@ -158,6 +158,15 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('rm -rf "$HF_BROKER_STATE_DIR"');
     expect(entrypoint).toContain('rm -f "$HF_BROKER_STATE_CONTRACT_FILE"');
     expect(entrypoint).toContain("printf '%s\\n' \"$HF_BROKER_STATE_CONTRACT\"");
+    expect(entrypoint).toContain('UNYOLO_TELEGRAM_STATE_CONTRACT="unyolo-telegram-inbox-v1-terminal-failures"');
+    expect(entrypoint).toContain(
+      'UNYOLO_TELEGRAM_STATE_CONTRACT_FILE="$PROTECTED_STATE_DIR/control/unyolo-telegram-state-contract"',
+    );
+    expect(entrypoint).toContain('[ ! -f "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE" ]');
+    expect(entrypoint).toContain('[ -L "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE" ]');
+    expect(entrypoint).toContain('rm -rf "$UNYOLO_TELEGRAM_STATE_DIR"');
+    expect(entrypoint).toContain('rm -f "$UNYOLO_TELEGRAM_STATE_CONTRACT_FILE"');
+    expect(entrypoint).toContain("printf '%s\\n' \"$UNYOLO_TELEGRAM_STATE_CONTRACT\"");
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/control"');
     expect(entrypoint).toContain('install -d -m 0710 -o root -g mlclaw-protected "$PROTECTED_STATE_DIR/unyolo"');
