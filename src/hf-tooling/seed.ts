@@ -228,12 +228,19 @@ conflict is durable: inspect the existing operation instead of restarting the
 broker. Protected actions appear in the ML Claw unYOLO control and may also
 be sent through configured OpenClaw channels.
 
-For repeated repository or bucket writes, request the narrowest temporary grant
-with \`hf_grant_request\`. A bounded wait may return a pending grant; continue
-with \`hf_grant_wait\` using the same grant ID. Revoke the grant when the work is
-finished. Use the installed \`hf-broker\` client for local file upload and
-verified download streams. Never use the deployment state bucket for agent
-work; its exact target is denied by policy.
+For repeated operations, use \`hf_grant_request\` with the number of uses the
+user requested; never substitute a fixed example value. For \`job.run\` and
+\`job.uv.run\`, "any N jobs" means empty or omitted \`attrs\`, while "this exact
+job N times" means exact target and argument digest attrs. If the wording does
+not say whether job arguments may change, ask one short question first. Before
+requesting approval, state the scope plainly: "any job arguments for this
+target" or "exact job arguments only."
+
+A bounded wait may return a pending grant; continue with \`hf_grant_wait\` using
+the same grant ID. Revoke the grant when the work is finished. Use the installed
+\`hf-broker\` client for local file upload and verified download streams. Never
+use the deployment state bucket for agent work; its exact target is denied by
+policy.
 
 After repository creation, use the brokered Git transport for repository
 contents. The limited broker credential is not a Hugging Face Hub token; do

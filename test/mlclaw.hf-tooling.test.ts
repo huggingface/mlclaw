@@ -55,7 +55,7 @@ describe("Hugging Face tooling baseline", () => {
     expect(brokerSkill).toContain('"namespace":"OWNER"');
     expect(brokerSkill).not.toContain('"kind":"bucket","owner"');
     expect(brokerSkill).not.toContain("client operation list");
-    expect(brokerSkill).toContain("--max-uses 25");
+    expect(brokerSkill).toContain('--max-uses "$REQUESTED_USES"');
     expect(brokerSkill).not.toContain("--max-uses unlimited");
     for (const skill of OPTIONAL_ONLY_SKILLS) {
       await expect(fs.access(path.join("assets/hf-tooling/skills", skill, "SKILL.md"))).rejects.toMatchObject({
@@ -105,8 +105,16 @@ describe("Hugging Face tooling baseline", () => {
     expect(agentsMd).toContain("`hf auth whoami` to report no login");
     expect(agentsMd).toContain("never run `hf auth login`");
     expect(agentsMd).toContain("deployment state bucket");
+    expect(agentsMd).toContain("any N jobs");
+    expect(agentsMd).toContain("exact job arguments only");
     expect(agentsMd).toContain("`.agents/skills`");
     expect(agentsMd).toContain("`skills`");
+
+    const brokerSkill = await fs.readFile(path.join(workspaceDir, "skills/hf-broker/SKILL.md"), "utf8");
+    expect(brokerSkill).toContain('"Allow any N jobs"');
+    expect(brokerSkill).toContain("attrs` omitted or empty");
+    expect(brokerSkill).toContain("always use the number of uses");
+    expect(brokerSkill).toContain("user requested");
 
     const rawManifest = await fs.readFile(path.join(workspaceDir, ".agents/.mlclaw-hf-tooling.json"), "utf8");
     expect(rawManifest).toContain('"installedAt": "2026-07-09T00:00:00.000Z"');

@@ -24,18 +24,32 @@ grant instead of submitting another mutation.
 
 ## Request reusable write access
 
-Request a temporary grant only when repeated writes are needed. Keep the scope
-as narrow as possible. A day is 1,440 minutes and a week is 10,080 minutes.
-These repeated-write examples explicitly request the deployment policy's
-25-use ceiling; the operator may approve a smaller use budget.
+Request a temporary grant only when repeated operations are needed. Keep the
+scope as narrow as the user requested, and always use the number of uses the
+user requested. Do not substitute a fixed example value. A day is 1,440 minutes
+and a week is 10,080 minutes.
 
-For one bucket key prefix:
+For `job.run` and `job.uv.run`:
+
+- "Allow any N jobs" means `max_uses: N` with `attrs` omitted or empty, so job
+  arguments may change between uses for the same target.
+- "Run this exact job N times" means `max_uses: N` with exact target and
+  argument digest attrs.
+- If it is unclear whether arguments may change, ask one short question before
+  requesting the grant.
+
+Before requesting approval, say either "any job arguments for this target" or
+"exact job arguments only." Never silently narrow an any-job request with exact
+digests.
+
+Set `REQUESTED_USES` to the number the user requested. For one bucket key
+prefix:
 
 ```sh
 hf-broker client grant request bucket.object.write OWNER/BUCKET \
   --key 'artifacts/**' \
   --minutes 10080 \
-  --max-uses 25 \
+  --max-uses "$REQUESTED_USES" \
   --reason "Write the requested artifacts for one week" \
   --request-id STABLE-GRANT-REQUEST-ID
 ```
@@ -47,7 +61,7 @@ hf-broker client grant request repo.commit.create OWNER/REPO \
   --type dataset \
   --path 'data/**' \
   --minutes 1440 \
-  --max-uses 25 \
+  --max-uses "$REQUESTED_USES" \
   --reason "Update the requested dataset path for one day" \
   --request-id STABLE-GRANT-REQUEST-ID
 ```
