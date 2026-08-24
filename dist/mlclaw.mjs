@@ -15383,7 +15383,7 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.12.1",
+  "packageVersion": "0.12.2",
   "openclawVersion": "2026.8.1-beta.2",
   "hfBrokerVersion": "hf-broker/v0.11.1",
   "telegramBotMuxVersion": "0.1.0",
