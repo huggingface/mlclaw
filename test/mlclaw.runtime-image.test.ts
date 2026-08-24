@@ -239,6 +239,10 @@ describe("runtime image Dockerfile", () => {
       'env MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN" node /app/hf-state-sync.js prepare-restore',
     );
     expect(entrypoint).toContain('export MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN"');
+    expect(entrypoint).toContain('gosu "$OPENCLAW_IDENTITY" node /app/openclaw.mjs doctor --fix --non-interactive');
+    expect(entrypoint.indexOf("node /app/openclaw.mjs doctor --fix --non-interactive")).toBeLessThan(
+      entrypoint.indexOf("node /app/hf-state-sync.js supervise"),
+    );
     expect(entrypoint).toContain("! -name .mlclaw-protected");
     expect(entrypoint.indexOf("node /app/hf-state-sync.js prepare-restore")).toBeLessThan(
       entrypoint.lastIndexOf("\nstart_hf_broker\n"),
@@ -260,6 +264,12 @@ describe("runtime image Dockerfile", () => {
       "OAUTH_CLIENT_SECRET",
       "HF_TOKEN",
       "HUGGINGFACE_HUB_TOKEN",
+      "MLCLAW_BROKER_HF_TOKEN",
+      "MLCLAW_ROUTER_TOKEN",
+      "HF_ROUTER_TOKEN",
+      "OPENAI_API_KEY",
+      "TELEGRAM_BOT_TOKEN",
+      "MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN",
     ]) {
       expect(entrypoint).toContain(`-u ${secret}`);
     }
