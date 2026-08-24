@@ -1,9 +1,9 @@
-ARG OPENCLAW_VERSION=2026.7.2-beta.5
+ARG OPENCLAW_VERSION=2026.8.1-beta.2
 ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
-ARG UNYOLO_PLUGIN_VERSION=0.7.0
-ARG HF_BROKER_VERSION=hf-broker/v0.11.0
+ARG UNYOLO_PLUGIN_VERSION=0.7.3
+ARG HF_BROKER_VERSION=hf-broker/v0.11.1
 ARG TELEGRAM_BOT_MUX_VERSION=0.1.0
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.12.0-openclaw-2026.7.2-beta.5
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.12.1-openclaw-2026.8.1-beta.2
 
 FROM ghcr.io/osolmaz/telegram-bot-mux:v${TELEGRAM_BOT_MUX_VERSION} AS telegram-bot-mux
 

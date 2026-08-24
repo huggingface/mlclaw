@@ -141,8 +141,8 @@ describe("generated Space repository", () => {
     expect(dockerfile).toContain('"hf-discover==1.3.7"');
     expect(dockerfile).toContain('"uv==0.11.28"');
     expect(dockerfile).toContain('CMD ["/app/entrypoint.sh"]');
-    await expect(fs.readFile(path.join(outDir, "runtime/openclaw.default.json"), "utf8")).resolves.toContain(
-      '"dangerouslyDisableDeviceAuth": true',
-    );
+    const generatedOpenClawConfig = await fs.readFile(path.join(outDir, "runtime/openclaw.default.json"), "utf8");
+    expect(generatedOpenClawConfig).toContain('"deviceAutoApprove": {');
+    expect(generatedOpenClawConfig).not.toContain("dangerouslyDisableDeviceAuth");
   });
 });

@@ -2280,19 +2280,25 @@ describe("ML Claw Space runtime", () => {
       port: config.openclawPort,
       auth: {
         mode: "trusted-proxy",
+        identityScopes: { alice: ["operator.admin"] },
         trustedProxy: {
           userHeader: "x-forwarded-user",
           requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
+          allowUsers: ["alice"],
           allowLoopback: true,
+          deviceAutoApprove: {
+            enabled: true,
+            scopes: ["operator.read", "operator.write", "operator.approvals"],
+          },
         },
       },
       trustedProxies: ["127.0.0.1", "::1"],
       controlUi: {
-        dangerouslyDisableDeviceAuth: true,
         allowedOrigins: ["https://alice-research.hf.space", "https://gateway.example.ts.net:17860"],
         embedSandbox: "scripts",
       },
     });
+    expect(rewritten.gateway.controlUi).not.toHaveProperty("dangerouslyDisableDeviceAuth");
     expect(rewritten.agents.defaults.model.primary).toBe("huggingface/google/gemma-4-26B-A4B-it:deepinfra");
     expect(rewritten.session).toEqual({
       reset: { mode: "idle", idleMinutes: 2_147_483_647 },

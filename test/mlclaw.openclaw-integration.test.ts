@@ -13,15 +13,16 @@ const execFile = promisify(execFileCallback);
 const openclawPackageDir = process.env.MLCLAW_OPENCLAW_PACKAGE_DIR;
 const cleanups: Array<() => Promise<void> | void> = [];
 const ownerOnlyTools = [
+  "automations",
   "computer",
   "conversations_list",
   "conversations_send",
   "conversations_turn",
-  "cron",
   "gateway",
   "mobile_ui",
   "nodes",
   "openclaw",
+  "portal",
   "sessions",
   "terminal",
 ].sort();
