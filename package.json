@@ -1,12 +1,12 @@
 {
   "name": "mlclaw",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "license": "MIT",
   "config": {
-    "openclawVersion": "2026.7.2-beta.5",
-    "hfBrokerVersion": "hf-broker/v0.11.0",
+    "openclawVersion": "2026.8.1-beta.2",
+    "hfBrokerVersion": "hf-broker/v0.11.1",
     "telegramBotMuxVersion": "0.1.0",
-    "unyoloPluginVersion": "0.7.0",
+    "unyoloPluginVersion": "0.7.3",
     "runtimeImageRepository": "ghcr.io/huggingface/mlclaw"
   },
   "repository": {
@@ -77,7 +77,7 @@
     "commander": "^14.0.3",
     "hono": "^4.12.28",
     "lucide-react": "^0.468.0",
-    "openclaw-unyolo": "0.7.0",
+    "openclaw-unyolo": "0.7.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "skillflag": "^0.2.0",

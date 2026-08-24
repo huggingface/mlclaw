@@ -32,16 +32,26 @@ export async function configureOpenClawGateway(
   gateway.port = config.openclawPort;
   gateway.auth = {
     mode: "trusted-proxy",
+    identityScopes: Object.fromEntries(config.adminUsers.map((user) => [user, ["operator.admin"]])),
     trustedProxy: {
       userHeader: "x-forwarded-user",
       requiredHeaders: ["x-forwarded-proto", "x-forwarded-host"],
+      allowUsers: config.allowedUsers,
       allowLoopback: true,
+      deviceAutoApprove: {
+        enabled: true,
+        scopes: ["operator.read", "operator.write", "operator.approvals"],
+      },
     },
   };
   gateway.trustedProxies = ["127.0.0.1", "::1"];
+  const supportedControlUi =
+    typeof gateway.controlUi === "object" && gateway.controlUi
+      ? { ...(gateway.controlUi as Record<string, unknown>) }
+      : {};
+  delete supportedControlUi.dangerouslyDisableDeviceAuth;
   gateway.controlUi = {
-    ...(typeof gateway.controlUi === "object" && gateway.controlUi ? gateway.controlUi : {}),
-    dangerouslyDisableDeviceAuth: true,
+    ...supportedControlUi,
     allowedOrigins: config.accessOrigins,
     embedSandbox: "scripts",
   };

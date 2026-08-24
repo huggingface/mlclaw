@@ -16,12 +16,15 @@
       "trustedProxy": {
         "userHeader": "x-forwarded-user",
         "requiredHeaders": ["x-forwarded-proto", "x-forwarded-host"],
-        "allowLoopback": true
+        "allowLoopback": true,
+        "deviceAutoApprove": {
+          "enabled": true,
+          "scopes": ["operator.read", "operator.write", "operator.approvals"]
+        }
       }
     },
     "trustedProxies": ["127.0.0.1", "::1"],
     "controlUi": {
-      "dangerouslyDisableDeviceAuth": true,
       "allowedOrigins": ["${MLCLAW_PUBLIC_URL}"]
     }
   },

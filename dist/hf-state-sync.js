@@ -712,7 +712,7 @@ var SplicedBlob = class _SplicedBlob extends Blob {
   }
 };
 
-// ../../mlclaw/node_modules/gearhash-jit/dist/esm/table.js
+// node_modules/gearhash-jit/dist/esm/table.js
 var GEAR_TABLE = [
   0xb088d3a9e840f559n,
   0x5652c7f739ed20d6n,
@@ -972,7 +972,7 @@ var GEAR_TABLE = [
   0x63c7a906c1dd187bn
 ];
 
-// ../../mlclaw/node_modules/gearhash-jit/dist/esm/wasm.js
+// node_modules/gearhash-jit/dist/esm/wasm.js
 var TABLE_OFFSET = 0;
 var HASH_OFFSET = 2048;
 var MASK_OFFSET = 2056;
@@ -1108,7 +1108,7 @@ function getView() {
   return wasmView;
 }
 
-// ../../mlclaw/node_modules/gearhash-jit/dist/esm/index.js
+// node_modules/gearhash-jit/dist/esm/index.js
 var Hasher = class {
   maskBytes;
   /**
@@ -1149,7 +1149,7 @@ var Hasher = class {
   }
 };
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/compress.js
+// node_modules/@huggingface/blake3-jit/dist/esm/compress.js
 function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, blockLen, flags) {
   let m0 = block[blockOff] | 0;
   let m1 = block[blockOff + 1] | 0;
@@ -1989,7 +1989,7 @@ function compress2(cv, cvOff, block, blockOff, out, outOff, full, counter, block
   out[outOff + 7] = s7 ^ s15;
 }
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/constants.js
+// node_modules/@huggingface/blake3-jit/dist/esm/constants.js
 var IV = new Uint32Array([
   1779033703,
   3144134277,
@@ -2127,7 +2127,7 @@ var PERMUTATIONS = new Uint8Array([
   13
 ]);
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/utils.js
+// node_modules/@huggingface/blake3-jit/dist/esm/utils.js
 var IS_LITTLE_ENDIAN = new Uint8Array(new Uint32Array([16909060]).buffer)[0] === 4;
 function readLittleEndianWordsFull(input, offset, words) {
   for (let i = 0; i < 16; ++i, offset += 4) {
@@ -2210,7 +2210,7 @@ var CTZ32_TABLE = new Uint8Array([
   9
 ]);
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
+// node_modules/@huggingface/blake3-jit/dist/esm/hasher.js
 var XofReader = class {
   inputCv;
   blockWords;
@@ -2564,7 +2564,7 @@ var Hasher2 = class _Hasher {
   }
 };
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
+// node_modules/@huggingface/blake3-jit/dist/esm/wasm-simd.js
 function toLebU32Min2(n) {
   return [n & 127 | 128, n >>> 7 & 127];
 }
@@ -3371,7 +3371,7 @@ var arenaBatchCounterLow = null;
 var arenaBatchFlagsBase = null;
 var arenaBatchOutput = null;
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/hash.js
+// node_modules/@huggingface/blake3-jit/dist/esm/hash.js
 var CV_STACK_DEPTH = 64;
 var HYPER_CV_STACK = new Uint32Array(CV_STACK_DEPTH * 8);
 var CV_POOL_SIZE = 64;
@@ -3417,14 +3417,14 @@ function warmupSimd() {
   return ensureSimdSync();
 }
 
-// ../../mlclaw/node_modules/@huggingface/blake3-jit/dist/esm/index.js
+// node_modules/@huggingface/blake3-jit/dist/esm/index.js
 if (typeof globalThis !== "undefined" && typeof globalThis.document !== "undefined") {
   queueMicrotask(() => {
     warmupSimd();
   });
 }
 
-// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
+// node_modules/@huggingface/xetchunk-wasm/dist/esm/xet-chunker.js
 var TARGET_CHUNK_SIZE = 64 * 1024;
 var MINIMUM_CHUNK_DIVISOR = 8;
 var MAXIMUM_CHUNK_MULTIPLIER = 2;
@@ -3639,7 +3639,7 @@ function hexToBytes(hex) {
   return bytes;
 }
 
-// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
+// node_modules/@huggingface/xetchunk-wasm/dist/esm/xorb-hash.js
 var MEAN_CHUNK_PER_NODE = 4;
 var BLAKE3_NODE_KEY = new Uint8Array([
   1,
@@ -3714,7 +3714,7 @@ function mergedHashOfSequence(chunks) {
   return { hash: hash3, length: totalLength };
 }
 
-// ../../mlclaw/node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
+// node_modules/@huggingface/xetchunk-wasm/dist/esm/hash-utils.js
 var ZERO_KEY = new Uint8Array(32);
 var VERIFICATION_KEY = new Uint8Array([
   127,
@@ -5122,7 +5122,7 @@ async function sha256File(file) {
   return hash3.digest("hex");
 }
 
-// ../../mlclaw/node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -5234,7 +5234,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// ../../mlclaw/node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_) => {
@@ -5368,7 +5368,7 @@ var getParsedType = (data) => {
   }
 };
 
-// ../../mlclaw/node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -5486,7 +5486,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// ../../mlclaw/node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -5589,7 +5589,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// ../../mlclaw/node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -5598,7 +5598,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// ../../mlclaw/node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path9, errorMaps, issueData } = params;
   const fullPath = [...path9, ...issueData.path || []];
@@ -5708,14 +5708,14 @@ var isDirty = (x) => x.status === "dirty";
 var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-// ../../mlclaw/node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// ../../mlclaw/node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path9, key) {
     this._cachedPath = [];
