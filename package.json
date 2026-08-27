@@ -1,6 +1,6 @@
 {
   "name": "mlclaw",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "license": "MIT",
   "config": {
     "openclawVersion": "2026.8.1-beta.3",

@@ -964,6 +964,7 @@ describe("ML Claw Space runtime", () => {
       headers: {
         cookie,
         "x-forwarded-user": "mallory",
+        "x-forwarded-for": "203.0.113.8",
         "x-openclaw-scopes": "operator.admin",
         "tailscale-user-login": "mallory@example.com",
         authorization: "Bearer attacker",
@@ -974,6 +975,7 @@ describe("ML Claw Space runtime", () => {
     expect(await response.text()).toBe("alice");
     expect(capturedHeaders).toMatchObject({
       "x-forwarded-user": "alice",
+      "x-forwarded-for": "192.0.2.1",
       "x-forwarded-proto": "http",
       "x-forwarded-host": `127.0.0.1:${config.port}`,
       "x-openclaw-scopes": "operator.admin,operator.read,operator.write,operator.approvals,operator.pairing",

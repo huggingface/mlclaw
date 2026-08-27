@@ -70,6 +70,7 @@ The ML Claw proxy injects these headers only after HF OAuth session validation:
 
 ```text
 x-forwarded-user: <hf username>
+x-forwarded-for: <immediate Space ingress peer, or 192.0.2.1 for loopback>
 x-forwarded-proto: https
 x-forwarded-host: <space host>
 x-openclaw-scopes: operator.admin,operator.read,operator.write,operator.approvals,operator.pairing
@@ -167,7 +168,10 @@ explicit `--public-space` opt-in for public demos and template-style Spaces.
 
 - Do not expose OpenClaw shared gateway tokens to the browser.
 - Do not accept trusted-proxy headers from the browser; strip them before
-  forwarding and re-add known-safe values server-side.
+  forwarding and re-add known-safe values server-side. Rebuild `x-forwarded-for`
+  from the immediate ingress peer. Use the documentation-only `192.0.2.1`
+  address when that peer is loopback so OpenClaw can attribute the request
+  without treating the value as a real client address.
 - Do not proxy before session validation.
 - Use signed, HTTP-only, secure, SameSite=Lax cookies.
 - Logout clears the browser cookie. Signed sessions are stateless, so a copied

@@ -40,7 +40,7 @@ export async function proxyHttp(
     delete headers["accept-encoding"];
     delete headers["Accept-Encoding"];
   }
-  addTrustedProxyHeaders(headers, config, identity, requestAccessOrigin(req, config));
+  addTrustedProxyHeaders(headers, config, identity, requestAccessOrigin(req, config), proxyClientAddress(req));
 
   const upstream = http.request(
     {
@@ -108,7 +108,7 @@ export function proxyWebSocket(
     headers.host = `${config.openclawHost}:${config.openclawPort}`;
     headers.connection = "Upgrade";
     headers.upgrade = req.headers.upgrade ?? "websocket";
-    addTrustedProxyHeaders(headers, config, identity, requestAccessOrigin(req, config));
+    addTrustedProxyHeaders(headers, config, identity, requestAccessOrigin(req, config), proxyClientAddress(req));
     upstream.write(`${req.method ?? "GET"} ${req.url ?? "/"} HTTP/${req.httpVersion}\r\n`);
     for (const [key, value] of Object.entries(headers)) {
       if (Array.isArray(value)) {
@@ -168,11 +168,29 @@ function addTrustedProxyHeaders(
   config: SpaceRuntimeConfig,
   identity: ProxyIdentity,
   accessOrigin: string,
+  clientAddress: string,
 ): void {
   headers["x-forwarded-user"] = identity.username;
+  headers["x-forwarded-for"] = clientAddress;
   headers["x-forwarded-proto"] = accessOrigin.startsWith("https://") ? "https" : "http";
   headers["x-forwarded-host"] = new URL(accessOrigin).host;
   headers["x-openclaw-scopes"] = resolveControlUiScopes(config, identity).join(",");
+}
+
+function proxyClientAddress(req: http.IncomingMessage): string {
+  const remoteAddress = req.socket.remoteAddress?.trim();
+  if (remoteAddress && net.isIP(remoteAddress) !== 0 && !isLoopbackAddress(remoteAddress)) {
+    return remoteAddress;
+  }
+  // OpenClaw requires a non-loopback client attribution behind a trusted proxy.
+  // This documentation-only address keeps local proxy traffic attributable without
+  // trusting a browser-supplied forwarding header or claiming a real client address.
+  return "192.0.2.1";
+}
+
+function isLoopbackAddress(address: string): boolean {
+  const normalized = address.toLowerCase();
+  return normalized === "::1" || normalized.startsWith("127.") || normalized.startsWith("::ffff:127.");
 }
 
 function requestAccessOrigin(req: http.IncomingMessage, config: SpaceRuntimeConfig): string {
