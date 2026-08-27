@@ -20374,7 +20374,7 @@ async function proxyHttp(req, res, config2, identity) {
     delete headers["accept-encoding"];
     delete headers["Accept-Encoding"];
   }
-  addTrustedProxyHeaders(headers, config2, identity, requestAccessOrigin(req, config2));
+  addTrustedProxyHeaders(headers, config2, identity, requestAccessOrigin(req, config2), proxyClientAddress(req));
   const upstream = http2.request(
     {
       host: config2.openclawHost,
@@ -20432,7 +20432,7 @@ function proxyWebSocket(req, socket, head, config2, identity) {
     headers.host = `${config2.openclawHost}:${config2.openclawPort}`;
     headers.connection = "Upgrade";
     headers.upgrade = req.headers.upgrade ?? "websocket";
-    addTrustedProxyHeaders(headers, config2, identity, requestAccessOrigin(req, config2));
+    addTrustedProxyHeaders(headers, config2, identity, requestAccessOrigin(req, config2), proxyClientAddress(req));
     upstream.write(`${req.method ?? "GET"} ${req.url ?? "/"} HTTP/${req.httpVersion}\r
 `);
     for (const [key, value] of Object.entries(headers)) {
@@ -20483,11 +20483,23 @@ function sanitizeHeaders(headers) {
   }
   return out;
 }
-function addTrustedProxyHeaders(headers, config2, identity, accessOrigin) {
+function addTrustedProxyHeaders(headers, config2, identity, accessOrigin, clientAddress) {
   headers["x-forwarded-user"] = identity.username;
+  headers["x-forwarded-for"] = clientAddress;
   headers["x-forwarded-proto"] = accessOrigin.startsWith("https://") ? "https" : "http";
   headers["x-forwarded-host"] = new URL(accessOrigin).host;
   headers["x-openclaw-scopes"] = resolveControlUiScopes(config2, identity).join(",");
+}
+function proxyClientAddress(req) {
+  const remoteAddress = req.socket.remoteAddress?.trim();
+  if (remoteAddress && net.isIP(remoteAddress) !== 0 && !isLoopbackAddress(remoteAddress)) {
+    return remoteAddress;
+  }
+  return "192.0.2.1";
+}
+function isLoopbackAddress(address) {
+  const normalized = address.toLowerCase();
+  return normalized === "::1" || normalized.startsWith("127.") || normalized.startsWith("::ffff:127.");
 }
 function requestAccessOrigin(req, config2) {
   const host = req.headers.host?.trim().toLowerCase();
