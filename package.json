@@ -1,9 +1,9 @@
 {
   "name": "mlclaw",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "license": "MIT",
   "config": {
-    "openclawVersion": "2026.8.1-beta.2",
+    "openclawVersion": "2026.8.1-beta.3",
     "hfBrokerVersion": "hf-broker/v0.11.1",
     "telegramBotMuxVersion": "0.1.0",
     "unyoloPluginVersion": "0.7.3",
