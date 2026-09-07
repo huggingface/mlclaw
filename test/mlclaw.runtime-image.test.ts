@@ -80,6 +80,7 @@ describe("runtime image Dockerfile", () => {
     expect(dockerfile).toContain('"hf-discover==1.3.7"');
     expect(dockerfile).not.toContain("--no-deps");
     expect(dockerfile).toContain('"uv==0.11.28"');
+    expect(dockerfile).toContain("FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS sync-build");
     expect(dockerfile).toContain("COPY --from=sync-build /build/dist/hf-tooling-seed.js /app/hf-tooling-seed.js");
     expect(dockerfile).toContain("COPY package.json package-lock.json tsconfig.json vite.control-ui.config.ts ./");
     expect(dockerfile).not.toContain("18789/healthz");
