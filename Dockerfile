@@ -3,7 +3,7 @@ ARG OPENCLAW_BASE_IMAGE=ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION}
 ARG UNYOLO_PLUGIN_VERSION=0.7.3
 ARG HF_BROKER_VERSION=hf-broker/v0.11.1
 ARG TELEGRAM_BOT_MUX_VERSION=0.1.0
-ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.12.5-openclaw-2026.9.2
+ARG MLCLAW_RUNTIME_IMAGE=ghcr.io/huggingface/mlclaw:0.12.6-openclaw-2026.9.2
 
 FROM ghcr.io/osolmaz/telegram-bot-mux:v${TELEGRAM_BOT_MUX_VERSION} AS telegram-bot-mux
 
@@ -28,7 +28,7 @@ RUN git init /src \
     --manifest /out/hf-broker.policy-manifest.json
 
 # Stage 1: build the state-sync bundle so the runtime image needs no dev deps.
-FROM node:24-bookworm-slim AS sync-build
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS sync-build
 WORKDIR /build
 COPY package.json package-lock.json tsconfig.json vite.control-ui.config.ts ./
 COPY src ./src
