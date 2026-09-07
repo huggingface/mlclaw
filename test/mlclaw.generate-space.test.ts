@@ -108,7 +108,11 @@ describe("generated Space repository", () => {
     expect(dockerfile).toContain(`ARG UNYOLO_PLUGIN_VERSION=${UNYOLO_PLUGIN_VERSION}`);
     expect(dockerfile).toContain(`ARG HF_BROKER_VERSION=${HF_BROKER_VERSION}`);
     expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
-    expect(dockerfile).not.toContain("@openai/codex");
+    expect(dockerfile).toContain("require('/app/extensions/codex/package.json').dependencies['@openai/codex']");
+    expect(dockerfile).toContain("require('/app/extensions/codex/package.json').dependencies['smol-toml']");
+    expect(dockerfile).toContain('"@openai/codex@${codex_version}"');
+    expect(dockerfile).toContain('"smol-toml@${smol_toml_version}"');
+    expect(dockerfile).toContain("node /app/node_modules/@openai/codex/bin/codex.js --version");
     expect(dockerfile).toContain(
       'git -C /src fetch --depth=1 https://github.com/osolmaz/unyolo.git "refs/tags/$HF_BROKER_VERSION:refs/tags/$HF_BROKER_VERSION"',
     );
