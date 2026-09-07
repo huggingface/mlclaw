@@ -15383,7 +15383,7 @@ function nextLink(header) {
 
 // src/mlclaw/release-config.generated.ts
 var RELEASE_CONFIG = {
-  "packageVersion": "0.12.7",
+  "packageVersion": "0.12.8",
   "openclawVersion": "2026.9.2",
   "hfBrokerVersion": "hf-broker/v0.11.1",
   "telegramBotMuxVersion": "0.1.0",
@@ -15550,6 +15550,18 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \\
   "uvicorn==0.49.0" \\
   "uv==0.11.28" \\
   "hf-discover==1.3.7"
+# OpenClaw includes the Codex extension but omits its managed runtime packages.
+# Read the exact package versions from the pinned OpenClaw image.
+RUN codex_version="$(node -p "require('/app/extensions/codex/package.json').dependencies['@openai/codex']")" \\
+  && smol_toml_version="$(node -p "require('/app/extensions/codex/package.json').dependencies['smol-toml']")" \\
+  && npm install --omit=dev --no-audit --no-fund --prefix /opt/openclaw-codex-runtime \\
+    "@openai/codex@\${codex_version}" \\
+    "smol-toml@\${smol_toml_version}" \\
+  && cp -a /opt/openclaw-codex-runtime/node_modules/@openai /app/node_modules/ \\
+  && cp -a /opt/openclaw-codex-runtime/node_modules/smol-toml /app/node_modules/ \\
+  && node /app/node_modules/@openai/codex/bin/codex.js --version \\
+  && node --input-type=module -e "import {createRequire} from 'node:module'; const require=createRequire('/app/dist/extensions/codex/index.js'); require.resolve('@openai/codex/package.json'); require.resolve('smol-toml'); await import('/app/dist/extensions/codex/index.js')" \\
+  && rm -rf /opt/openclaw-codex-runtime
 ARG UNYOLO_PLUGIN_VERSION
 RUN npm install --omit=dev --omit=peer --no-audit --no-fund --prefix /opt/openclaw-plugins   "openclaw-unyolo@\${UNYOLO_PLUGIN_VERSION}"   && test -f /opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json
 

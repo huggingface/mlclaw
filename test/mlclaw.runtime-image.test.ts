@@ -43,7 +43,11 @@ describe("runtime image Dockerfile", () => {
     );
     expect(dockerfile).toContain(`"openclaw-unyolo@\${UNYOLO_PLUGIN_VERSION}"`);
     expect(dockerfile).not.toContain("CODEX_CLI_VERSION");
-    expect(dockerfile).not.toContain("@openai/codex");
+    expect(dockerfile).toContain("require('/app/extensions/codex/package.json').dependencies['@openai/codex']");
+    expect(dockerfile).toContain("require('/app/extensions/codex/package.json').dependencies['smol-toml']");
+    expect(dockerfile).toContain('"@openai/codex@${codex_version}"');
+    expect(dockerfile).toContain('"smol-toml@${smol_toml_version}"');
+    expect(dockerfile).toContain("node /app/node_modules/@openai/codex/bin/codex.js --version");
     expect(dockerfile).not.toContain("unyolo-plugin-build");
     expect(dockerfile).toContain("/opt/openclaw-plugins/node_modules/openclaw-unyolo/openclaw.plugin.json");
     expect(dockerfile).toContain("ENV MLCLAW_UNYOLO_PLUGIN_PATH=/opt/openclaw-plugins/node_modules/openclaw-unyolo");
