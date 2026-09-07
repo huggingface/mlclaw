@@ -1,6 +1,6 @@
 // Generated from package.json by scripts/sync-release-config.mjs. Do not edit.
 export const RELEASE_CONFIG = {
-  "packageVersion": "0.12.6",
+  "packageVersion": "0.12.7",
   "openclawVersion": "2026.9.2",
   "hfBrokerVersion": "hf-broker/v0.11.1",
   "telegramBotMuxVersion": "0.1.0",

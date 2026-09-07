@@ -242,6 +242,9 @@ describe("runtime image Dockerfile", () => {
     expect(entrypoint).toContain('export MLCLAW_STATE_HF_TOKEN="$STATE_HF_TOKEN"');
     expect(entrypoint).toContain('gosu "$OPENCLAW_IDENTITY" node /app/openclaw.mjs doctor --fix --non-interactive');
     expect(entrypoint.indexOf("node /app/openclaw.mjs doctor --fix --non-interactive")).toBeLessThan(
+      entrypoint.indexOf("node /app/openclaw.mjs setup --baseline"),
+    );
+    expect(entrypoint.indexOf("node /app/openclaw.mjs doctor --fix --non-interactive")).toBeLessThan(
       entrypoint.indexOf("node /app/hf-state-sync.js supervise"),
     );
     expect(entrypoint).toContain("! -name .mlclaw-protected");
