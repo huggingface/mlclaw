@@ -401,6 +401,26 @@ echo "[unyolo] preparing renamed OpenClaw plugin configuration"
 env HOME=/home/node USER=node LOGNAME=node \
   gosu "$OPENCLAW_IDENTITY" node /app/mlclaw-space-runtime.js prepare-unyolo-config
 
+# Repair restored configuration and state before any OpenClaw command validates
+# them. Newer OpenClaw releases can reject old configuration during setup.
+echo "[openclaw-migrate] applying safe persisted-state migrations"
+env \
+  -u MLCLAW_CREDENTIAL_KEY \
+  -u MLCLAW_SESSION_SECRET \
+  -u SESSION_SECRET \
+  -u OAUTH_CLIENT_SECRET \
+  -u HF_TOKEN \
+  -u HUGGINGFACE_HUB_TOKEN \
+  -u MLCLAW_BROKER_HF_TOKEN \
+  -u MLCLAW_ROUTER_TOKEN \
+  -u HF_ROUTER_TOKEN \
+  -u OPENAI_API_KEY \
+  -u TELEGRAM_BOT_TOKEN \
+  -u MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN \
+  HOME=/home/node USER=node LOGNAME=node \
+  gosu "$OPENCLAW_IDENTITY" node /app/openclaw.mjs doctor --fix --non-interactive
+echo "[openclaw-migrate] persisted-state migrations complete"
+
 # Let OpenClaw create its native workspace files. The ML Claw runtime waits for
 # native onboarding to finish before adding workspace tooling; OpenClaw treats
 # any preinstalled workspace skills as evidence that onboarding already ran.
@@ -443,27 +463,6 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ "$TELEGRAM_BOT_MUX_ENABLED" != "1" ] &&
     echo "[telegram-probe] curl is unavailable; skipping"
   fi
 fi
-
-# Run OpenClaw's safe persisted-state migrations before ML Claw imports the
-# deployment-scoped OAuth profile. Newer OpenClaw releases reject writes to an
-# older agent database until doctor migrates it in place.
-echo "[openclaw-migrate] applying safe persisted-state migrations"
-env \
-  -u MLCLAW_CREDENTIAL_KEY \
-  -u MLCLAW_SESSION_SECRET \
-  -u SESSION_SECRET \
-  -u OAUTH_CLIENT_SECRET \
-  -u HF_TOKEN \
-  -u HUGGINGFACE_HUB_TOKEN \
-  -u MLCLAW_BROKER_HF_TOKEN \
-  -u MLCLAW_ROUTER_TOKEN \
-  -u HF_ROUTER_TOKEN \
-  -u OPENAI_API_KEY \
-  -u TELEGRAM_BOT_TOKEN \
-  -u MLCLAW_UNYOLO_TELEGRAM_BOT_TOKEN \
-  HOME=/home/node USER=node LOGNAME=node \
-  gosu "$OPENCLAW_IDENTITY" node /app/openclaw.mjs doctor --fix --non-interactive
-echo "[openclaw-migrate] persisted-state migrations complete"
 
 chown_openclaw_live
 # The wrapper remains the trusted root supervisor so its OAuth credentials and
