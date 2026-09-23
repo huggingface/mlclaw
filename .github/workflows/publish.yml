@@ -79,12 +79,14 @@ jobs:
         run: |
           git init "$RUNNER_TEMP/unyolo"
           git -C "$RUNNER_TEMP/unyolo" fetch --depth=1 https://github.com/osolmaz/unyolo.git \
-            "refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}:refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}"
-          git -C "$RUNNER_TEMP/unyolo" checkout --detach "${{ steps.runtime-config.outputs.hf_broker_version }}"
+            "refs/tags/${STEPS_RUNTIME_CONFIG_OUTPUTS_HF_BROKER_VERSION}:refs/tags/${STEPS_RUNTIME_CONFIG_OUTPUTS_HF_BROKER_VERSION}"
+          git -C "$RUNNER_TEMP/unyolo" checkout --detach "${STEPS_RUNTIME_CONFIG_OUTPUTS_HF_BROKER_VERSION}"
           test "$(git -C "$RUNNER_TEMP/unyolo" rev-parse \
-            "refs/tags/${{ steps.runtime-config.outputs.hf_broker_version }}^{commit}")" = \
+            "refs/tags/${STEPS_RUNTIME_CONFIG_OUTPUTS_HF_BROKER_VERSION}^{commit}")" = \
             "$(git -C "$RUNNER_TEMP/unyolo" rev-parse HEAD)"
           go build -C "$RUNNER_TEMP/unyolo" -o "$RUNNER_TEMP/hf-broker" ./brokers/huggingface/cmd/hf-broker
+        env:
+          STEPS_RUNTIME_CONFIG_OUTPUTS_HF_BROKER_VERSION: ${{ steps.runtime-config.outputs.hf_broker_version }}
       - name: Test pinned unYOLO agent tools
         env:
           MLCLAW_HF_BROKER_BINARY: ${{ runner.temp }}/hf-broker
@@ -92,7 +94,9 @@ jobs:
       - name: Install pinned OpenClaw integration package
         run: |
           npm install --prefix "$RUNNER_TEMP/openclaw-integration" --ignore-scripts --no-audit --no-fund \
-            "openclaw@${{ steps.runtime-config.outputs.openclaw_version }}"
+            "openclaw@${STEPS_RUNTIME_CONFIG_OUTPUTS_OPENCLAW_VERSION}"
+        env:
+          STEPS_RUNTIME_CONFIG_OUTPUTS_OPENCLAW_VERSION: ${{ steps.runtime-config.outputs.openclaw_version }}
       - name: Test pinned OpenClaw integration
         env:
           MLCLAW_OPENCLAW_PACKAGE_DIR: ${{ runner.temp }}/openclaw-integration/node_modules/openclaw
