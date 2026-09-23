@@ -36,13 +36,15 @@ on:
         default: "osolmaz/mlclaw"
         type: string
 
-permissions:
-  contents: read
-  id-token: write
-  packages: write
+
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

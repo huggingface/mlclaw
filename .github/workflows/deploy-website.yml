@@ -9,17 +9,17 @@ on:
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: github-pages
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,6 +41,9 @@ jobs:
           path: website/dist
 
   deploy:
+    permissions:
+      id-token: write
+      pages: write
     needs: build
     runs-on: ubuntu-latest
     environment:
